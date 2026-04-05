@@ -46,6 +46,13 @@ Types used in this repo:
 
 ---
 
+## Build references (MelonLoader)
+
+- Set `DataCenterGameDir` in `Directory.Build.props` (or pass `-p:DataCenterGameDir=...` to `dotnet build`) to your **Data Center** install folder.
+- The project resolves game stubs from `MelonLoader\Il2CppAssemblies` when present (after running the game once with MelonLoader). If that folder is missing, it falls back to `BepInEx\interop` for local development.
+- MelonLoader binaries are referenced from `MelonLoader\net6` (`MelonLoader.dll`, `0Harmony.dll`, `Il2CppInterop.Runtime.dll`). If your install uses another TFM folder, adjust `MelonLoaderNetDir` in `Directory.Build.props`.
+- `Core/MelonModInfo.cs` uses a **universal** `[MelonGame()]` so the mod is not filtered by company/product name. To restrict loading to Data Center only, replace it with `[MelonGame("Company", "Product")]` using the values from `MelonLoader/Latest.log` at startup.
+
 ## Coding Guidelines
 
 - Keep compatibility with current MelonLoader + IL2CPP interop patterns.

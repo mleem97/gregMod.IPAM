@@ -39,9 +39,12 @@ The project focuses on:
 
 ## Repository Structure
 
-- `Main.cs` — Mod entry point and runtime hooks
-- `DHCPManager.cs` — DHCP assignment flow and patches
-- `IPAMOverlay.cs` — in-game monitoring/feedback overlay
+- **`docs/SOURCE_LAYOUT.md`** — folder-by-folder map of all C# sources
+- **`StreamingAssets.Mods/DataCenter_Router/`** — passive shop `config.json` template for a dedicated **router** item (copy into `Data Center_Data/StreamingAssets/Mods/`; add mesh/textures from your game files)
+- **`Core/`** — MelonLoader entry (`Main.cs`, `MelonModInfo.cs`, …)
+- **`Networking/`** — DHCP, reachability/L3, subnets, `RouteMath`, device classification
+- **`Ipam/`** — IPAM overlay (`IPAMOverlay.cs`), `LicenseManager`
+- **`Cli/`**, **`Config/`**, **`Routing/`**, **`Ping/`**, **`Patches/`**, **`Input/`**, **`Diagnostics/`** — see `docs/SOURCE_LAYOUT.md`
 - `ROADMAP.md` — phased implementation roadmap
 - `.github/copilot-instructions.md` — project-specific guidance
 
@@ -65,8 +68,8 @@ cd DataCenter_DHCPSwitches
 
 ### 3) Configure Local References
 
-`DHCPSwitches.csproj` references local game assemblies (MelonLoader and IL2CPP assemblies).  
-Adjust `HintPath` entries to your local installation path if needed.
+`DHCPSwitches.csproj` references **MelonLoader** (`MelonLoader\net6`) and IL2CPP stubs (`MelonLoader\Il2CppAssemblies`, with fallback to `BepInEx\interop`).  
+Point `DataCenterGameDir` in `Directory.Build.props` at your game folder (or override with `dotnet build -p:DataCenterGameDir="..."`).
 
 ### 4) Build
 
