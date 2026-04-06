@@ -20,8 +20,8 @@ public class DHCPSwitchesMod : MelonMod
     {
         try
         {
-            ModDebugLog.Bootstrap();
             ModLogging.Instance = LoggerInstance;
+            ModDebugLog.Bootstrap();
             DeviceConfigRegistry.BootstrapLoadDisk();
 
             ClassInjector.RegisterTypeInIl2Cpp<DHCPController>();
@@ -42,7 +42,8 @@ public class DHCPSwitchesMod : MelonMod
                 "DHCP Switches & IPAM loaded. F1 = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles or Ctrl+D = lock (debug). Rack switch/router red menu = CLI, or IPAM → device → Open CLI.");
             if (!string.IsNullOrEmpty(ModDebugLog.DiagnosticLogPath))
             {
-                LoggerInstance.Msg("DHCPSwitches diagnostic file: " + ModDebugLog.DiagnosticLogPath);
+                LoggerInstance.Msg(
+                    "DHCPSwitches debug log (replaced each game launch): " + ModDebugLog.DiagnosticLogPath);
             }
 
             if (ModDebugLog.IsIpamFileLogEnabled && !string.IsNullOrEmpty(ModDebugLog.IpamDiagnosticLogPath))
@@ -55,6 +56,7 @@ public class DHCPSwitchesMod : MelonMod
         {
             try
             {
+                ModLogging.Instance = LoggerInstance;
                 ModDebugLog.Bootstrap();
                 ModDebugLog.WriteLine("OnInitializeMelon failed: " + ex);
             }
@@ -306,12 +308,21 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
             IPAMOverlay.TickInputSystemIopsToolbarClick();
             IPAMOverlay.TickIopsCalculatorInputSystem();
         }
+
     }
 
     private void LateUpdate()
     {
         var anyOverlay = IPAMOverlay.IsVisible || DeviceTerminalOverlay.IsVisible;
         IpamMenuOcclusion.Tick(anyOverlay);
+
+        var setIp = SetIpKeypadDhcpButton.ResolveSetIPForTick();
+        SetIpKeypadDhcpButton.Tick(setIp);
+
+        if (setIp != null && setIp.isActive)
+        {
+            SetIpKeypadDiagnostics.MaybeDumpWhileKeypadOpen(setIp);
+        }
     }
 
     private void OnGUI()

@@ -478,6 +478,14 @@ public static class DHCPManager
                 return;
             }
 
+            // Physical / in-game "clear IP" passes empty or 0.0.0.0 while server.IP is still the old address.
+            // Without this, we immediately DHCP again and the clear never sticks.
+            var prevIp = GetServerIP(server);
+            if (!IsUnsetIp(prevIp))
+            {
+                return;
+            }
+
             var autoIp = GetNextFreeIpForServer(server, null);
             if (string.IsNullOrEmpty(autoIp))
             {
@@ -533,7 +541,10 @@ public static class DHCPManager
                 return false;
             }
 
-            ModDebugLog.WriteThrottledIopsAllow(cid, ReachabilityService.SummarizeServersForCustomer(cid));
+            var allowDetail = ModDebugLog.IsIopsAllowIpSamplesEnabled
+                ? ReachabilityService.SummarizeServersForCustomer(cid)
+                : ReachabilityService.SummarizeServersForCustomerBrief(cid);
+            ModDebugLog.WriteThrottledIopsAllow(cid, allowDetail);
             return true;
         }
     }

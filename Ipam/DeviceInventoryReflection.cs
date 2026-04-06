@@ -38,14 +38,26 @@ internal static class DeviceInventoryReflection
 
     private static readonly Dictionary<Type, (PropertyInfo[] Props, FieldInfo[] Fields)> EolMemberScanCache = new();
 
+    /// <summary>Exact names only for technician — broad heuristics were invoking unrelated &quot;service&quot; / EOL helpers.</summary>
     private static readonly string[] TechnicianMethods =
     {
-        "SendTechnician", "DispatchTechnician", "CallTechnician", "RequestTechnician", "SendRepair", "RequestRepair",
+        "SendTechnician", "DispatchTechnician", "CallTechnician", "RequestTechnician",
+        "SendRepair", "RequestRepair", "OrderTechnician", "HireTechnician", "SpawnTechnician", "DispatchRepair",
+        "StartTechnicianDispatch", "BeginTechnicianVisit", "TriggerTechnician", "RequestOnsiteTechnician",
+        "DispatchOnsiteRepair", "SpawnRepairTechnician", "StartPhysicalRepair", "BeginRepairVisit",
+        "StartRepair", "RequestMaintenance", "CallMaintenance", "SummonRepair", "RepairDevice",
+        "FixDevice", "RequestService", "CallForService", "OrderRepair",
     };
 
     private static readonly string[] ClearAlarmMethods =
     {
         "ClearAlarms", "ClearAlarm", "ResetAlarms", "ResetAlarm", "AcknowledgeAlarms", "SilenceAlarms",
+        "DismissAlarms", "AckAlarms", "ClearAllAlarms", "SilenceAllAlarms", "ResetAllAlarms",
+        "ClearFaults", "ResetFaults", "AcknowledgeAlarm", "DismissAlarm", "SilenceAlarm",
+        "ClearIssues", "DismissIssues", "ClearProblems", "ResetErrors", "ClearNotifications",
+        "DismissAllAlarms", "ClearDeviceAlarms",
+        "ClearWarnings", "DismissWarnings", "ClearAlerts", "RemoveAlarms", "ResolveAlarms",
+        "MuteAlarms", "SuppressAlarms", "ClearIncident", "ClearIncidents",
     };
 
     internal static string GetDisplayName(UnityEngine.Object o)
@@ -201,41 +213,878 @@ internal static class DeviceInventoryReflection
                || t.StartsWith("-", StringComparison.Ordinal);
     }
 
-    internal static bool TrySendTechnician(UnityEngine.Object o) => TryInvokeNoArgs(o, TechnicianMethods);
-
-    internal static bool TryClearAlarms(UnityEngine.Object o) => TryInvokeNoArgs(o, ClearAlarmMethods);
-
-    private static bool TryInvokeNoArgs(UnityEngine.Object o, string[] methodNames)
+    internal static bool TrySendTechnician(UnityEngine.Object o)
     {
         if (o == null)
         {
             return false;
         }
 
-        var t = o.GetType();
-        for (var bt = t; bt != null; bt = bt.BaseType)
+        if (GameTechnicianDispatch.TryDispatch(o, out var gameDetail))
         {
-            foreach (var name in methodNames)
+            LogLifecycleInvoke("Send technician", gameDetail);
+            return true;
+        }
+
+        ModLogging.Warning(
+            "[DHCPSwitches IPAM] Send technician: no game dispatch path succeeded (device line → TechnicianManager → AssetManagement). "
+            + "Check MelonLoader/Latest.log next to the game, and DHCPSwitches-debug.log in the folder above *_Data (if created).");
+
+        return false;
+    }
+
+    internal static bool TryClearAlarms(UnityEngine.Object o)
+    {
+        if (o == null)
+        {
+            return false;
+        }
+
+        // Try every plausible component on the device — the first match may be a no-op stub while a child owns real alarm state.
+        var anyDeviceInvoke = false;
+        foreach (var target in EnumerateAlarmTargets(o))
+        {
+            var allowHeuristic = target is Server or NetworkSwitch
+                || (target is Component c && PlausibleAlarmSubsystemType(c.GetType()));
+            if (TryInvokeLifecycleOnTarget(
+                    target,
+                    ClearAlarmMethods,
+                    allowNameHeuristic: allowHeuristic,
+                    nameHeuristic: IsLikelyClearAlarmMethodName,
+                    logLabel: "Clear alarms"))
             {
-                try
+                anyDeviceInvoke = true;
+            }
+        }
+
+        if (anyDeviceInvoke)
+        {
+            return true;
+        }
+
+        return TryInvokeOnSceneFacadesOneArg(o, ClearAlarmMethods, "Clear alarms");
+    }
+
+    private static void LogLifecycleInvoke(string label, string detail)
+    {
+        ModLogging.Msg(
+            $"[DHCPSwitches IPAM] {label}: {detail} — if the visible effect is wrong, the game may use a different API; check the game assembly for this type.");
+    }
+
+    private static bool TryInvokeLifecycleOnTarget(
+        UnityEngine.Object o,
+        string[] explicitNames,
+        bool allowNameHeuristic,
+        Func<string, bool> nameHeuristic,
+        string logLabel)
+    {
+        if (TryAccessToolsInvokeNoArgs(o, explicitNames, out var dAccess))
+        {
+            LogLifecycleInvoke(logLabel, dAccess);
+            return true;
+        }
+
+        if (TryInvokeNoArgsByNameList(o, explicitNames, out var d0))
+        {
+            LogLifecycleInvoke(logLabel, d0);
+            return true;
+        }
+
+        if (TryAccessToolsInvokeSingleBool(o, explicitNames, out var dAccessB))
+        {
+            LogLifecycleInvoke(logLabel, dAccessB);
+            return true;
+        }
+
+        if (TryInvokeSingleBoolByNameList(o, explicitNames, out var d1))
+        {
+            LogLifecycleInvoke(logLabel, d1);
+            return true;
+        }
+
+        if (allowNameHeuristic
+            && nameHeuristic != null
+            && TryInvokeFirstZeroArgMethodMatching(o, nameHeuristic, out var d2))
+        {
+            LogLifecycleInvoke(logLabel, d2 + " [name heuristic]");
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Walks the instance type chain and matches declared methods only — avoids Harmony <c>AccessTools.Method</c>,
+    /// which logs a console error on every miss (very noisy during IPAM technician / alarm probes).
+    /// </summary>
+    private static MethodInfo TryResolveInstanceMethodOnHierarchy(Type startType, string methodName, Type[] parameterTypes)
+    {
+        if (startType == null || string.IsNullOrEmpty(methodName) || parameterTypes == null)
+        {
+            return null;
+        }
+
+        for (var t = startType; t != null && t != typeof(object); t = t.BaseType)
+        {
+            try
+            {
+                foreach (var m in t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
                 {
-                    var m = bt.GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
-                    if (m == null)
+                    if (m.IsStatic || !string.Equals(m.Name, methodName, StringComparison.Ordinal))
                     {
                         continue;
                     }
 
-                    m.Invoke(o, null);
+                    var ps = m.GetParameters();
+                    if (ps.Length != parameterTypes.Length)
+                    {
+                        continue;
+                    }
+
+                    var sigOk = true;
+                    for (var i = 0; i < ps.Length; i++)
+                    {
+                        var pt = ps[i].ParameterType;
+                        var exp = parameterTypes[i];
+                        if (exp == typeof(bool) && IsBoolLikeParameterType(pt))
+                        {
+                            continue;
+                        }
+
+                        if (pt != exp)
+                        {
+                            sigOk = false;
+                            break;
+                        }
+                    }
+
+                    if (sigOk)
+                    {
+                        return m;
+                    }
+                }
+            }
+            catch
+            {
+                // Il2Cpp
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsBoolLikeParameterType(Type pt)
+    {
+        if (pt == null)
+        {
+            return false;
+        }
+
+        if (pt == typeof(bool))
+        {
+            return true;
+        }
+
+        return string.Equals(pt.Name, "Boolean", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Instance method with one parameter that accepts <paramref name="device"/> (or <see cref="GameObject"/> for a <see cref="Component"/>).</summary>
+    private static MethodInfo TryFindInstanceMethodOneArgAcceptsDevice(Type startType, string methodName, UnityEngine.Object device)
+    {
+        if (startType == null || device == null)
+        {
+            return null;
+        }
+
+        for (var t = startType; t != null && t != typeof(object); t = t.BaseType)
+        {
+            try
+            {
+                foreach (var m in t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                {
+                    if (m.IsStatic || !string.Equals(m.Name, methodName, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var ps = m.GetParameters();
+                    if (ps.Length != 1)
+                    {
+                        continue;
+                    }
+
+                    var pt = ps[0].ParameterType;
+                    if (pt.IsInstanceOfType(device))
+                    {
+                        return m;
+                    }
+
+                    if (device is Component dc && dc.gameObject != null && pt == typeof(GameObject))
+                    {
+                        return m;
+                    }
+                }
+            }
+            catch
+            {
+                // Il2Cpp
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryAccessToolsInvokeNoArgs(UnityEngine.Object o, string[] methodNames, out string detail)
+    {
+        detail = null;
+        if (o == null || methodNames == null)
+        {
+            return false;
+        }
+
+        foreach (var name in methodNames)
+        {
+            var m = TryResolveInstanceMethodOnHierarchy(o.GetType(), name, Type.EmptyTypes);
+            if (m == null)
+            {
+                continue;
+            }
+
+            try
+            {
+                m.Invoke(o, null);
+                detail = $"{m.DeclaringType?.Name ?? "?"}.{m.Name}()";
+                return true;
+            }
+            catch
+            {
+                // try next name
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryAccessToolsInvokeSingleBool(UnityEngine.Object o, string[] methodNames, out string detail)
+    {
+        detail = null;
+        if (o == null || methodNames == null)
+        {
+            return false;
+        }
+
+        foreach (var name in methodNames)
+        {
+            var m = TryResolveInstanceMethodOnHierarchy(o.GetType(), name, new[] { typeof(bool) });
+            if (m == null)
+            {
+                continue;
+            }
+
+            foreach (var arg in new[] { true, false })
+            {
+                try
+                {
+                    m.Invoke(o, new object[] { arg });
+                    detail = $"{m.DeclaringType?.Name ?? "?"}.{m.Name}({arg.ToString().ToLowerInvariant()})";
                     return true;
                 }
                 catch
                 {
-                    // try next
+                    // try other bool
                 }
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Game may expose <c>ClearAlarms(Server s)</c> / <c>SendTechnician(Server s)</c> on a scene singleton rather than on the device.
+    /// </summary>
+    private static bool TryInvokeOnSceneFacadesOneArg(UnityEngine.Object device, string[] methodNames, string logLabel)
+    {
+        if (device == null || methodNames == null)
+        {
+            return false;
+        }
+
+        MonoBehaviour[] arr;
+        try
+        {
+            arr = UnityEngine.Object.FindObjectsOfType<MonoBehaviour>(true);
+        }
+        catch
+        {
+            return false;
+        }
+
+        for (var i = 0; i < arr.Length; i++)
+        {
+            var mb = arr[i];
+            if (mb == null || ReferenceEquals(mb, device))
+            {
+                continue;
+            }
+
+            var bt = mb.GetType();
+            if (!IsInterestingGameFacadeType(bt))
+            {
+                continue;
+            }
+
+            if (TryInvokeFirstMatchingOneArg(mb, device, methodNames, out var sig))
+            {
+                LogLifecycleInvoke(logLabel, $"{bt.Name}.{sig} (scene)");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsInterestingGameFacadeType(Type t)
+    {
+        var ns = t.Namespace ?? "";
+        if (ns.StartsWith("UnityEngine", StringComparison.Ordinal)
+            || ns.StartsWith("TMPro", StringComparison.Ordinal)
+            || ns.StartsWith("MelonLoader", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (ns.StartsWith("DHCPSwitches", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var n = t.Name;
+        return n.IndexOf("Alarm", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Fault", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Technician", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Repair", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Operational", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Coordinator", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Director", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Facility", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Rack", StringComparison.OrdinalIgnoreCase) >= 0
+               || (n.IndexOf("Device", StringComparison.OrdinalIgnoreCase) >= 0
+                   && n.IndexOf("Manager", StringComparison.OrdinalIgnoreCase) >= 0)
+               || (n.IndexOf("Server", StringComparison.OrdinalIgnoreCase) >= 0
+                   && (n.IndexOf("Manager", StringComparison.OrdinalIgnoreCase) >= 0
+                       || n.IndexOf("Service", StringComparison.OrdinalIgnoreCase) >= 0))
+               || n.IndexOf("Inventory", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Notification", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    /// <summary>Map selected device to a facade method's single parameter (e.g. <see cref="GameObject"/> vs the device reference type).</summary>
+    private static object TryResolveFacadeInvokeArgument(UnityEngine.Object device, Type paramType)
+    {
+        if (paramType != null && paramType.IsInstanceOfType(device))
+        {
+            return device;
+        }
+
+        if (device is Component c && c.gameObject != null && paramType == typeof(GameObject))
+        {
+            return c.gameObject;
+        }
+
+        return null;
+    }
+
+    private static bool TryInvokeFirstMatchingOneArg(
+        UnityEngine.Object target,
+        UnityEngine.Object device,
+        string[] methodNames,
+        out string detail)
+    {
+        detail = null;
+        if (target == null || device == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var m in target.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (m.IsStatic || m.IsSpecialName)
+                {
+                    continue;
+                }
+
+                var ps = m.GetParameters();
+                if (ps.Length != 1)
+                {
+                    continue;
+                }
+
+                var arg0 = TryResolveFacadeInvokeArgument(device, ps[0].ParameterType);
+                if (arg0 == null)
+                {
+                    continue;
+                }
+
+                foreach (var name in methodNames)
+                {
+                    if (!string.Equals(m.Name, name, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        m.Invoke(target, new object[] { arg0 });
+                        detail = $"{m.Name}({arg0.GetType().Name})";
+                        return true;
+                    }
+                    catch
+                    {
+                        // next name
+                    }
+                }
+            }
+
+            foreach (var m in target.GetType().GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (!m.IsStatic || m.IsSpecialName)
+                {
+                    continue;
+                }
+
+                var ps = m.GetParameters();
+                if (ps.Length != 1)
+                {
+                    continue;
+                }
+
+                var arg0 = TryResolveFacadeInvokeArgument(device, ps[0].ParameterType);
+                if (arg0 == null)
+                {
+                    continue;
+                }
+
+                foreach (var name in methodNames)
+                {
+                    if (!string.Equals(m.Name, name, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        m.Invoke(null, new object[] { arg0 });
+                        detail = $"{m.Name}({arg0.GetType().Name}) static";
+                        return true;
+                    }
+                    catch
+                    {
+                        // next name
+                    }
+                }
+            }
+
+            foreach (var name in methodNames)
+            {
+                var am = TryFindInstanceMethodOneArgAcceptsDevice(target.GetType(), name, device);
+                if (am == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var ps = am.GetParameters();
+                    object arg = device;
+                    if (ps.Length == 1
+                        && ps[0].ParameterType == typeof(GameObject)
+                        && device is Component dc
+                        && dc.gameObject != null)
+                    {
+                        arg = dc.gameObject;
+                    }
+
+                    am.Invoke(target, new object[] { arg });
+                    detail = $"{am.Name}({arg.GetType().Name})";
+                    return true;
+                }
+                catch
+                {
+                    // next name
+                }
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        return false;
+    }
+
+    private static bool IsUnityUiOrChrome(Component comp)
+    {
+        if (comp is RectTransform)
+        {
+            return true;
+        }
+
+        var ns = comp.GetType().Namespace ?? "";
+        if (ns.StartsWith("UnityEngine.UI", StringComparison.Ordinal)
+            || ns.StartsWith("TMPro", StringComparison.Ordinal)
+            || ns.StartsWith("UnityEngine.EventSystems", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Extra components under the device that may own alarm state (not the root <see cref="Server"/> type name).</summary>
+    private static bool PlausibleAlarmSubsystemType(Type t)
+    {
+        var n = t.Name;
+        if (n.IndexOf("Alarm", StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Fault", StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Alert", StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Notification", StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Warning", StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Issue", StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Health", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return true;
+        }
+
+        // "Status" alone matches many unrelated UI/helpers; require another device/network cue.
+        if (n.IndexOf("Status", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return n.IndexOf("Server", StringComparison.OrdinalIgnoreCase) >= 0
+                   || n.IndexOf("Device", StringComparison.OrdinalIgnoreCase) >= 0
+                   || n.IndexOf("Network", StringComparison.OrdinalIgnoreCase) >= 0
+                   || n.IndexOf("Rack", StringComparison.OrdinalIgnoreCase) >= 0
+                   || n.IndexOf("Health", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Avoid EOL/timer-only behaviours for sibling sweep — those often reset countdown without spawning a character.
+    /// </summary>
+    private static bool PlausibleTechnicianSubsystemType(Type t)
+    {
+        var n = t.Name;
+        if (n.IndexOf("EOL", StringComparison.OrdinalIgnoreCase) >= 0
+            || n.IndexOf("Eol", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return false;
+        }
+
+        return n.IndexOf("Technician", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Repair", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Maintenance", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Dispatch", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("WorkOrder", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Onsite", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Usable", StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("Interact", StringComparison.OrdinalIgnoreCase) >= 0
+               || (n.IndexOf("Visit", StringComparison.OrdinalIgnoreCase) >= 0
+                   && n.IndexOf("Technician", StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
+    private static IEnumerable<UnityEngine.Object> EnumerateAlarmTargets(UnityEngine.Object o)
+    {
+        if (o == null)
+        {
+            yield break;
+        }
+
+        var seen = new HashSet<int>();
+        if (!seen.Add(o.GetInstanceID()))
+        {
+            yield break;
+        }
+
+        yield return o;
+
+        if (o is not Component c || c.gameObject == null)
+        {
+            yield break;
+        }
+
+        foreach (var comp in c.gameObject.GetComponents<Component>())
+        {
+            if (comp == null || IsUnityUiOrChrome(comp))
+            {
+                continue;
+            }
+
+            if (!PlausibleAlarmSubsystemType(comp.GetType()))
+            {
+                continue;
+            }
+
+            if (!seen.Add(comp.GetInstanceID()))
+            {
+                continue;
+            }
+
+            yield return comp;
+        }
+
+        foreach (var comp in c.gameObject.GetComponentsInChildren<Component>(true))
+        {
+            if (comp == null || IsUnityUiOrChrome(comp))
+            {
+                continue;
+            }
+
+            if (!seen.Add(comp.GetInstanceID()))
+            {
+                continue;
+            }
+
+            if (PlausibleAlarmSubsystemType(comp.GetType()))
+            {
+                yield return comp;
+            }
+        }
+    }
+
+    private static IEnumerable<UnityEngine.Object> EnumerateTechnicianTargets(UnityEngine.Object o)
+    {
+        if (o == null)
+        {
+            yield break;
+        }
+
+        var seen = new HashSet<int>();
+        if (!seen.Add(o.GetInstanceID()))
+        {
+            yield break;
+        }
+
+        yield return o;
+
+        if (o is not Component c || c.gameObject == null)
+        {
+            yield break;
+        }
+
+        foreach (var comp in c.gameObject.GetComponents<Component>())
+        {
+            if (comp == null || IsUnityUiOrChrome(comp))
+            {
+                continue;
+            }
+
+            if (!PlausibleTechnicianSubsystemType(comp.GetType()))
+            {
+                continue;
+            }
+
+            if (!seen.Add(comp.GetInstanceID()))
+            {
+                continue;
+            }
+
+            yield return comp;
+        }
+
+        foreach (var comp in c.gameObject.GetComponentsInChildren<Component>(true))
+        {
+            if (comp == null || IsUnityUiOrChrome(comp))
+            {
+                continue;
+            }
+
+            if (!seen.Add(comp.GetInstanceID()))
+            {
+                continue;
+            }
+
+            if (PlausibleTechnicianSubsystemType(comp.GetType()))
+            {
+                yield return comp;
+            }
+        }
+    }
+
+    private static bool TryInvokeNoArgsByNameList(UnityEngine.Object o, string[] methodNames, out string detail)
+    {
+        detail = null;
+        if (o == null || methodNames == null || methodNames.Length == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var m in o.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (m.IsStatic || m.IsSpecialName || m.GetParameters().Length != 0)
+                {
+                    continue;
+                }
+
+                foreach (var name in methodNames)
+                {
+                    if (!string.Equals(m.Name, name, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        m.Invoke(o, null);
+                        detail = $"{o.GetType().Name}.{m.Name}()";
+                        return true;
+                    }
+                    catch
+                    {
+                        // wrong overload / Il2Cpp — try next candidate
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        return false;
+    }
+
+    private static bool TryInvokeSingleBoolByNameList(UnityEngine.Object o, string[] methodNames, out string detail)
+    {
+        detail = null;
+        if (o == null || methodNames == null || methodNames.Length == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var m in o.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (m.IsStatic || m.IsSpecialName)
+                {
+                    continue;
+                }
+
+                var ps = m.GetParameters();
+                if (ps.Length != 1)
+                {
+                    continue;
+                }
+
+                var pt = ps[0].ParameterType;
+                var isBoolParam = pt == typeof(bool)
+                                  || string.Equals(pt.Name, "Boolean", StringComparison.OrdinalIgnoreCase);
+                if (!isBoolParam)
+                {
+                    continue;
+                }
+
+                foreach (var name in methodNames)
+                {
+                    if (!string.Equals(m.Name, name, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    foreach (var arg in new[] { true, false })
+                    {
+                        try
+                        {
+                            m.Invoke(o, new object[] { arg });
+                            detail = $"{o.GetType().Name}.{m.Name}({arg.ToString().ToLowerInvariant()})";
+                            return true;
+                        }
+                        catch
+                        {
+                            // try other bool / next method
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        return false;
+    }
+
+    private static bool TryInvokeFirstZeroArgMethodMatching(UnityEngine.Object o, Func<string, bool> nameOk, out string detail)
+    {
+        detail = null;
+        if (o == null || nameOk == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var m in o.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (m.IsStatic || m.IsSpecialName || m.GetParameters().Length != 0)
+                {
+                    continue;
+                }
+
+                if (!nameOk(m.Name))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    m.Invoke(o, null);
+                    detail = $"{o.GetType().Name}.{m.Name}()";
+                    return true;
+                }
+                catch
+                {
+                    // try next method on same component
+                }
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        return false;
+    }
+
+    private static bool IsLikelyClearAlarmMethodName(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return false;
+        }
+
+        var aboutIssue = name.IndexOf("Alarm", StringComparison.OrdinalIgnoreCase) >= 0
+                         || name.IndexOf("Fault", StringComparison.OrdinalIgnoreCase) >= 0
+                         || name.IndexOf("Alert", StringComparison.OrdinalIgnoreCase) >= 0
+                         || name.IndexOf("Issue", StringComparison.OrdinalIgnoreCase) >= 0
+                         || name.IndexOf("Problem", StringComparison.OrdinalIgnoreCase) >= 0
+                         || name.IndexOf("Error", StringComparison.OrdinalIgnoreCase) >= 0
+                         || name.IndexOf("Warning", StringComparison.OrdinalIgnoreCase) >= 0;
+        if (!aboutIssue)
+        {
+            return false;
+        }
+
+        return name.IndexOf("Clear", StringComparison.OrdinalIgnoreCase) >= 0
+               || name.IndexOf("Ack", StringComparison.OrdinalIgnoreCase) >= 0
+               || name.IndexOf("Silence", StringComparison.OrdinalIgnoreCase) >= 0
+               || name.IndexOf("Reset", StringComparison.OrdinalIgnoreCase) >= 0
+               || name.IndexOf("Dismiss", StringComparison.OrdinalIgnoreCase) >= 0
+               || name.IndexOf("Resolve", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static bool TryReadStringMember(object o, string[] names, out string value)

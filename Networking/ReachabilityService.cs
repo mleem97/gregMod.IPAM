@@ -178,6 +178,32 @@ public static class ReachabilityService
             : $"{match} server(s), {withIp} with assigned IP; sample: {sb}";
     }
 
+    /// <summary>Same counts as <see cref="SummarizeServersForCustomer"/> without per-server names/IPs (quieter debug log).</summary>
+    internal static string SummarizeServersForCustomerBrief(int customerId)
+    {
+        EnsureSceneDeviceCache();
+        var match = 0;
+        var withIp = 0;
+        foreach (var s in _sceneServers)
+        {
+            if (s == null || s.GetCustomerID() != customerId)
+            {
+                continue;
+            }
+
+            match++;
+            var ip = DHCPManager.GetServerIP(s);
+            if (!string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0")
+            {
+                withIp++;
+            }
+        }
+
+        return match == 0
+            ? $"no Server with GetCustomerID()=={customerId} (game may not link this customer to any server)"
+            : $"{match} server(s), {withIp} with assigned IP";
+    }
+
     private static string DescribeCustomerWanMap(CustomerBase customer)
     {
         var map = customer?.subnetsPerApp;
