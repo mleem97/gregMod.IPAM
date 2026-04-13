@@ -2,19 +2,16 @@ using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Text;
 using System.Threading;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 
 namespace DHCPSwitches;
 
 public static class DHCPManager
 {
-    private const string SUBNET_BASE = "192.168.1.";
-    private const int POOL_START = 10;
-    private const int POOL_END = 254;
-
     private static readonly HashSet<string> AssignedIPs = new();
-    private static readonly Dictionary<int, string> CustomerSubnetPrefixCache = new();
 
     /// <summary>
     /// When true (default), empty <c>SetIP</c> from the game is auto-filled via Harmony (DHCP-style).
@@ -34,7 +31,7 @@ public static class DHCPManager
 
     public static void ClearCaches()
     {
-        CustomerSubnetPrefixCache.Clear();
+        GameSubnetHelper.ClearCaches();
     }
 
     /// <summary>IPAM customer-assign and batch actions can surface errors the same way as <see cref="SetServerIP"/>.</summary>
@@ -47,8 +44,8 @@ public static class DHCPManager
         ModDebugLog.Bootstrap();
         ModDebugLog.WriteLine(
             IsFlowPaused
-                ? "IPAM: sim flow PAUSED — AddAppPerformance is blocked here."
-                : "IPAM: sim flow RUNNING — AddAppPerformance prefix will run.");
+                ? "IPAM: sim flow PAUSED — AddAppPerformance is blocked here (no IOPS ticks through this gate; L3 checks are skipped)."
+                : "IPAM: sim flow RUNNING — AddAppPerformance prefix will run (L3 enforcement applies when L3 is ON).");
     }
 
     public static void AssignAllServers()
@@ -58,6 +55,10 @@ public static class DHCPManager
             ModLogging.Warning("DHCP locked (toggle with Ctrl+D debug).");
             return;
         }
+
+        ModDebugLog.EnterDhcpResolutionBatch();
+        try
+        {
 
         var servers = UnityEngine.Object.FindObjectsOfType<Server>();
         RebuildAssignedIpsFromScene(servers);
@@ -89,24 +90,53 @@ public static class DHCPManager
             ModLogging.Msg($"DHCP: {assigned} IPs assigned.");
             IPAMOverlay.InvalidateDeviceCache();
         }
+
+        }
+        finally
+        {
+            ModDebugLog.LeaveDhcpResolutionBatch();
+        }
     }
 
     /// <summary>Assign DHCP from the game's contract usable lists (and fallbacks) to every listed server; skips servers that already have an IP.</summary>
     public static int AssignDhcpToServers(System.Collections.Generic.IEnumerable<Server> servers)
     {
+        ModDebugLog.Bootstrap();
+
         if (servers == null)
         {
+            ModDebugLog.WriteDhcpAssign("AssignDhcpToServers called with servers=null");
             return 0;
         }
 
+        var selectedNonNull = 0;
+        foreach (var x in servers)
+        {
+            if (x != null)
+            {
+                selectedNonNull++;
+            }
+        }
+
+        var sceneArr = UnityEngine.Object.FindObjectsOfType<Server>();
+        var sceneCount = sceneArr != null ? sceneArr.Length : 0;
+        ModDebugLog.WriteDhcpAssign(
+            $"AssignDhcpToServers begin selectedNonNull={selectedNonNull} sceneServerCount={sceneCount} dhcpUnlocked={LicenseManager.IsDHCPUnlocked}");
+
         if (!LicenseManager.IsDHCPUnlocked)
         {
+            ModDebugLog.WriteDhcpAssign("aborted: DHCP feature locked (LicenseManager.IsDHCPUnlocked=false; use mod unlock / Ctrl+D per docs)");
             ModLogging.Warning("DHCP locked (toggle with Ctrl+D debug).");
             return 0;
         }
 
-        var allServers = UnityEngine.Object.FindObjectsOfType<Server>();
+        ModDebugLog.EnterDhcpResolutionBatch();
+        try
+        {
+        var allServers = sceneArr ?? UnityEngine.Object.FindObjectsOfType<Server>();
         RebuildAssignedIpsFromScene(allServers);
+        ModDebugLog.WriteDhcpAssign($"after RebuildAssignedIpsFromScene in-use IP slots={AssignedIPs.Count}");
+
         var n = 0;
         foreach (var server in servers)
         {
@@ -118,21 +148,31 @@ public static class DHCPManager
             var ip = GetServerIP(server);
             if (!string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0")
             {
+                ModDebugLog.WriteDhcpAssign($"skip {FormatServerLogLabel(server)} (already has ip={ip})");
                 continue;
             }
 
             var newIp = GetNextFreeIpForServer(server, allServers);
             if (string.IsNullOrEmpty(newIp))
             {
+                ModDebugLog.WriteDhcpAssign(
+                    $"no address {FormatServerLogLabel(server)} reason={ExplainDhcpMiss(server, allServers)}");
                 continue;
             }
 
-            if (SetServerIP(server, newIp, skipUsableListCheck: true))
+            if (!SetServerIP(server, newIp, skipUsableListCheck: true))
             {
-                AssignedIPs.Add(newIp);
-                n++;
+                ModDebugLog.WriteDhcpAssign(
+                    $"SetIP failed {FormatServerLogLabel(server)} candidate={newIp} LastSetIpError={LastSetIpError ?? "(null)"}");
+                continue;
             }
+
+            AssignedIPs.Add(newIp);
+            n++;
+            ModDebugLog.WriteDhcpAssign($"assigned {FormatServerLogLabel(server)} -> {newIp}");
         }
+
+        ModDebugLog.WriteDhcpAssign($"AssignDhcpToServers end assignedCount={n}");
 
         if (n > 0)
         {
@@ -141,6 +181,11 @@ public static class DHCPManager
         }
 
         return n;
+        }
+        finally
+        {
+            ModDebugLog.LeaveDhcpResolutionBatch();
+        }
     }
 
     /// <summary>Assign one free usable address to a single server (toolbar / per-row DHCP auto).</summary>
@@ -157,6 +202,9 @@ public static class DHCPManager
             return false;
         }
 
+        ModDebugLog.EnterDhcpResolutionBatch();
+        try
+        {
         var allServers = UnityEngine.Object.FindObjectsOfType<Server>();
         RebuildAssignedIpsFromScene(allServers);
         var newIp = GetNextFreeIpForServer(server, allServers);
@@ -168,7 +216,7 @@ public static class DHCPManager
             }
             else
             {
-                LastSetIpError = "DHCP failed: no free address was found in the customer subnet or legacy pool.";
+                LastSetIpError = "DHCP failed: no free address in the contract subnet usable lists for this server.";
             }
 
             ModLogging.Warning("DHCP: AssignDhcpToSingleServer found no free IP.");
@@ -183,6 +231,99 @@ public static class DHCPManager
 
         IPAMOverlay.InvalidateDeviceCache();
         return true;
+        }
+        finally
+        {
+            ModDebugLog.LeaveDhcpResolutionBatch();
+        }
+    }
+
+    private static string FormatServerLogLabel(Server server)
+    {
+        if (server == null)
+        {
+            return "Server<null>";
+        }
+
+        try
+        {
+            var nm = server.name;
+            return string.IsNullOrEmpty(nm)
+                ? $"Server(instanceId={server.GetInstanceID()})"
+                : $"{nm} instanceId={server.GetInstanceID()}";
+        }
+        catch
+        {
+            return $"Server(instanceId={server.GetInstanceID()})";
+        }
+    }
+
+    /// <summary>Why <see cref="GetNextFreeIpForServer"/> returned null (for <c>dhcp-assign:</c> log lines).</summary>
+    private static string ExplainDhcpMiss(Server server, Server[] allServers)
+    {
+        if (server == null)
+        {
+            return "server is null";
+        }
+
+        int customerId;
+        try
+        {
+            customerId = server.GetCustomerID();
+        }
+        catch (Exception ex)
+        {
+            return $"GetCustomerID threw: {ex.GetType().Name}: {ex.Message}";
+        }
+
+        var cb = GameSubnetHelper.FindCustomerBaseForServer(server);
+        if (ModDebugLog.IsDhcpAssignVerboseEnabled && cb != null)
+        {
+            ModDebugLog.WriteDhcpAssign($"verbose subnets: {GameSubnetHelper.FormatSubnetsDiagnostic(cb)}");
+        }
+
+        var tryOrder = GameSubnetHelper.BuildDhcpCidrTryOrder(server, cb, allServers, logSteps: false);
+        if (tryOrder == null || tryOrder.Count == 0)
+        {
+            if (customerId <= 0)
+            {
+                return "GetCustomerID()<=0 and no a.b.c.d/prefix strings on Server or matching AssetManagementDeviceLine";
+            }
+
+            if (cb == null)
+            {
+                return $"no CustomerBase in scene for customerId={customerId} and no CIDR on Server/DeviceLine";
+            }
+
+            return ModDebugLog.IsDhcpAssignVerboseEnabled
+                ? $"no try CIDRs after Server/DeviceLine + CustomerBase. {GameSubnetHelper.FormatSubnetsDiagnostic(cb)}"
+                : "0 CIDRs (CustomerBase map empty and no x.x.x.x/nn on Server or AssetManagementDeviceLine); add DHCPSwitches-dhcp-assign.flag";
+        }
+
+        var sb = new StringBuilder();
+        sb.Append("tried CIDRs ");
+        for (var i = 0; i < tryOrder.Count; i++)
+        {
+            var cidr = tryOrder[i];
+            if (string.IsNullOrWhiteSpace(cidr))
+            {
+                continue;
+            }
+
+            var usable = GameSubnetHelper.GetUsableIpsForSubnet(cidr, logDetail: false);
+            var len = usable?.Length ?? 0;
+            if (i > 0)
+            {
+                sb.Append("; ");
+            }
+
+            sb.Append(cidr);
+            sb.Append(" usableCount=");
+            sb.Append(len);
+        }
+
+        sb.Append(" — no unused usable IP (all taken, .1 skipped, or lists empty)");
+        return sb.ToString();
     }
 
     private static void RebuildAssignedIpsFromScene(IEnumerable<Server> servers)
@@ -238,6 +379,17 @@ public static class DHCPManager
             return false;
         }
 
+        if (!skipUsableListCheck
+            && !string.IsNullOrWhiteSpace(ip)
+            && ip != "0.0.0.0"
+            && !GameSubnetHelper.IsIpAllowedForServer(server, ip))
+        {
+            LastSetIpError =
+                "That IP is not in this app's usable range for the contract. Use an address from the in-game IP keypad (hint list) or DHCP auto.";
+            ModLogging.Warning($"SetIP blocked: '{ip}' is not in the usable list for this server's contract subnet.");
+            return false;
+        }
+
         var prevIp = GetServerIP(server);
         var needSuppress = suppressAutoAssignOnEmpty && IsUnsetIp(ip);
         try
@@ -270,19 +422,157 @@ public static class DHCPManager
         }
     }
 
-    /// <summary>Legacy pool when no customer subnet is bound (e.g. main menu).</summary>
-    private static string GetNextFreeLegacyPoolIp()
+    /// <summary>Skips x.x.x.1 — same convention as the in-game hint (gateway is usually .1 on contract subnets).</summary>
+    private static bool IsTypicalGatewayLastOctet(string ip)
     {
-        for (var i = POOL_START; i <= POOL_END; i++)
+        if (string.IsNullOrWhiteSpace(ip))
         {
-            var candidate = SUBNET_BASE + i;
-            if (!AssignedIPs.Contains(candidate))
+            return false;
+        }
+
+        var parts = ip.Trim().Split('.');
+        if (parts.Length != 4 || !int.TryParse(parts[3], out var last))
+        {
+            return false;
+        }
+
+        return last == 1;
+    }
+
+    private static bool IsIpUsedByAnotherServer(Server self, string ip, Server[] allServers)
+    {
+        if (string.IsNullOrWhiteSpace(ip) || allServers == null)
+        {
+            return false;
+        }
+
+        foreach (var s in allServers)
+        {
+            if (s == null || s == self)
             {
-                return candidate;
+                continue;
+            }
+
+            var cur = GetServerIP(s);
+            if (cur == ip)
+            {
+                return true;
             }
         }
 
-        ModLogging.Warning("DHCP: legacy 192.168.1.x pool exhausted.");
+        return false;
+    }
+
+    private static string PickFromUsableArray(
+        Il2CppStringArray usable,
+        Server server,
+        Server[] allServers,
+        string cidrForLog,
+        bool logStep,
+        bool logEachReject)
+    {
+        if (usable == null)
+        {
+            if (logStep)
+            {
+                ModDebugLog.WriteDhcpStep($"PickFromUsableArray cidr={cidrForLog}: usable array is null");
+            }
+
+            return null;
+        }
+
+        var nEmpty = 0;
+        var nInAssigned = 0;
+        var nOtherServer = 0;
+        var nGatewaySkip = 0;
+
+        for (var i = 0; i < usable.Length; i++)
+        {
+            var candidate = usable[i];
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                nEmpty++;
+                if (logEachReject)
+                {
+                    ModDebugLog.WriteDhcpTrace($"PickFromUsableArray cidr={cidrForLog} idx={i}: empty candidate");
+                }
+
+                continue;
+            }
+
+            if (AssignedIPs.Contains(candidate))
+            {
+                nInAssigned++;
+                if (logEachReject)
+                {
+                    ModDebugLog.WriteDhcpTrace($"PickFromUsableArray cidr={cidrForLog} idx={i}: skip {candidate} (in mod AssignedIPs pool)");
+                }
+
+                continue;
+            }
+
+            if (IsIpUsedByAnotherServer(server, candidate, allServers))
+            {
+                nOtherServer++;
+                if (logEachReject)
+                {
+                    ModDebugLog.WriteDhcpTrace($"PickFromUsableArray cidr={cidrForLog} idx={i}: skip {candidate} (used by another Server in scene)");
+                }
+
+                continue;
+            }
+
+            if (IsTypicalGatewayLastOctet(candidate))
+            {
+                nGatewaySkip++;
+                if (logEachReject)
+                {
+                    ModDebugLog.WriteDhcpTrace($"PickFromUsableArray cidr={cidrForLog} idx={i}: skip {candidate} (typical gateway .1 rule)");
+                }
+
+                continue;
+            }
+
+            if (logStep)
+            {
+                ModDebugLog.WriteDhcpStep(
+                    $"PickFromUsableArray cidr={cidrForLog}: chose {candidate} idx={i} stats empty={nEmpty} inAssignedPool={nInAssigned} otherServer={nOtherServer} gatewaySkip={nGatewaySkip} totalLen={usable.Length}");
+            }
+
+            return candidate;
+        }
+
+        if (logStep)
+        {
+            ModDebugLog.WriteDhcpStep(
+                $"PickFromUsableArray cidr={cidrForLog}: no candidate totalLen={usable.Length} empty={nEmpty} inAssignedPool={nInAssigned} otherServer={nOtherServer} gatewaySkip={nGatewaySkip}");
+        }
+
+        return null;
+    }
+
+    private static string PickFromPrivateLan(string privateCidr, Server server, Server[] allServers)
+    {
+        foreach (var candidate in CustomerPrivateSubnetRegistry.EnumerateDhcpCandidates(privateCidr))
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            if (AssignedIPs.Contains(candidate))
+            {
+                continue;
+            }
+
+            if (IsIpUsedByAnotherServer(server, candidate, allServers))
+            {
+                continue;
+            }
+
+            return candidate;
+        }
+
         return null;
     }
 
@@ -290,258 +580,94 @@ public static class DHCPManager
     {
         if (server == null)
         {
-            return GetNextFreeLegacyPoolIp();
-        }
-
-        var prefix = TryGetCustomerSubnetPrefix(server);
-        if (!string.IsNullOrWhiteSpace(prefix))
-        {
-            var customerIp = GetNextFreeIpFromPrefix(prefix);
-            if (!string.IsNullOrWhiteSpace(customerIp))
-            {
-                return customerIp;
-            }
-        }
-
-        return GetNextFreeLegacyPoolIp();
-    }
-
-    private static string TryGetCustomerSubnetPrefix(Server server)
-    {
-        if (server == null)
-        {
             return null;
         }
 
-        var customerId = server.GetCustomerID();
-        if (customerId < 0)
+        var allServers = allServersCache ?? UnityEngine.Object.FindObjectsOfType<Server>();
+
+        var logDetail = ModDebugLog.IsDhcpResolutionStepLogging || ModDebugLog.IsDhcpStepTraceEnabled;
+        var logEachReject = ModDebugLog.IsDhcpStepTraceEnabled;
+
+        if (logDetail)
         {
-            return null;
+            ModDebugLog.WriteDhcpStep($"--- GetNextFreeIpForServer {FormatServerLogLabel(server)} ---");
         }
 
-        if (CustomerSubnetPrefixCache.TryGetValue(customerId, out var cached))
+        var cb = GameSubnetHelper.FindCustomerBaseForServer(server);
+        if (logDetail)
         {
-            return cached;
+            ModDebugLog.WriteDhcpStep(
+                $"FindCustomerBaseForServer: {(cb == null ? "null" : "found")} (scene CustomerBase match for this server GetCustomerID)");
         }
 
-        var prefix = TryLookupCustomerSubnetPrefix(customerId);
-        if (!string.IsNullOrWhiteSpace(prefix))
+        var tryOrder = GameSubnetHelper.BuildDhcpCidrTryOrder(server, cb, allServers, logSteps: logDetail);
+        if (tryOrder.Count > 0)
         {
-            CustomerSubnetPrefixCache[customerId] = prefix;
-            return prefix;
-        }
-
-        CustomerSubnetPrefixCache[customerId] = null;
-        return null;
-    }
-
-    private static string TryLookupCustomerSubnetPrefix(int customerId)
-    {
-        foreach (var customer in UnityEngine.Object.FindObjectsOfType<CustomerBase>())
-        {
-            if (customer == null)
+            if (logDetail)
             {
-                continue;
+                ModDebugLog.WriteDhcpStep(
+                    $"GetNextFreeIpForServer: tryOrder count={tryOrder.Count} order=[{string.Join(", ", tryOrder)}]");
             }
 
-            try
+            foreach (var cidr in tryOrder)
             {
-                if (customer.customerID != customerId)
+                if (string.IsNullOrWhiteSpace(cidr))
                 {
                     continue;
                 }
-            }
-            catch
-            {
-                continue;
-            }
 
-            var prefix = TryExtractCustomerSubnetPrefix(customer);
-            if (!string.IsNullOrWhiteSpace(prefix))
-            {
-                return prefix;
-            }
-        }
-
-        return null;
-    }
-
-    private static string TryExtractCustomerSubnetPrefix(object customer)
-    {
-        if (customer == null)
-        {
-            return null;
-        }
-
-        var seen = new HashSet<object>();
-        return TryExtractCustomerSubnetPrefixRecursive(customer, seen, 0);
-    }
-
-    private static string TryExtractCustomerSubnetPrefixRecursive(object obj, HashSet<object> seen, int depth)
-    {
-        if (obj == null || depth > 8)
-        {
-            return null;
-        }
-
-        if (obj is string strValue)
-        {
-            return TryParsePrefix(strValue);
-        }
-
-        var type = obj.GetType();
-        if (type.IsPrimitive || type.IsEnum)
-        {
-            return null;
-        }
-
-        if (!seen.Add(obj))
-        {
-            return null;
-        }
-
-        if (obj is System.Collections.IEnumerable enumerable && !(obj is string))
-        {
-            foreach (var item in enumerable)
-            {
-                var prefix = TryExtractCustomerSubnetPrefixRecursive(item, seen, depth + 1);
-                if (!string.IsNullOrWhiteSpace(prefix))
+                if (logDetail)
                 {
-                    return prefix;
+                    ModDebugLog.WriteDhcpStep($"GetNextFreeIpForServer: trying cidr={cidr}");
                 }
-            }
-        }
 
-        foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
-        {
-            try
-            {
-                var fieldValue = field.GetValue(obj);
-                if (fieldValue is string stringValue)
+                var usable = GameSubnetHelper.GetUsableIpsForSubnet(cidr, logDetail: logDetail);
+                var picked = PickFromUsableArray(usable, server, allServers, cidr, logDetail, logEachReject);
+                if (!string.IsNullOrEmpty(picked))
                 {
-                    var parsed = TryParsePrefix(stringValue);
-                    if (!string.IsNullOrWhiteSpace(parsed))
+                    if (logDetail)
                     {
-                        return parsed;
+                        ModDebugLog.WriteDhcpStep($"GetNextFreeIpForServer: SUCCESS ip={picked} from cidr={cidr}");
                     }
-                }
 
-                var nested = TryExtractCustomerSubnetPrefixRecursive(fieldValue, seen, depth + 1);
-                if (!string.IsNullOrWhiteSpace(nested))
-                {
-                    return nested;
+                    return picked;
                 }
             }
-            catch
-            {
-            }
-        }
 
-        foreach (var prop in type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
-        {
-            if (!prop.CanRead)
+            if (logDetail)
             {
-                continue;
+                ModDebugLog.WriteDhcpStep("GetNextFreeIpForServer: exhausted all CIDRs in tryOrder without a pick");
             }
 
-            try
-            {
-                var propValue = prop.GetValue(obj);
-                if (propValue is string stringValue)
-                {
-                    var parsed = TryParsePrefix(stringValue);
-                    if (!string.IsNullOrWhiteSpace(parsed))
-                    {
-                        return parsed;
-                    }
-                }
-
-                var nested = TryExtractCustomerSubnetPrefixRecursive(propValue, seen, depth + 1);
-                if (!string.IsNullOrWhiteSpace(nested))
-                {
-                    return nested;
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        return null;
-    }
-
-    private static bool IsPrefixMemberName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return false;
-        }
-
-        name = name.ToLowerInvariant();
-        return name.Contains("subnet")
-               || name.Contains("prefix")
-               || name.Contains("network")
-               || name.Contains("address")
-               || name.Contains("ip")
-               || name.Contains("gateway")
-               || name.Contains("range")
-               || name.Contains("cidr");
-    }
-
-    private static string TryParsePrefix(string rawValue)
-    {
-        if (string.IsNullOrWhiteSpace(rawValue))
-        {
+            ModLogging.Warning(
+                "DHCP: no free address in any contract subnet list for this server (all may be in use or lists empty).");
             return null;
         }
 
-        var trimmed = rawValue.Trim();
-        if (trimmed.EndsWith("/24", StringComparison.OrdinalIgnoreCase))
+        if (logDetail)
         {
-            trimmed = trimmed.Substring(0, trimmed.Length - 3).Trim();
+            ModDebugLog.WriteDhcpStep("GetNextFreeIpForServer: tryOrder count=0; fallbacks private LAN / mod CIDR");
         }
 
-        if (trimmed.EndsWith(".0", StringComparison.OrdinalIgnoreCase))
+        if (CustomerPrivateSubnetRegistry.TryGetPrivateLanCidrForServer(server, out var privateCidr))
         {
-            trimmed = trimmed.Substring(0, trimmed.Length - 2);
-        }
-
-        if (trimmed.EndsWith(".", StringComparison.OrdinalIgnoreCase))
-        {
-            return trimmed;
-        }
-
-        var parts = trimmed.Split('.');
-        if (parts.Length == 4)
-        {
-            return $"{parts[0]}.{parts[1]}.{parts[2]}.";
-        }
-
-        return null;
-    }
-
-    private static string GetNextFreeIpFromPrefix(string prefixBase)
-    {
-        if (string.IsNullOrWhiteSpace(prefixBase))
-        {
-            return null;
-        }
-
-        if (!prefixBase.EndsWith("."))
-        {
-            prefixBase += ".";
-        }
-
-        for (var i = POOL_START; i <= POOL_END; i++)
-        {
-            var candidate = prefixBase + i;
-            if (!AssignedIPs.Contains(candidate))
+            var fromPrivate = PickFromPrivateLan(privateCidr, server, allServers);
+            if (!string.IsNullOrEmpty(fromPrivate))
             {
-                return candidate;
+                return fromPrivate;
             }
         }
 
-        ModLogging.Warning($"DHCP: pool exhausted for prefix {prefixBase}");
+        if (DeviceConfigRegistry.TryGetPreferredDhcpCidrForServer(server, out var modCidr))
+        {
+            var usableMod = GameSubnetHelper.GetUsableIpsForSubnet(modCidr, logDetail: logDetail);
+            var pickedMod = PickFromUsableArray(usableMod, server, allServers, modCidr, logDetail, logEachReject);
+            if (!string.IsNullOrEmpty(pickedMod))
+            {
+                return pickedMod;
+            }
+        }
+
         return null;
     }
 
@@ -623,18 +749,27 @@ public static class DHCPManager
             if (hit == 1)
             {
                 ModDebugLog.WriteLine(
-                    "IOPS: first AddAppPerformance call observed — Harmony gate is active (see IPAM Pause flow / DHCPSwitches-debug.log).");
+                    "IOPS: first AddAppPerformance call observed — Harmony gate is active (see IPAM Pause flow / L3 / DHCPSwitches-debug.log).");
             }
 
             var cid = __instance != null ? __instance.customerID : -1;
             if (IsFlowPaused)
             {
+                ModDebugLog.Trace("iops", "AddAppPerformance Prefix: blocked (IsFlowPaused)");
                 ModDebugLog.WriteThrottledIopsDeny(
                     cid,
                     "FLOW_PAUSED: IPAM flow is paused — click Resume in IPAM so AddAppPerformance runs.");
                 return false;
             }
 
+            if (!ReachabilityService.AllowCustomerAddAppPerformance(__instance, out var denyReason))
+            {
+                ModDebugLog.Trace("iops", $"AddAppPerformance Prefix: blocked (ReachabilityService) {denyReason}");
+                ModDebugLog.WriteThrottledIopsDeny(cid, denyReason ?? "REACHABILITY: blocked (unknown reason)");
+                return false;
+            }
+
+            ModDebugLog.WriteThrottledIopsAllow(cid, ReachabilityService.SummarizeServersForCustomer(cid));
             return true;
         }
     }

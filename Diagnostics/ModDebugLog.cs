@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using UnityEngine;
 
 namespace DHCPSwitches;
@@ -15,6 +16,10 @@ namespace DHCPSwitches;
 /// <c>IOPS ALLOW</c> lines in this file omit per-server IP samples by default; create <c>DHCPSwitches-iops-allow-ips.flag</c> to restore the long sample (server=name=ip) on those lines.
 /// IPAM UI diagnostics (IOPS toolbar, OnGUI mouse) go to <c>DHCPSwitches-ipam.log</c> when <c>DHCPSwitches-ipam.flag</c>
 /// is present — see <see cref="IpamDebugLog"/>.
+/// Batch DHCP from IPAM (e.g. &quot;DHCP all selected&quot;) always writes <c>dhcp-assign:</c> lines to this file; create
+/// <c>DHCPSwitches-dhcp-assign.flag</c> beside <c>_Data</c> for extra subnet/reflection detail on those lines.
+/// During explicit IPAM DHCP (assign all / batch / single), <c>dhcp-step:</c> lines record try-order construction and per-CIDR picks.
+/// Create <c>DHCPSwitches-dhcp-trace.flag</c> for maximum detail (every string field scanned, every usable-IP skip reason).
 /// </summary>
 internal static class ModDebugLog
 {
@@ -34,6 +39,11 @@ internal static class ModDebugLog
     private static bool _setIpDhcpFlagCached;
     private static DateTime _iopsAllowIpsFlagCacheUntilUtc;
     private static bool _iopsAllowIpsFlagCached;
+    private static DateTime _dhcpAssignVerboseFlagCacheUntilUtc;
+    private static bool _dhcpAssignVerboseFlagCached;
+    private static DateTime _dhcpStepTraceFlagCacheUntilUtc;
+    private static bool _dhcpStepTraceFlagCached;
+    private static int _dhcpResolutionBatchDepth;
     private static readonly Dictionary<int, (float Time, string Reason)> IopsDenyThrottle = new();
     private static readonly Dictionary<int, float> IopsAllowThrottle = new();
 
@@ -276,6 +286,136 @@ internal static class ModDebugLog
 
             return _setIpDhcpFlagCached;
         }
+    }
+
+    /// <summary>True when <c>DHCPSwitches-dhcp-assign.flag</c> exists beside the debug log (checked every ~2s).</summary>
+    internal static bool IsDhcpAssignVerboseEnabled
+    {
+        get
+        {
+            var now = DateTime.UtcNow;
+            if (now < _dhcpAssignVerboseFlagCacheUntilUtc)
+            {
+                return _dhcpAssignVerboseFlagCached;
+            }
+
+            Bootstrap();
+            _dhcpAssignVerboseFlagCacheUntilUtc = now.AddSeconds(2);
+            try
+            {
+                if (string.IsNullOrEmpty(_path))
+                {
+                    _dhcpAssignVerboseFlagCached = false;
+                    return false;
+                }
+
+                var dir = Path.GetDirectoryName(_path);
+                if (string.IsNullOrEmpty(dir))
+                {
+                    _dhcpAssignVerboseFlagCached = false;
+                    return false;
+                }
+
+                _dhcpAssignVerboseFlagCached = File.Exists(Path.Combine(dir, "DHCPSwitches-dhcp-assign.flag"));
+            }
+            catch
+            {
+                _dhcpAssignVerboseFlagCached = false;
+            }
+
+            return _dhcpAssignVerboseFlagCached;
+        }
+    }
+
+    /// <summary>Writes a <c>dhcp-assign:</c> line to <c>DHCPSwitches-debug.log</c> (creates/truncates log on first bootstrap of the session).</summary>
+    internal static void WriteDhcpAssign(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return;
+        }
+
+        WriteLine($"dhcp-assign: {message}");
+    }
+
+    /// <summary>Increment while running explicit DHCP from IPAM so <see cref="WriteDhcpStep"/> emits mid-level resolution logs.</summary>
+    internal static void EnterDhcpResolutionBatch()
+    {
+        Interlocked.Increment(ref _dhcpResolutionBatchDepth);
+    }
+
+    internal static void LeaveDhcpResolutionBatch()
+    {
+        Interlocked.Decrement(ref _dhcpResolutionBatchDepth);
+    }
+
+    /// <summary>True during <see cref="EnterDhcpResolutionBatch"/> scope.</summary>
+    internal static bool IsDhcpResolutionStepLogging => _dhcpResolutionBatchDepth > 0;
+
+    /// <summary>True when <c>DHCPSwitches-dhcp-trace.flag</c> exists beside the debug log (checked every ~2s).</summary>
+    internal static bool IsDhcpStepTraceEnabled
+    {
+        get
+        {
+            var now = DateTime.UtcNow;
+            if (now < _dhcpStepTraceFlagCacheUntilUtc)
+            {
+                return _dhcpStepTraceFlagCached;
+            }
+
+            Bootstrap();
+            _dhcpStepTraceFlagCacheUntilUtc = now.AddSeconds(2);
+            try
+            {
+                if (string.IsNullOrEmpty(_path))
+                {
+                    _dhcpStepTraceFlagCached = false;
+                    return false;
+                }
+
+                var dir = Path.GetDirectoryName(_path);
+                if (string.IsNullOrEmpty(dir))
+                {
+                    _dhcpStepTraceFlagCached = false;
+                    return false;
+                }
+
+                _dhcpStepTraceFlagCached = File.Exists(Path.Combine(dir, "DHCPSwitches-dhcp-trace.flag"));
+            }
+            catch
+            {
+                _dhcpStepTraceFlagCached = false;
+            }
+
+            return _dhcpStepTraceFlagCached;
+        }
+    }
+
+    /// <summary>Mid-level DHCP resolution (try-order phases, usable counts, pick result). Batch scope or trace flag.</summary>
+    internal static void WriteDhcpStep(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return;
+        }
+
+        if (!IsDhcpResolutionStepLogging && !IsDhcpStepTraceEnabled)
+        {
+            return;
+        }
+
+        WriteLine($"dhcp-step: {message}");
+    }
+
+    /// <summary>Low-level DHCP (per field, per skipped IP). Requires <c>DHCPSwitches-dhcp-trace.flag</c>.</summary>
+    internal static void WriteDhcpTrace(string message)
+    {
+        if (string.IsNullOrEmpty(message) || !IsDhcpStepTraceEnabled)
+        {
+            return;
+        }
+
+        WriteLine($"dhcp-trace: {message}");
     }
 
     /// <summary>

@@ -1183,6 +1183,9 @@ public static partial class IPAMOverlay
             UpdateAnchorServerForDetail();
             if (LicenseManager.IsDHCPUnlocked)
             {
+                ModDebugLog.Bootstrap();
+                ModDebugLog.WriteDhcpAssign(
+                    $"UI: after customer assign to {GetCustomerName(cb)} — invoking AssignDhcpToServers (selection={SelectedServersScratch.Count})");
                 DHCPManager.AssignDhcpToServers(SelectedServersScratch);
                 DHCPManager.ClearLastSetIpError();
                 BeginImGuiInputRecoveryBurst();
@@ -1596,6 +1599,9 @@ public static partial class IPAMOverlay
             var ox = px;
             if (ImguiButtonOnce(new Rect(ox, py, 148, 26), "DHCP all selected", 50, _stPrimaryBtn))
             {
+                ModDebugLog.Bootstrap();
+                ModDebugLog.WriteDhcpAssign(
+                    $"UI: DHCP all selected clicked (selection={SelectedServersScratch.Count} servers)");
                 DHCPManager.AssignDhcpToServers(SelectedServersScratch);
                 DHCPManager.ClearLastSetIpError();
             }
