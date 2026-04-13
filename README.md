@@ -69,3 +69,9 @@ cd gregFramework/deploy
 ---
 *gregFramework - Powered by the Community!*
 
+
+
+## Contributors
+- @mleem97
+- @Joniii11
+
