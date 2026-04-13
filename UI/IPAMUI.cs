@@ -67,22 +67,24 @@ public class IPAMUI : MonoBehaviour
         foreach (var row in _rows) Destroy(row);
         _rows.Clear();
 
-        // Bypass: NetworkSwitch type is currently unavailable in Assembly-CSharp references.
-        var switches = new object[0];
+        var switches = GregSwitchDiscoveryService.ScanAll();
         foreach (var sw in switches)
         {
             AddSwitchRow(sw);
         }
     }
 
-    private void AddSwitchRow(object swObj)
+    private void AddSwitchRow(SwitchInfo sw)
     {
         var row = new GameObject("Row").AddComponent<HorizontalLayoutGroup>();
         row.transform.SetParent(_listContainer, false);
         row.childForceExpandWidth = true;
         _rows.Add(row.gameObject);
 
-        var status = FlowAnalyzer.AnalyzeSwitch(swObj);
+        // Analysis logic (simplified for UI)
+        bool isIsolated = string.IsNullOrEmpty(sw.RackId);
+        DeepFlowStatus status = sw.IsBroken ? DeepFlowStatus.Broken : (isIsolated ? DeepFlowStatus.Isolated : DeepFlowStatus.Active);
+
         Color statusColor = status switch
         {
             DeepFlowStatus.Active => Color.green,
@@ -91,10 +93,10 @@ public class IPAMUI : MonoBehaviour
             _ => Color.gray
         };
 
-        CreateCell(row.transform, "SW-Unknown");
-        CreateCell(row.transform, "N/A");
+        CreateCell(row.transform, sw.SwitchId ?? "SW-UNKNOWN");
+        CreateCell(row.transform, sw.RackId ?? "N/A");
         CreateCell(row.transform, status.ToString(), statusColor);
-        CreateCell(row.transform, "10.x.x.x/24"); // Placeholder
+        CreateCell(row.transform, "10.x.x.x/24"); // Metadata lookup required for real IP
         CreateCell(row.transform, "0");
     }
 
