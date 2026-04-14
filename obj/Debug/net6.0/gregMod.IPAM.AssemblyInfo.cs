@@ -12,12 +12,11 @@ using System.Reflection;
 
 [assembly: System.Reflection.AssemblyCompanyAttribute("gregMod.IPAM")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
-[assembly: System.Reflection.AssemblyFileVersionAttribute(\"1.0.0.30-pre\")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9c829ae26833622061db2bf0005878bf548f0b9a")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+44f07241c4870f84ff2764b9df4c29d234e9a92f")]
 [assembly: System.Reflection.AssemblyProductAttribute("gregMod.IPAM")]
 [assembly: System.Reflection.AssemblyTitleAttribute("gregMod.IPAM")]
-[assembly: System.Reflection.AssemblyVersionAttribute(\"1.0.0.30-pre\")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
 
 // Von der MSBuild WriteCodeFragment-Klasse generiert.
-
 
