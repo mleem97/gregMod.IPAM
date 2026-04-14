@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("gregMod.IPAM")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3d1a1a1426bf618b1e619eca5d3e0dfbfe3cc8d4")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+59c7fb45866e3413dee877a4d2d9d14229bb5b10")]
 [assembly: System.Reflection.AssemblyProductAttribute("gregMod.IPAM")]
 [assembly: System.Reflection.AssemblyTitleAttribute("gregMod.IPAM")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
