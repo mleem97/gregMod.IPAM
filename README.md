@@ -25,7 +25,7 @@
 ## Installation
 
 1. Install **MelonLoader** (v0.6+)
-2. Place `gregCore.dll` + `gregMod.IPAM.dll` into `Game/Mods/`
+2. Place `gregMod.IPAM.dll` into `Game/Mods/`
 3. Start the game and press **F6**
 
 ## Dependencies
