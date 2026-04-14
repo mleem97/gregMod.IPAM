@@ -1,16 +1,25 @@
 # gregMod.IPAM - Network Management
 
 > IP Address Management and subnet automation for your data center network.
+> Migrated from [DataCenter_DHCPSwitches](https://github.com/mleem97/DataCenter_DHCPSwitches).
 
 **Author:** teamGreg (MLeeM97 & Mochimus) | **License:** MIT | **Framework:** [gregCore](https://git.datacentermods.com/teamGreg/gregCore)
 
 ---
+
+## Overview
+
+`gregMod.IPAM` is a gamified networking system and IPAM layer for **Data Center**. It expands network management depth while keeping the experience practical and fun.
 
 ## Features
 - Auto-subnetting (/24, /22, /16 blocks)
 - VLAN editor and assignment
 - DeepFlow network status integration
 - Customer-to-subnet mapping
+- DHCP scope management
+- Shared server / multi-tenant gameplay concepts
+
+---
 
 ## Installation
 
@@ -22,12 +31,33 @@
 
 - `gregCore.dll`
 
+---
+
+## Tech Stack
+
+- **Game:** Data Center
+- **Runtime:** MelonLoader (`0.7.2+` target)
+- **Language:** C# / .NET 6
+- **Interop:** Il2CppInterop
+- **Patching:** Harmony
+
+---
+
+## Repository Structure
+
+- **`Core/`** — MelonLoader entry (`Main.cs`, `MelonModInfo.cs`, …)
+- **`Networking/`** — DHCP, subnets, device helpers
+- **`Ipam/`** — IPAM overlay (`IPAMOverlay.cs`), `LicenseManager`
+- **`ROADMAP.md`** — phased implementation roadmap
+- **`docs/SOURCE_LAYOUT.md`** — folder-by-folder map of all C# sources
+
+---
+
 ## Building from Source
 
 ```bash
-cd gregFramework/src\gregMod.IPAM
+cd gregFramework/src/gregMod.IPAM
 dotnet build -c Release
-# Output: bin/Release/net6.0/gregMod.IPAM.dll
 ```
 
 Or build everything at once:
@@ -35,13 +65,7 @@ Or build everything at once:
 ```bash
 cd gregFramework/deploy
 ./build-all.ps1
-# Output: gregFramework/BuiltModsForGame/
 ```
-
-## Links
-
-- **Primary:** [git.datacentermods.com/teamGreg](https://git.datacentermods.com/teamGreg)
-- **Discord:** [discord.gg/greg](https://discord.gg/greg)
 
 ---
 
@@ -55,12 +79,9 @@ cd gregFramework/deploy
 - **Kirei**
 - **TeamWaseku** (ModernSamurai, GamerFrankstar, Ultra, Zyn)
 
-*...for keeping the community alive!*
-
 ### Code & Testing
-**Special thanks:**
-- **Joniii11** ([GitHub](https://github.com/Joniii11)) & **mochimus** - Code + Tests
-- **Baker**, **Sharpy1o1**, **MachineFreak** - Testing + Modeling
+- **Joniii11** ([GitHub](https://github.com/Joniii11)) & **mochimus**
+- **Baker**, **Sharpy1o1**, **MachineFreak**
 
 ### Sponsors
 - **@tobiasreichel** - Haupt-Sponsor
@@ -68,10 +89,3 @@ cd gregFramework/deploy
 
 ---
 *gregFramework - Powered by the Community!*
-
-
-
-## Contributors
-- @mleem97
-- @Joniii11
-

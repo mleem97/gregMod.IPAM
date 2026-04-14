@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    Point DataCenterGameDir at the game folder (contains MelonLoader\ or legacy BepInEx\interop for stubs).
+    Override: dotnet build -p:DataCenterGameDir="C:\path\to\Data Center"
+  -->
+  <PropertyGroup>
+    <DataCenterGameDir Condition="'$(DataCenterGameDir)' == ''">D:\Steam\steamapps\common\Data Center</DataCenterGameDir>
+    <MelonLoaderNetDir>$(DataCenterGameDir)\MelonLoader\net6</MelonLoaderNetDir>
+    <MelonIl2CppAssembliesDir>$(DataCenterGameDir)\MelonLoader\Il2CppAssemblies</MelonIl2CppAssembliesDir>
+    <MelonIl2CppInteropDir>$(DataCenterGameDir)\MelonLoader\Dependencies\SupportModules\Il2Cpp</MelonIl2CppInteropDir>
+    <BepInExInteropDir>$(DataCenterGameDir)\BepInEx\interop</BepInExInteropDir>
+    <!-- Prefer MelonLoader-generated assemblies; fall back to BepInEx interop for local builds. -->
+    <GameInteropDir Condition="Exists('$(MelonIl2CppAssembliesDir)\Assembly-CSharp.dll')">$(MelonIl2CppAssembliesDir)</GameInteropDir>
+    <GameInteropDir Condition="'$(GameInteropDir)' == ''">$(BepInExInteropDir)</GameInteropDir>
+  </PropertyGroup>
+</Project>
