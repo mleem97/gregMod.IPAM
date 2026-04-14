@@ -93,8 +93,8 @@
     },
     "gregCore/1.0.0": {
       "type": "project",
-      "path": "../../../../gregCore/gregCore.csproj",
-      "msbuildProject": "../../../../gregCore/gregCore.csproj"
+      "path": "../gregCore/gregCore.csproj",
+      "msbuildProject": "../gregCore/gregCore.csproj"
     }
   },
   "projectFileDependencyGroups": {
@@ -109,11 +109,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\marvi\\source\\repos\\gregFramework\\gregAddons\\mods\\src\\gregMod.IPAM\\gregMod.IPAM.csproj",
+      "projectUniqueName": "C:\\Users\\marvi\\source\\repos\\gregFramework\\gregMod.IPAM\\gregMod.IPAM.csproj",
       "projectName": "gregMod.IPAM",
-      "projectPath": "C:\\Users\\marvi\\source\\repos\\gregFramework\\gregAddons\\mods\\src\\gregMod.IPAM\\gregMod.IPAM.csproj",
+      "projectPath": "C:\\Users\\marvi\\source\\repos\\gregFramework\\gregMod.IPAM\\gregMod.IPAM.csproj",
       "packagesPath": "C:\\Users\\marvi\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\marvi\\source\\repos\\gregFramework\\gregAddons\\mods\\src\\gregMod.IPAM\\obj\\",
+      "outputPath": "C:\\Users\\marvi\\source\\repos\\gregFramework\\gregMod.IPAM\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "G:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -177,4 +177,3 @@
     }
   }
 }
-

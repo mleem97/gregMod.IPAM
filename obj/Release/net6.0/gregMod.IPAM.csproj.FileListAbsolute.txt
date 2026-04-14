@@ -1,0 +1,16 @@
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\gregMod.IPAM.csproj.AssemblyReference.cache
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\gregMod.IPAM.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\gregMod.IPAM.AssemblyInfoInputs.cache
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\gregMod.IPAM.AssemblyInfo.cs
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\gregMod.IPAM.csproj.CoreCompileInputs.cache
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\gregMod.IPAM.sourcelink.json
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\bin\Release\net6.0\gregMod.IPAM.deps.json
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\bin\Release\net6.0\gregMod.IPAM.dll
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\bin\Release\net6.0\gregMod.IPAM.pdb
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\bin\Release\net6.0\gregCore.dll
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\bin\Release\net6.0\gregCore.pdb
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\gregMod..C40425F5.Up2Date
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\gregMod.IPAM.dll
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\refint\gregMod.IPAM.dll
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\gregMod.IPAM.pdb
+C:\Users\marvi\source\repos\gregFramework\gregMod.IPAM\obj\Release\net6.0\ref\gregMod.IPAM.dll
