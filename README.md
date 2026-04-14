@@ -12,6 +12,7 @@
 `gregMod.IPAM` is a gamified networking system and IPAM layer for **Data Center**. It expands network management depth while keeping the experience practical and fun.
 
 ## Features
+
 - Auto-subnetting (/24, /22, /16 blocks)
 - VLAN editor and assignment
 - DeepFlow network status integration
@@ -72,7 +73,9 @@ cd gregFramework/deploy
 ## Contributors & Thanks
 
 ### Discord Community
+
 **Thanks to:**
+
 - **Noootry**
 - **TheSlickers**
 - **Jarvis**
@@ -80,10 +83,12 @@ cd gregFramework/deploy
 - **TeamWaseku** (ModernSamurai, GamerFrankstar, Ultra, Zyn)
 
 ### Code & Testing
+
 - **Joniii11** ([GitHub](https://github.com/Joniii11)) & **mochimus**
 - **Baker**, **Sharpy1o1**, **MachineFreak**
 
 ### Sponsors
+
 - **@tobiasreichel** - Haupt-Sponsor
 - **SQ8** - Infrastructure Hosting
 
