@@ -50,6 +50,7 @@ public static partial class IPAMOverlay
             _nextListRefreshTime = t + ListRefreshInterval;
             _cachedSwitches = FilterAlive(UnityEngine.Object.FindObjectsOfType<NetworkSwitch>());
             _cachedServers = FilterAlive(UnityEngine.Object.FindObjectsOfType<Server>());
+            GameSubnetHelper.RebuildAssetManagementDeviceLineServerCache();
             var sc = _cachedServers.Length;
             var swc = _cachedSwitches.Length;
             if (sc != _lastDeviceListServerCount || swc != _lastDeviceListSwitchCount)
@@ -237,6 +238,7 @@ public static partial class IPAMOverlay
         _lastDeviceListSwitchCount = -1;
         CustomerDisplayNameCache.Clear();
         DHCPManager.ClearCaches();
+        GameSubnetHelper.RebuildAssetManagementDeviceLineServerCache();
     }
     /// <summary>Call from <c>OnGUI</c> (start and, when overlays are closed, end of pass) so IMGUI does not keep capture after closing windows.</summary>
     public static void PumpImGuiInputRecovery()

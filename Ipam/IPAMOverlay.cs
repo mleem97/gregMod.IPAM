@@ -84,11 +84,53 @@ public static partial class IPAMOverlay
 
     private static readonly Dictionary<int, string> CustomerDisplayNameCache = new();
 
+    /// <summary>
+    /// True when the server is not on a customer for IPAM purposes: negative <see cref="Server.GetCustomerID"/>,
+    /// or the game left a default positive ID before rack placement — then we require an <see cref="AssetManagementDeviceLine"/>
+    /// reference and/or a real IPv4 to treat them as assigned.
+    /// </summary>
+    internal static bool IsServerWithoutCustomerAssignment(Server server)
+    {
+        if (server == null)
+        {
+            return true;
+        }
+
+        int cid;
+        try
+        {
+            cid = server.GetCustomerID();
+        }
+        catch
+        {
+            return true;
+        }
+
+        if (cid < 0)
+        {
+            return true;
+        }
+
+        if (GameSubnetHelper.IsServerReferencedByAssetManagementDeviceLine(server))
+        {
+            return false;
+        }
+
+        var ip = DHCPManager.GetServerIP(server);
+        var hasRealIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
+        return !hasRealIp;
+    }
+
     internal static string GetCustomerDisplayName(Server server)
     {
         if (server == null)
         {
             return "Unknown";
+        }
+
+        if (IsServerWithoutCustomerAssignment(server))
+        {
+            return "—";
         }
 
         var cid = server.GetCustomerID();
@@ -167,6 +209,15 @@ public static partial class IPAMOverlay
     private static bool _customerDropdownOpen;
     private static Vector2 _customerDropdownScroll;
 
+    /// <summary>Customers tab: filtered server rows (rebuilt each draw).</summary>
+    private static readonly List<Server> CustomersTabServersBuffer = new();
+
+    /// <summary>Customers tab: sentinel <c>-1</c> = servers with no customer (<see cref="IsServerWithoutCustomerAssignment"/>); else match <see cref="Server.GetCustomerID"/> (including 0).</summary>
+    private static int _customersTabFilterCustomerId = -1;
+
+    private static bool _customersTabFilterMenuOpen;
+    private static Vector2 _customersTabFilterScroll;
+
     private static bool _ipamResizeDrag;
     private static Vector2 _ipamResizeStartMouse;
     private static Vector2 _ipamResizeStartSize;
@@ -203,7 +254,8 @@ public static partial class IPAMOverlay
         Dashboard = 0,
         Devices = 1,
         IpAddresses = 2,
-        Prefixes = 3,
+        Customers = 3,
+        Prefixes = 4,
     }
 
     private static NavSection _navSection = NavSection.Devices;
@@ -262,8 +314,6 @@ public static partial class IPAMOverlay
     private static bool _iopsCalculatorOpen;
     /// <summary>Digits only — typed via <see cref="EventType.KeyDown"/> (no TextField on IL2CPP).</summary>
     private static string _iopsCalculatorDigits = "";
-    /// <summary>0 = 2U server, 1 = 4U server.</summary>
-    private static int _iopsCalculatorServerKind;
     private static int _iopsCalcKeyDedupeFrame = -1;
     private static readonly HashSet<int> _iopsCalcKeyDigests = new();
 
@@ -336,6 +386,8 @@ public static partial class IPAMOverlay
     private static GUIStyle _stMutedBtn;
     /// <summary>Result line — same face as <see cref="_stTableCell"/> (IPAM body text).</summary>
     private static GUIStyle _stIopsResult;
+    /// <summary>Larger type for IOPS calculator 4 U / 2 U server counts.</summary>
+    private static GUIStyle _stIopsResultCounts;
     /// <summary>Placeholder on the result card when no valid IOPS entered (muted like <see cref="_stMuted"/>).</summary>
     private static GUIStyle _stIopsResultPlaceholder;
     private static bool _stylesReady;

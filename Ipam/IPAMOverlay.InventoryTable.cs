@@ -320,6 +320,7 @@ public static partial class IPAMOverlay
         BumpHeader(0, "Name");
         BumpHeader(1, "Customer");
         BumpHeader(2, "Role");
+        BumpHeader(2, "Type");
         BumpHeader(3, "IPv4 address");
         BumpHeader(3, "Mgmt IPv4");
         BumpHeader(4, "EOL");
@@ -365,7 +366,7 @@ public static partial class IPAMOverlay
 
             BumpCell(0, DeviceInventoryReflection.GetDisplayName(server));
             BumpCell(1, GetCustomerDisplayName(server));
-            BumpCell(2, "Server");
+            BumpCell(2, DeviceInventoryReflection.GetServerFormFactorLabel(server));
             var ip = DHCPManager.GetServerIP(server);
             BumpCell(3, string.IsNullOrWhiteSpace(ip) ? "—" : ip);
             if (TryGetIpamEolString(server, out var eolS))
@@ -553,7 +554,10 @@ public static partial class IPAMOverlay
                 GetCustomerDisplayName(a),
                 GetCustomerDisplayName(b),
                 StringComparison.OrdinalIgnoreCase),
-            2 => 0,
+            2 => string.Compare(
+                DeviceInventoryReflection.GetServerFormFactorLabel(a),
+                DeviceInventoryReflection.GetServerFormFactorLabel(b),
+                StringComparison.OrdinalIgnoreCase),
             3 => IpSortKey(DHCPManager.GetServerIP(a)).CompareTo(IpSortKey(DHCPManager.GetServerIP(b))),
             4 => string.Compare(
                 EolSortKey(a),

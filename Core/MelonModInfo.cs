@@ -1,6 +1,6 @@
 using DHCPSwitches;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(DHCPSwitchesMod), "DHCP Switches & IPAM", "1.0.0", "DHCPSwitches Contributors")]
+[assembly: MelonInfo(typeof(DHCPSwitchesMod), "DHCP Switches & IPAM", "0.3.0", "Mochimus")]
 // Empty MelonGame = universal (any game). For a stricter mod, use e.g. [MelonGame("CompanyFromLog", "ProductFromLog")] from MelonLoader/Latest.log.
 [assembly: MelonGame()]

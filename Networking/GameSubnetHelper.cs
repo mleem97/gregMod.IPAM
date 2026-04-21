@@ -29,11 +29,82 @@ public static class GameSubnetHelper
     private static MethodInfo _cachedUsableIpMethod;
     private static object _cachedUsableIpTarget;
 
+    /// <summary>Instance IDs of <see cref="Server"/> referenced by <see cref="AssetManagementDeviceLine.server"/> (rack / contract UI).</summary>
+    private static readonly HashSet<int> ServerInstanceIdsOnAssetManagementDeviceLines = new();
+
     public static void ClearCaches()
     {
         SubnetsCacheByCustomerId.Clear();
         _cachedUsableIpMethod = null;
         _cachedUsableIpTarget = null;
+        ServerInstanceIdsOnAssetManagementDeviceLines.Clear();
+    }
+
+    /// <summary>Rebuilds the set of servers currently tied to an asset-management row (O(n) scene scan).</summary>
+    public static void RebuildAssetManagementDeviceLineServerCache()
+    {
+        ServerInstanceIdsOnAssetManagementDeviceLines.Clear();
+        try
+        {
+            var lines = UnityEngine.Object.FindObjectsOfType<AssetManagementDeviceLine>(true);
+            if (lines == null)
+            {
+                return;
+            }
+
+            foreach (var line in lines)
+            {
+                if (line == null)
+                {
+                    continue;
+                }
+
+                Server lineServer = null;
+                try
+                {
+                    lineServer = line.server;
+                }
+                catch
+                {
+                    lineServer = null;
+                }
+
+                if (lineServer == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    ServerInstanceIdsOnAssetManagementDeviceLines.Add(lineServer.GetInstanceID());
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
+            }
+        }
+        catch
+        {
+            // type or field mismatch across game versions
+        }
+    }
+
+    public static bool IsServerReferencedByAssetManagementDeviceLine(Server server)
+    {
+        if (server == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return ServerInstanceIdsOnAssetManagementDeviceLines.Contains(server.GetInstanceID());
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public static CustomerBase FindCustomerBaseForServer(Server server)

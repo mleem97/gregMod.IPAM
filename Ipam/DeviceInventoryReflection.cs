@@ -60,6 +60,141 @@ internal static class DeviceInventoryReflection
         "MuteAlarms", "SuppressAlarms", "ClearIncident", "ClearIncidents",
     };
 
+    /// <summary>Rack form factor for inventory (2 U / 4 U) when the name or game fields hint at it; otherwise "—".</summary>
+    internal static string GetServerFormFactorLabel(Server server)
+    {
+        if (server == null)
+        {
+            return "—";
+        }
+
+        try
+        {
+            var blob = ((server.name ?? "") + " " + GetDisplayName(server)).Trim();
+            var fromName = ClassifyFormFactorFromText(blob);
+            if (fromName != null)
+            {
+                return fromName;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        foreach (var name in new[]
+                 {
+                     "rackUnits", "RackUnits", "rackUnitHeight", "RackUnitHeight", "unitHeight", "UnitHeight",
+                     "uHeight", "UHeight", "heightU", "HeightU", "ru", "RU", "formFactor", "FormFactor",
+                     "serverFormFactor", "ServerFormFactor", "serverType", "ServerType", "hardwareType", "HardwareType",
+                     "serverLine", "ServerLine", "modelName", "ModelName",
+                 })
+        {
+            if (TryReadIntMember(server, name, out var u) && (u == 2 || u == 4))
+            {
+                return u == 4 ? "4 U" : "2 U";
+            }
+        }
+
+        return "—";
+    }
+
+    private static string ClassifyFormFactorFromText(string blob)
+    {
+        if (string.IsNullOrEmpty(blob))
+        {
+            return null;
+        }
+
+        if (blob.IndexOf("4u", StringComparison.OrdinalIgnoreCase) >= 0
+            || blob.IndexOf("4 u", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return "4 U";
+        }
+
+        if (blob.IndexOf("2u", StringComparison.OrdinalIgnoreCase) >= 0
+            || blob.IndexOf("2 u", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return "2 U";
+        }
+
+        return null;
+    }
+
+    private static bool TryReadIntMember(object o, string memberName, out int value)
+    {
+        value = 0;
+        if (o == null || string.IsNullOrEmpty(memberName))
+        {
+            return false;
+        }
+
+        for (var bt = o.GetType(); bt != null && bt != typeof(object); bt = bt.BaseType)
+        {
+            try
+            {
+                var p = bt.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (p != null && p.CanRead && TryConvertToInt32(p.GetValue(o), out value))
+                {
+                    return true;
+                }
+
+                var f = bt.GetField(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (f != null && TryConvertToInt32(f.GetValue(o), out value))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // Il2Cpp
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryConvertToInt32(object v, out int i)
+    {
+        i = 0;
+        if (v == null)
+        {
+            return false;
+        }
+
+        switch (v)
+        {
+            case int x:
+                i = x;
+                return true;
+            case long x:
+                i = (int)x;
+                return true;
+            case short x:
+                i = x;
+                return true;
+            case byte x:
+                i = x;
+                return true;
+            case uint x:
+                if (x <= int.MaxValue)
+                {
+                    i = (int)x;
+                    return true;
+                }
+
+                return false;
+            case float f:
+                i = Mathf.RoundToInt(f);
+                return true;
+            case double d:
+                i = (int)Math.Round(d);
+                return true;
+            default:
+                return int.TryParse(v.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out i);
+        }
+    }
+
     internal static string GetDisplayName(UnityEngine.Object o)
     {
         if (o == null)

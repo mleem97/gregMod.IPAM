@@ -264,9 +264,12 @@ public static partial class IPAMOverlay
         DrawNavEntry(new Rect(8, bodyTop + 30, SidebarW - 8, 32), NavSection.Dashboard, "Dashboard");
         DrawNavEntry(new Rect(8, bodyTop + 64, SidebarW - 8, 32), NavSection.Devices, "Devices");
         DrawNavEntry(new Rect(8, bodyTop + 98, SidebarW - 8, 32), NavSection.IpAddresses, "IP addresses");
-        DrawNavEntry(new Rect(8, bodyTop + 132, SidebarW - 8, 32), NavSection.Prefixes, "Prefixes");
+        DrawNavEntry(new Rect(8, bodyTop + 132, SidebarW - 8, 32), NavSection.Customers, "Customers");
+        DrawNavEntry(new Rect(8, bodyTop + 166, SidebarW - 8, 32), NavSection.Prefixes, "Prefixes");
+        var tipY = bodyTop + 204f;
+        var tipH = Mathf.Max(36f, bodyTop + bodyH - tipY - 8f);
         GUI.Label(
-            new Rect(8, bodyTop + bodyH - 88, SidebarW - 12, 80),
+            new Rect(8, tipY, SidebarW - 12, tipH),
             "Tip: plain click selects one; Ctrl toggles; Shift+click range within the same table (switches or servers) from the last plain click there. Drag column headers to resize; Fit columns sizes to content.",
             _stNavHint);
 
@@ -311,7 +314,10 @@ public static partial class IPAMOverlay
             case NavSection.IpAddresses:
                 DrawIpAddressTable(innerW);
                 break;
-            default:
+            case NavSection.Customers:
+                DrawCustomersView(innerW);
+                break;
+            case NavSection.Prefixes:
                 DrawPrefixesPlaceholder(innerW);
                 break;
         }
@@ -513,12 +519,16 @@ public static partial class IPAMOverlay
         UpdateAnchorServerForDetail();
     }
 
-    private static int FindSortedServerIndex(int instanceId)
+    private static int FindServerIndexInList(int instanceId, List<Server> list)
     {
-        EnsureSortedServers();
-        for (var i = 0; i < SortedServersBuffer.Count; i++)
+        if (list == null)
         {
-            var s = SortedServersBuffer[i];
+            return -1;
+        }
+
+        for (var i = 0; i < list.Count; i++)
+        {
+            var s = list[i];
             if (s != null && s.GetInstanceID() == instanceId)
             {
                 return i;
@@ -541,9 +551,9 @@ public static partial class IPAMOverlay
         return null;
     }
 
-    private static void HandleServerRowClick(Server server, int sortedIndex, string ip)
+    private static void HandleServerRowClick(Server server, int sortedIndex, string ip, List<Server> viewRows)
     {
-        if (server == null)
+        if (server == null || viewRows == null)
         {
             return;
         }
@@ -557,7 +567,7 @@ public static partial class IPAMOverlay
 
         if (shift && !ctrl && _serverRangeAnchorInstanceId >= 0)
         {
-            var anchorIdx = FindSortedServerIndex(_serverRangeAnchorInstanceId);
+            var anchorIdx = FindServerIndexInList(_serverRangeAnchorInstanceId, viewRows);
             if (anchorIdx < 0)
             {
                 anchorIdx = sortedIndex;
@@ -568,7 +578,7 @@ public static partial class IPAMOverlay
             _selectedServerInstanceIds.Clear();
             for (var i = lo; i <= hi; i++)
             {
-                var s = SortedServersBuffer[i];
+                var s = viewRows[i];
                 if (s != null)
                 {
                     _selectedServerInstanceIds.Add(s.GetInstanceID());
@@ -782,6 +792,7 @@ public static partial class IPAMOverlay
         {
             _navSection = target;
             _scroll = Vector2.zero;
+            _customersTabFilterMenuOpen = false;
             RecomputeContentHeight();
         }
     }
@@ -798,6 +809,12 @@ public static partial class IPAMOverlay
                 var sv = _cachedServers.Length;
                 var y = CardPad + SectionTitleH + 2f + 7f + SectionTitleH + 4f + TableHeaderH + sv * TableRowH + CardPad;
                 _cachedContentHeight = Mathf.Max(220f, y);
+                return;
+            }
+            case NavSection.Customers:
+            {
+                var n = CountServersMatchingCustomersTabFilter();
+                _cachedContentHeight = ComputeCustomersTabContentHeight(n);
                 return;
             }
             case NavSection.Prefixes:
@@ -934,7 +951,7 @@ public static partial class IPAMOverlay
             ref _serverSortAscending,
             "Name",
             "Customer",
-            "Role",
+            "Type",
             "IPv4 address",
             "EOL",
             "Status",
@@ -957,7 +974,7 @@ public static partial class IPAMOverlay
                     false,
                     "(removed)",
                     "—",
-                    "Server",
+                    "—",
                     "—",
                     "—",
                     "—",
@@ -975,6 +992,7 @@ public static partial class IPAMOverlay
             var eolCol = TableEolCellDisplay(server, cardW);
             var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
             var dispName = CellTextForCol(0, string.IsNullOrEmpty(dispRaw) ? "—" : dispRaw, cardW);
+            var typeCol = CellTextForCol(2, DeviceInventoryReflection.GetServerFormFactorLabel(server), cardW);
             if (TableDataRowClick(
                     r,
                     StableRowHint(2, server, i),
@@ -982,13 +1000,13 @@ public static partial class IPAMOverlay
                     IsServerRowSelected(server),
                     dispName,
                     cust,
-                    CellTextForCol(2, "Server", cardW),
+                    typeCol,
                     ipCol,
                     eolCol,
                     status,
                     cardW))
             {
-                HandleServerRowClick(server, i, ip);
+                HandleServerRowClick(server, i, ip, SortedServersBuffer);
             }
 
             y += TableRowH;
@@ -1042,7 +1060,7 @@ public static partial class IPAMOverlay
             ref _serverSortAscending,
             "Device",
             "Customer",
-            "Role",
+            "Type",
             "IPv4 address",
             "EOL",
             "Status",
@@ -1082,6 +1100,7 @@ public static partial class IPAMOverlay
             var eolCol = TableEolCellDisplay(server, cardW);
             var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
             var dispName = CellTextForCol(0, string.IsNullOrEmpty(dispRaw) ? "—" : dispRaw, cardW);
+            var typeCol = CellTextForCol(2, DeviceInventoryReflection.GetServerFormFactorLabel(server), cardW);
             if (TableDataRowClick(
                     r,
                     StableRowHint(4, server, i),
@@ -1089,13 +1108,13 @@ public static partial class IPAMOverlay
                     IsServerRowSelected(server),
                     dispName,
                     cust,
-                    CellTextForCol(2, "Server", cardW),
+                    typeCol,
                     ipCol,
                     eolCol,
                     status,
                     cardW))
             {
-                HandleServerRowClick(server, i, ip);
+                HandleServerRowClick(server, i, ip, SortedServersBuffer);
             }
 
             y += TableRowH;
@@ -1457,6 +1476,12 @@ public static partial class IPAMOverlay
         }
 
         CustomerPickBuffer.AddRange(uniqueCustomers.Values);
+        CustomerPickBuffer.Sort((a, b) =>
+        {
+            TryGetCustomerId(b, out var bid);
+            TryGetCustomerId(a, out var aid);
+            return bid.CompareTo(aid);
+        });
         GUI.Label(new Rect(px, py + 3, 78, 22), "Customer:", _stFormLabel);
         var fieldW = Mathf.Min(w - px - 100, 520f);
         var dropBtnRect = new Rect(px + 82, py, fieldW, 24);

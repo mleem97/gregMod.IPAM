@@ -1,0 +1,1 @@
+gregMod.IPAM.dll — Release 0.3.0 (MelonLoader). Built from this branch; assembly name inside the DLL remains DHCPSwitches. Copy into the game Mods folder as needed.

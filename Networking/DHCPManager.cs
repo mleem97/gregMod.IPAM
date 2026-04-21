@@ -210,9 +210,9 @@ public static class DHCPManager
         var newIp = GetNextFreeIpForServer(server, allServers);
         if (string.IsNullOrEmpty(newIp))
         {
-            if (server.GetCustomerID() <= 0)
+            if (IPAMOverlay.IsServerWithoutCustomerAssignment(server))
             {
-                LastSetIpError = "DHCP failed: this server is not assigned to a customer contract.";
+                LastSetIpError = "DHCP failed: server is not on a customer contract yet (rack row or IPAM assign).";
             }
             else
             {
@@ -285,9 +285,9 @@ public static class DHCPManager
         var tryOrder = GameSubnetHelper.BuildDhcpCidrTryOrder(server, cb, allServers, logSteps: false);
         if (tryOrder == null || tryOrder.Count == 0)
         {
-            if (customerId <= 0)
+            if (IPAMOverlay.IsServerWithoutCustomerAssignment(server))
             {
-                return "GetCustomerID()<=0 and no a.b.c.d/prefix strings on Server or matching AssetManagementDeviceLine";
+                return "server not on customer contract (no AssetManagementDeviceLine + no real IPv4, or GetCustomerID()<0); no CIDR try list";
             }
 
             if (cb == null)

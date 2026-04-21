@@ -377,6 +377,16 @@ public static partial class IPAMOverlay
         _stIopsResult.clipping = TextClipping.Clip;
         _stIopsResult.normal.textColor = new Color32(220, 226, 235, 255);
 
+        _stIopsResultCounts = new GUIStyle();
+        _stIopsResultCounts.font = lf;
+        _stIopsResultCounts.fontSize = 20;
+        _stIopsResultCounts.fontStyle = FontStyle.Bold;
+        _stIopsResultCounts.alignment = TextAnchor.UpperLeft;
+        _stIopsResultCounts.wordWrap = true;
+        _stIopsResultCounts.padding = Ro(0, 0, 0, 0);
+        _stIopsResultCounts.clipping = TextClipping.Clip;
+        _stIopsResultCounts.normal.textColor = new Color32(220, 226, 235, 255);
+
         _stIopsResultPlaceholder = new GUIStyle();
         _stIopsResultPlaceholder.font = lf;
         _stIopsResultPlaceholder.fontSize = 11;
