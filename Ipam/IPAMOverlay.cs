@@ -222,7 +222,7 @@ public static partial class IPAMOverlay
     private static Vector2 _ipamResizeStartMouse;
     private static Vector2 _ipamResizeStartSize;
 
-    /// <summary>Right-packed inventory row: tr + gaps + Fit + Auto-DHCP + Fill + L3 + Pause + Alarms + Tech + IOPS.</summary>
+    /// <summary>Right-packed inventory row: trailing margin + gaps + Fit columns + IOPS calc.</summary>
     private static int _windowMinWFrame = -1;
     private static float _windowMinWCached = 1020f;
 
@@ -255,7 +255,6 @@ public static partial class IPAMOverlay
         Devices = 1,
         IpAddresses = 2,
         Customers = 3,
-        Prefixes = 4,
     }
 
     private static NavSection _navSection = NavSection.Devices;
@@ -361,6 +360,8 @@ public static partial class IPAMOverlay
     private static Texture2D _texMutedBtnHover;
     private static Texture2D _texNavBtnHover;
     private static Texture2D _texModalDim;
+    /// <summary>1×1 white — tint with <see cref="GUI.DrawTexture"/> for chart fills.</summary>
+    private static Texture2D _texWhite;
     private static bool _texturesReady;
 
     private static GUIStyle _stModalBlocker;
@@ -378,6 +379,8 @@ public static partial class IPAMOverlay
     private static GUIStyle _stTableCell;
     private static GUIStyle _stNavBtn;
     private static GUIStyle _stMuted;
+    /// <summary>Muted body text, centered (e.g. empty chart placeholder).</summary>
+    private static GUIStyle _stMutedCenter;
     private static GUIStyle _stHint;
     private static GUIStyle _stError;
     private static GUIStyle _stFormLabel;
@@ -388,6 +391,8 @@ public static partial class IPAMOverlay
     private static GUIStyle _stIopsResult;
     /// <summary>Larger type for IOPS calculator 4 U / 2 U server counts.</summary>
     private static GUIStyle _stIopsResultCounts;
+    /// <summary>Large metric on the IPAM dashboard hero cards.</summary>
+    private static GUIStyle _stDashboardHeroValue;
     /// <summary>Placeholder on the result card when no valid IOPS entered (muted like <see cref="_stMuted"/>).</summary>
     private static GUIStyle _stIopsResultPlaceholder;
     private static bool _stylesReady;

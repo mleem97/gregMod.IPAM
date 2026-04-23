@@ -90,6 +90,11 @@ public static partial class IPAMOverlay
         var dhcpUnlocked = LicenseManager.IsDHCPUnlocked;
         var ipamUnlocked = LicenseManager.IsIPAMUnlocked;
 
+        if (!Enum.IsDefined(typeof(NavSection), _navSection))
+        {
+            _navSection = NavSection.Devices;
+        }
+
         if (!ipamUnlocked)
         {
             CloseIopsCalculatorModal("IPAM locked");
@@ -143,7 +148,7 @@ public static partial class IPAMOverlay
                 new Rect(licDhcpX, licY, licBtnW, licBtnH),
                 new GUIContent(
                     dhcpUnlocked ? "DHCP: ON" : "DHCP: locked",
-                    "Toggle DHCP (bulk assign, per-server DHCP, fill-empty). Ctrl+D toggles DHCP+IPAM together."),
+                    "Toggle DHCP (per-server DHCP, detail panel). Ctrl+D toggles DHCP+IPAM together."),
                 8802,
                 dhcpUnlocked ? _stPrimaryBtn : _stMutedBtn))
         {
@@ -162,13 +167,7 @@ public static partial class IPAMOverlay
         const float g = 8f;
         const float btnH = 26f;
         float TW(GUIStyle st, string t) => ToolbarTextButtonWidth(st, t);
-        float TW2(GUIStyle st, string a, string b) => Mathf.Max(TW(st, a), TW(st, b));
         var fitColsW = TW(_stMutedBtn, "Fit columns");
-        var autoW = TW(_stPrimaryBtn, "Auto-DHCP (all servers)");
-        var fillW = TW2(_stMutedBtn, "Fill empty: ON", "Fill empty: OFF");
-        var pauseW = TW2(_stMutedBtn, "Resume flow", "Pause flow");
-        var clrAlarmW = TW(_stMutedBtn, "Clear alarms");
-        var techW = TW(_stMutedBtn, "Send technician");
         var iopsCalcW = TW(_stMutedBtn, "IOPS calc");
         var tx = w - tr;
         tx -= g + fitColsW;
@@ -182,38 +181,6 @@ public static partial class IPAMOverlay
             {
                 _tableColumnsAutoFitPending = true;
             }
-        }
-
-        tx -= g + autoW;
-        if (ImguiButtonOnce(new Rect(tx, btnRowY + ty, autoW, btnH), "Auto-DHCP (all servers)", 10, _stPrimaryBtn) && dhcpUnlocked)
-        {
-            DHCPManager.AssignAllServers();
-        }
-
-        tx -= g + fillW;
-        var fillOn = DHCPManager.EmptyIpAutoFillEnabled;
-        var fillLabel = fillOn ? "Fill empty: ON" : "Fill empty: OFF";
-        if (ImguiButtonOnce(new Rect(tx, btnRowY + ty, fillW, btnH), fillLabel, 17812, _stMutedBtn))
-        {
-            DHCPManager.EmptyIpAutoFillEnabled = !DHCPManager.EmptyIpAutoFillEnabled;
-        }
-
-        tx -= g + pauseW;
-        if (ImguiButtonOnce(new Rect(tx, btnRowY + ty, pauseW, btnH), DHCPManager.IsFlowPaused ? "Resume flow" : "Pause flow", 11, _stMutedBtn))
-        {
-            DHCPManager.ToggleFlow();
-        }
-
-        tx -= g + clrAlarmW;
-        if (ImguiButtonOnce(new Rect(tx, btnRowY + ty, clrAlarmW, btnH), "Clear alarms", 17886, _stMutedBtn))
-        {
-            RunClearAlarmsOnSelection();
-        }
-
-        tx -= g + techW;
-        if (ImguiButtonOnce(new Rect(tx, btnRowY + ty, techW, btnH), "Send technician", 17887, _stMutedBtn))
-        {
-            RunSendTechnicianOnSelection();
         }
 
         tx -= g + iopsCalcW;
@@ -265,8 +232,7 @@ public static partial class IPAMOverlay
         DrawNavEntry(new Rect(8, bodyTop + 64, SidebarW - 8, 32), NavSection.Devices, "Devices");
         DrawNavEntry(new Rect(8, bodyTop + 98, SidebarW - 8, 32), NavSection.IpAddresses, "IP addresses");
         DrawNavEntry(new Rect(8, bodyTop + 132, SidebarW - 8, 32), NavSection.Customers, "Customers");
-        DrawNavEntry(new Rect(8, bodyTop + 166, SidebarW - 8, 32), NavSection.Prefixes, "Prefixes");
-        var tipY = bodyTop + 204f;
+        var tipY = bodyTop + 172f;
         var tipH = Mathf.Max(36f, bodyTop + bodyH - tipY - 8f);
         GUI.Label(
             new Rect(8, tipY, SidebarW - 12, tipH),
@@ -316,9 +282,6 @@ public static partial class IPAMOverlay
                 break;
             case NavSection.Customers:
                 DrawCustomersView(innerW);
-                break;
-            case NavSection.Prefixes:
-                DrawPrefixesPlaceholder(innerW);
                 break;
         }
 
@@ -613,93 +576,6 @@ public static partial class IPAMOverlay
         LoadOctetsFromIp(ip);
     }
 
-    private static bool InventorySelectionIsNonEmpty()
-    {
-        return _selectedServerInstanceIds.Count > 0 || _selectedNetworkSwitchInstanceIds.Count > 0;
-    }
-
-    private static void RunSendTechnicianOnSelection()
-    {
-        if (!InventorySelectionIsNonEmpty())
-        {
-            ModLogging.Warning("Send technician: select one or more servers (table) or a network switch first.");
-            ShowIpamToast("Send technician: select a server row or switch in the table first.");
-            return;
-        }
-
-        var ok = 0;
-        foreach (var sid in _selectedServerInstanceIds)
-        {
-            var s = FindServerByInstanceId(sid);
-            if (s != null && DeviceInventoryReflection.TrySendTechnician(s))
-            {
-                ok++;
-            }
-        }
-
-        foreach (var sid in _selectedNetworkSwitchInstanceIds)
-        {
-            var sw = FindNetworkSwitchByInstanceId(sid);
-            if (sw != null && DeviceInventoryReflection.TrySendTechnician(sw))
-            {
-                ok++;
-            }
-        }
-
-        if (ok > 0)
-        {
-            ModLogging.Msg($"Send technician: game API invoked on {ok} device(s).");
-            ShowIpamToast($"Send technician: invoked on {ok} device(s). See MelonLoader console for [DHCPSwitches IPAM] lines.");
-        }
-        else
-        {
-            ModLogging.Warning(
-                "Send technician: no matching method on selected device(s). Enable MelonLoader console and check game DLL method names (Server / components) if this persists.");
-            ShowIpamToast("Send technician: no matching game method found. Open MelonLoader console for details.");
-        }
-    }
-
-    private static void RunClearAlarmsOnSelection()
-    {
-        if (!InventorySelectionIsNonEmpty())
-        {
-            ModLogging.Warning("Clear alarms: select one or more servers (table) or a network switch first.");
-            ShowIpamToast("Clear alarms: select a server row or switch in the table first.");
-            return;
-        }
-
-        var ok = 0;
-        foreach (var sid in _selectedServerInstanceIds)
-        {
-            var s = FindServerByInstanceId(sid);
-            if (s != null && DeviceInventoryReflection.TryClearAlarms(s))
-            {
-                ok++;
-            }
-        }
-
-        foreach (var sid in _selectedNetworkSwitchInstanceIds)
-        {
-            var sw = FindNetworkSwitchByInstanceId(sid);
-            if (sw != null && DeviceInventoryReflection.TryClearAlarms(sw))
-            {
-                ok++;
-            }
-        }
-
-        if (ok > 0)
-        {
-            ModLogging.Msg($"Clear alarms: game API invoked on {ok} device(s).");
-            ShowIpamToast($"Clear alarms: invoked on {ok} device(s). See MelonLoader console for [DHCPSwitches IPAM] lines.");
-        }
-        else
-        {
-            ModLogging.Warning(
-                "Clear alarms: no matching method on selected device(s). Enable MelonLoader console and check game DLL method names (Server / components) if this persists.");
-            ShowIpamToast("Clear alarms: no matching game method found. Open MelonLoader console for details.");
-        }
-    }
-
     private static void UpdateAnchorServerForDetail()
     {
         _selectedServer = null;
@@ -802,7 +678,7 @@ public static partial class IPAMOverlay
         switch (_navSection)
         {
             case NavSection.Dashboard:
-                _cachedContentHeight = 260f;
+                _cachedContentHeight = ComputeDashboardContentHeight();
                 return;
             case NavSection.IpAddresses:
             {
@@ -817,9 +693,6 @@ public static partial class IPAMOverlay
                 _cachedContentHeight = ComputeCustomersTabContentHeight(n);
                 return;
             }
-            case NavSection.Prefixes:
-                _cachedContentHeight = 240f;
-                return;
             default:
                 break;
         }
@@ -1013,24 +886,275 @@ public static partial class IPAMOverlay
         }
     }
 
+    private static void CollectDashboardStats(
+        out int customerContracts,
+        out int n4u,
+        out int n2u,
+        out int nOther,
+        out int totalServers,
+        out long ratedIopsSum)
+    {
+        customerContracts = 0;
+        n4u = 0;
+        n2u = 0;
+        nOther = 0;
+        totalServers = 0;
+        ratedIopsSum = 0;
+
+        var seen = new Dictionary<int, byte>();
+        foreach (var cb in UnityEngine.Object.FindObjectsOfType<CustomerBase>())
+        {
+            if (cb == null)
+            {
+                continue;
+            }
+
+            if (!TryGetCustomerId(cb, out var cid) || cid < 0)
+            {
+                continue;
+            }
+
+            seen[cid] = 0;
+        }
+
+        customerContracts = seen.Count;
+
+        foreach (var s in _cachedServers)
+        {
+            if (s == null)
+            {
+                continue;
+            }
+
+            totalServers++;
+            var lab = DeviceInventoryReflection.GetServerFormFactorLabel(s);
+            if (string.Equals(lab, "4 U", StringComparison.Ordinal))
+            {
+                n4u++;
+                ratedIopsSum += IopsPer4UServer;
+            }
+            else if (string.Equals(lab, "2 U", StringComparison.Ordinal))
+            {
+                n2u++;
+                ratedIopsSum += IopsPer2UServer;
+            }
+            else
+            {
+                nOther++;
+            }
+        }
+    }
+
+    private static readonly Color32 DashboardColor4U = new(0, 188, 164, 255);
+    private static readonly Color32 DashboardColor2U = new(56, 189, 248, 255);
+    private static readonly Color32 DashboardColorOther = new(148, 163, 184, 255);
+    private static readonly Color32 DashboardTrackDim = new(34, 42, 56, 255);
+
+    private static float ComputeDashboardContentHeight()
+    {
+        const float heroH = 92f;
+        const float sectionGap = 18f;
+        const float barH = 28f;
+        const float legendBlockH = 72f;
+        const float sceneCardH = 68f;
+        var y = CardPad;
+        y += SectionTitleH + 2f + 1f + 6f;
+        y += heroH + sectionGap;
+        y += SectionTitleH + 4f + barH + 10f + legendBlockH;
+        y += 26f + sectionGap;
+        y += SectionTitleH + 4f + sceneCardH + 16f;
+        y += 72f + CardPad;
+        return Mathf.Max(420f, y);
+    }
+
+    private static void DashboardDrawTintedRect(Rect r, Color tint)
+    {
+        if (_texWhite == null)
+        {
+            return;
+        }
+
+        GUI.DrawTexture(r, _texWhite, ScaleMode.StretchToFill, false, 0f, tint, 0f, 0f);
+    }
+
+    private static void DrawDashboardHeroCard(Rect r, string title, string value, string subtitle)
+    {
+        if (_texCard != null)
+        {
+            GUI.DrawTexture(r, _texCard, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
+        }
+
+        if (_texNavActive != null)
+        {
+            GUI.DrawTexture(new Rect(r.x, r.y, 4f, r.height), _texNavActive, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
+        }
+
+        var padX = 14f;
+        var innerW = Mathf.Max(40f, r.width - padX - 10f);
+        var tx = r.x + padX;
+        var ty = r.y + 10f;
+        GUI.Label(new Rect(tx, ty, innerW, 16f), title, _stMuted);
+        ty += 18f;
+        var valSt = _stDashboardHeroValue ?? _stIopsResultCounts;
+        GUI.Label(new Rect(tx, ty, innerW, 36f), value, valSt);
+        ty += 38f;
+        GUI.Label(new Rect(tx, ty, innerW, 22f), subtitle, _stMuted);
+    }
+
+    private static void DrawDashboardServerMixBar(float x0, float y, float w, float h, int n4u, int n2u, int nOther)
+    {
+        var bar = new Rect(x0, y, w, h);
+        DashboardDrawTintedRect(bar, DashboardTrackDim);
+        var mix = n4u + n2u + nOther;
+        if (mix <= 0)
+        {
+            GUI.Label(bar, "No servers in inventory cache", _stMutedCenter ?? _stMuted);
+            return;
+        }
+
+        var w4 = (n4u / (float)mix) * w;
+        var w2 = (n2u / (float)mix) * w;
+        var wO = Mathf.Max(0f, w - w4 - w2);
+        var x = x0;
+        if (w4 > 0.5f)
+        {
+            DashboardDrawTintedRect(new Rect(x, y, w4, h), DashboardColor4U);
+            x += w4;
+        }
+
+        if (w2 > 0.5f)
+        {
+            DashboardDrawTintedRect(new Rect(x, y, w2, h), DashboardColor2U);
+            x += w2;
+        }
+
+        if (wO > 0.5f)
+        {
+            DashboardDrawTintedRect(new Rect(x, y, wO, h), DashboardColorOther);
+        }
+    }
+
+    private static void DrawDashboardLegendLine(Rect r, Color32 swatchColor, string text)
+    {
+        const float sw = 10f;
+        DashboardDrawTintedRect(new Rect(r.x, r.y + 5f, sw, sw), swatchColor);
+        GUI.Label(new Rect(r.x + 16f, r.y, Mathf.Max(20f, r.width - 16f), 22f), text, _stMuted);
+    }
+
+    private static void DrawDashboardSceneCard(Rect r, string title, int count, float fill01, Color32 barTint)
+    {
+        if (_texCard != null)
+        {
+            GUI.DrawTexture(r, _texCard, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
+        }
+
+        var pad = 12f;
+        var innerW = Mathf.Max(40f, r.width - pad * 2f);
+        var tx = r.x + pad;
+        var ty = r.y + 8f;
+        GUI.Label(new Rect(tx, ty, innerW, 16f), title, _stMuted);
+        ty += 18f;
+        var valSt = _stIopsResultCounts ?? _stTableCell;
+        GUI.Label(new Rect(tx, ty, innerW, 30f), count.ToString("N0"), valSt);
+        ty += 32f;
+        var track = new Rect(tx, ty, innerW, 8f);
+        DashboardDrawTintedRect(track, DashboardTrackDim);
+        var fill = Mathf.Clamp01(fill01);
+        if (fill > 0.001f)
+        {
+            DashboardDrawTintedRect(new Rect(track.x, track.y, Mathf.Max(2f, track.width * fill), track.height), barTint);
+        }
+    }
+
     private static void DrawDashboard(float innerW)
     {
+        CollectDashboardStats(
+            out var customerContracts,
+            out var n4u,
+            out var n2u,
+            out var nOther,
+            out var totalServers,
+            out var ratedIopsSum);
+
         var x0 = CardPad;
         var y = CardPad;
         var w = innerW - CardPad * 2f;
+        const float heroH = 92f;
+        const float heroGap = 12f;
+        const float sectionGap = 18f;
+        const float barH = 28f;
+        const float legendRowH = 22f;
+        const float sceneCardH = 68f;
+
         GUI.Label(new Rect(x0, y - 2, w, SectionTitleH), "Organization  /  Dashboard", _stBreadcrumb);
-        y += SectionTitleH + 8f;
-        GUI.Label(new Rect(x0, y, w, SectionTitleH), "Overview", _stSectionTitle);
-        y += SectionTitleH + 6f;
-        var sw = _cachedSwitches.Length;
-        var sv = _cachedServers.Length;
-        GUI.Label(new Rect(x0, y, w, 22), $"Network switches in scene:  {sw}", _stMuted);
-        y += 24f;
-        GUI.Label(new Rect(x0, y, w, 22), $"Servers in scene:  {sv}", _stMuted);
-        y += 30f;
+        y += SectionTitleH + 2f;
+        GUI.DrawTexture(new Rect(x0, y, w, 1f), _texTableHeader);
+        y += 6f;
+
+        var half = (w - heroGap) * 0.5f;
+        DrawDashboardHeroCard(
+            new Rect(x0, y, half, heroH),
+            "Customer contracts",
+            customerContracts.ToString("N0"),
+            "Distinct CustomerBase IDs in scene");
+        DrawDashboardHeroCard(
+            new Rect(x0 + half + heroGap, y, half, heroH),
+            "Rated IOPS (2 U + 4 U)",
+            ratedIopsSum.ToString("N0"),
+            $"{n4u}×{IopsPer4UServer:N0} + {n2u}×{IopsPer2UServer:N0} (4 U + 2 U only)");
+        y += heroH + sectionGap;
+
+        GUI.Label(new Rect(x0, y, w, SectionTitleH), "Server inventory (by rack type)", _stSectionTitle);
+        y += SectionTitleH + 4f;
+        DrawDashboardServerMixBar(x0, y, w, barH, n4u, n2u, nOther);
+        y += barH + 10f;
+
+        var mix = n4u + n2u + nOther;
+        float P(int n) => mix > 0 ? (100f * n) / mix : 0f;
+        DrawDashboardLegendLine(
+            new Rect(x0, y, w, legendRowH),
+            DashboardColor4U,
+            $"4 U servers  ·  {n4u}  ({P(n4u):0.#}%)  — {IopsPer4UServer:N0} IOPS each");
+        y += legendRowH;
+        DrawDashboardLegendLine(
+            new Rect(x0, y, w, legendRowH),
+            DashboardColor2U,
+            $"2 U servers  ·  {n2u}  ({P(n2u):0.#}%)  — {IopsPer2UServer:N0} IOPS each");
+        y += legendRowH;
+        DrawDashboardLegendLine(
+            new Rect(x0, y, w, legendRowH),
+            DashboardColorOther,
+            $"Other / unknown  ·  {nOther}  ({P(nOther):0.#}%)  — excluded from IOPS total");
+        y += legendRowH + 6f;
+
+        GUI.Label(new Rect(x0, y, w, 24f), $"Total rated IOPS:  {ratedIopsSum:N0}", _stTableCell);
+        y += 26f + sectionGap;
+
+        var swCount = _cachedSwitches.Length;
+        var sceneDenom = Mathf.Max(1, swCount + totalServers);
+        var fillSw = swCount / (float)sceneDenom;
+        var fillSv = totalServers / (float)sceneDenom;
+
+        GUI.Label(new Rect(x0, y, w, SectionTitleH), "Scene devices", _stSectionTitle);
+        y += SectionTitleH + 4f;
+        var halfScene = (w - heroGap) * 0.5f;
+        DrawDashboardSceneCard(
+            new Rect(x0, y, halfScene, sceneCardH),
+            "Network switches",
+            swCount,
+            fillSw,
+            DashboardColor2U);
+        DrawDashboardSceneCard(
+            new Rect(x0 + halfScene + heroGap, y, halfScene, sceneCardH),
+            "Servers (all types)",
+            totalServers,
+            fillSv,
+            DashboardColor4U);
+        y += sceneCardH + 16f;
+
         GUI.Label(
             new Rect(x0, y, w, 72f),
-            "Open Devices for full inventory tables. IP addresses shows a flat IPv4 list. Toolbar actions apply to all servers.",
+            "IOPS totals use the same mod constants as the IOPS sizing calculator. Open Devices or Customers for full tables; assign IPs from the bottom panel.",
             _stHint);
     }
 
@@ -1119,19 +1243,6 @@ public static partial class IPAMOverlay
 
             y += TableRowH;
         }
-    }
-
-    private static void DrawPrefixesPlaceholder(float innerW)
-    {
-        var x0 = CardPad;
-        var y = CardPad;
-        var w = innerW - CardPad * 2f;
-        GUI.Label(new Rect(x0, y - 2, w, SectionTitleH), "Organization  /  Prefixes", _stBreadcrumb);
-        y += SectionTitleH + 10f;
-        GUI.Label(
-            new Rect(x0, y, w, 100f),
-            "Prefixes follow customer contracts in the base game. Per-VLAN / per-switch DHCP scopes are planned for a future mod release.",
-            _stMuted);
     }
 
     private static string Trunc(string s, int max)
@@ -1776,7 +1887,7 @@ public static partial class IPAMOverlay
             py += 32f;
             GUI.Label(
                 new Rect(px, py, w - px - 24, 36),
-                "Send technician / Clear alarms use every highlighted switch. Open CLI: select one device. Ctrl toggles; Shift+click range in the switch list.",
+                "Ctrl toggles selection; Shift+click selects a range in the switch list from the last plain click.",
                 _stHint);
             return;
         }

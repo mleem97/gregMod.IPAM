@@ -181,6 +181,7 @@ public static partial class IPAMOverlay
         _texMutedBtnHover = MakeTexture(58, 66, 82, 255);
         _texNavBtnHover = MakeTexture(38, 46, 60, 255);
         _texModalDim = MakeTexture(0, 0, 0, 140);
+        _texWhite = MakeTexture(255, 255, 255, 255);
         _texturesReady = true;
     }
 
@@ -312,6 +313,12 @@ public static partial class IPAMOverlay
         _stMuted.alignment = TextAnchor.MiddleLeft;
         _stMuted.normal.textColor = new Color32(154, 164, 178, 255);
 
+        _stMutedCenter = new GUIStyle();
+        _stMutedCenter.font = lf;
+        _stMutedCenter.fontSize = 11;
+        _stMutedCenter.alignment = TextAnchor.MiddleCenter;
+        _stMutedCenter.normal.textColor = new Color32(154, 164, 178, 255);
+
         _stHint = new GUIStyle();
         _stHint.font = lf;
         _stHint.fontSize = 10;
@@ -387,6 +394,16 @@ public static partial class IPAMOverlay
         _stIopsResultCounts.clipping = TextClipping.Clip;
         _stIopsResultCounts.normal.textColor = new Color32(220, 226, 235, 255);
 
+        _stDashboardHeroValue = new GUIStyle();
+        _stDashboardHeroValue.font = lf;
+        _stDashboardHeroValue.fontSize = 28;
+        _stDashboardHeroValue.fontStyle = FontStyle.Bold;
+        _stDashboardHeroValue.alignment = TextAnchor.UpperLeft;
+        _stDashboardHeroValue.wordWrap = false;
+        _stDashboardHeroValue.padding = Ro(0, 0, 0, 0);
+        _stDashboardHeroValue.clipping = TextClipping.Clip;
+        _stDashboardHeroValue.normal.textColor = new Color32(248, 250, 252, 255);
+
         _stIopsResultPlaceholder = new GUIStyle();
         _stIopsResultPlaceholder.font = lf;
         _stIopsResultPlaceholder.fontSize = 11;
@@ -419,23 +436,16 @@ public static partial class IPAMOverlay
 
     private static float ComputeToolbarInventoryMinWidth()
     {
-        if (!_stylesReady || _stMutedBtn == null || _stPrimaryBtn == null)
+        if (!_stylesReady || _stMutedBtn == null)
         {
-            return 970f;
+            return 420f;
         }
 
         const float g = 8f;
         const float tr = 14f;
         float W(GUIStyle st, string t) => ToolbarTextButtonWidth(st, t);
-        float W2(GUIStyle st, string a, string b) => Mathf.Max(W(st, a), W(st, b));
         var sum = tr;
         sum += g + W(_stMutedBtn, "Fit columns");
-        sum += g + W(_stPrimaryBtn, "Auto-DHCP (all servers)");
-        sum += g + W2(_stMutedBtn, "Fill empty: ON", "Fill empty: OFF");
-        sum += g + W2(_stMutedBtn, "L3: ON", "L3: OFF");
-        sum += g + W2(_stMutedBtn, "Resume flow", "Pause flow");
-        sum += g + W(_stMutedBtn, "Clear alarms");
-        sum += g + W(_stMutedBtn, "Send technician");
         sum += g + W(_stMutedBtn, "IOPS calc");
         return sum;
     }
