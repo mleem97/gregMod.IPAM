@@ -446,6 +446,7 @@ public static partial class IPAMOverlay
         float W(GUIStyle st, string t) => ToolbarTextButtonWidth(st, t);
         var sum = tr;
         sum += g + W(_stMutedBtn, "Fit columns");
+        sum += g + Mathf.Max(W(_stMutedBtn, "Perf: off"), W(_stMutedBtn, "Perf: on"));
         sum += g + W(_stMutedBtn, "IOPS calc");
         return sum;
     }

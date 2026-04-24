@@ -37,6 +37,7 @@ public static partial class IPAMOverlay
                 _nextSubnetSceneRefreshTime = 0f;
                 _serverSortListDirty = true;
                 _switchSortListDirty = true;
+                MarkCustomersTabServerBufferDirty();
                 _tableColumnsAutoFitPending = true;
                 if (_windowRect.width < WindowMinW)
                 {
@@ -164,26 +165,14 @@ public static partial class IPAMOverlay
             return null;
         }
 
-        foreach (var customer in UnityEngine.Object.FindObjectsOfType<CustomerBase>())
+        var customer = GameSubnetHelper.FindCustomerBaseByCustomerId(customerId);
+        if (customer == null)
         {
-            if (customer == null)
-            {
-                continue;
-            }
-
-            if (customer.customerID != customerId)
-            {
-                continue;
-            }
-
-            var name = GetCustomerName(customer);
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                return name.Trim();
-            }
+            return null;
         }
 
-        return null;
+        var name = GetCustomerName(customer);
+        return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
     }
 
     private static Rect _windowRect = new(48f, 48f, 1200f, 640f);
@@ -406,7 +395,9 @@ public static partial class IPAMOverlay
     public static void InvalidateCustomerCache()
     {
         CustomerDisplayNameCache.Clear();
+        GameSubnetHelper.InvalidateSceneCustomerFrameCache();
         _serverSortListDirty = true; // Forces the table to redraw
+        MarkCustomersTabServerBufferDirty();
     }
 
 
@@ -434,6 +425,8 @@ public static partial class IPAMOverlay
         // UnityEngine.EventSystems.EventSystem here — Data Center's UI_SelectedBorder.Update null-refs when it is off.
         // Drawn before the window so the window (drawn later) still receives hits inside its rect.
         var fullScreen = new Rect(0f, 0f, Screen.width, Screen.height);
+        var perf = ModDebugLog.IsIpamPerfLoggingEnabled;
+        var tBackdrop0 = perf ? Time.realtimeSinceStartupAsDouble : 0d;
         GUI.Box(fullScreen, string.Empty, _stModalBlocker);
 
         GUI.DrawTexture(_windowRect, _texBackdrop, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
@@ -441,7 +434,13 @@ public static partial class IPAMOverlay
         GUI.backgroundColor = Color.white;
         GUI.contentColor = new Color(0.92f, 0.94f, 0.96f, 1f);
 
+        var tWindow0 = perf ? Time.realtimeSinceStartupAsDouble : 0d;
         _windowRect = GUI.Window(9001, _windowRect, (GUI.WindowFunction)DrawWindow, " ");
+        if (perf)
+        {
+            var tEnd = Time.realtimeSinceStartupAsDouble;
+            RecordIpamPerfDrawMs((tWindow0 - tBackdrop0) * 1000.0, (tEnd - tWindow0) * 1000.0);
+        }
 
         // IOPS modal must be drawn *after* GUI.Window returns: controls nested inside the window callback
         // can fail hit-testing (clicks/keys) on IL2CPP; top-level rects use screen space matching Event.mousePosition.

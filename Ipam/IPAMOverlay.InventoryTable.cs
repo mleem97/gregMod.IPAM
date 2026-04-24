@@ -9,6 +9,42 @@ namespace DHCPSwitches;
 
 public static partial class IPAMOverlay
 {
+    /// <summary>
+    /// While drawing inside the main IPAM <see cref="GUI.BeginScrollView"/>, skip per-row Repaint work for rows
+    /// outside the viewport. IMGUI still runs <see cref="GUIUtility.GetControlID"/> for every row (stable IDs), but
+    /// avoids hundreds of <see cref="GUI.DrawTexture"/> / style draws that were dominating REN time.
+    /// </summary>
+    private static bool _inventoryScrollRowRepaintCullActive;
+
+    private static float _inventoryScrollRowRepaintCullMinY;
+    private static float _inventoryScrollRowRepaintCullMaxY;
+
+    private const float InventoryScrollRowCullSlopPixels = 96f;
+
+    private static void BeginInventoryScrollRowRepaintCull(float scrollY, float viewportHeight)
+    {
+        _inventoryScrollRowRepaintCullActive = true;
+        var pad = InventoryScrollRowCullSlopPixels;
+        _inventoryScrollRowRepaintCullMinY = scrollY - pad;
+        _inventoryScrollRowRepaintCullMaxY = scrollY + viewportHeight + pad;
+    }
+
+    private static void EndInventoryScrollRowRepaintCull()
+    {
+        _inventoryScrollRowRepaintCullActive = false;
+    }
+
+    /// <summary>False for rows outside the scroll viewport during Repaint (string truncation can be skipped).</summary>
+    private static bool InventoryScrollRowWantsRepaintText(float rowYMin, float rowYMax)
+    {
+        if (!_inventoryScrollRowRepaintCullActive)
+        {
+            return true;
+        }
+
+        return rowYMax > _inventoryScrollRowRepaintCullMinY && rowYMin < _inventoryScrollRowRepaintCullMaxY;
+    }
+
     private static void RebuildIpamEolSnapshot()
     {
         _eolDisplayByInstanceId.Clear();
@@ -408,6 +444,13 @@ public static partial class IPAMOverlay
         NormalizeTableColWeights();
     }
 
+    /// <summary>
+    /// Unity invokes IMGUI windows for <see cref="EventType.Layout"/> and <see cref="EventType.Repaint"/> (and more).
+    /// Per-row work uses <see cref="GUIStyle.CalcSize"/> for truncation — skip that on non-Repaint events to avoid O(rows) cost twice per frame.
+    /// </summary>
+    private static bool ShouldComputeTruncatedInventoryCellText =>
+        Event.current == null || Event.current.type == EventType.Repaint;
+
     /// <summary>Stable per Unity object so row order can change (sort) without IMGUI control ID drift.</summary>
     private static int StableRowHint(int section, UnityEngine.Object obj, int uniqueIfNull = 0)
     {
@@ -463,6 +506,15 @@ public static partial class IPAMOverlay
 
                 break;
             case EventType.Repaint:
+                if (_inventoryScrollRowRepaintCullActive)
+                {
+                    if (rowRect.yMax <= _inventoryScrollRowRepaintCullMinY
+                        || rowRect.yMin >= _inventoryScrollRowRepaintCullMaxY)
+                    {
+                        break;
+                    }
+                }
+
                 var hover = rowRect.Contains(e.mousePosition);
                 var bg = rowSelected
                     ? _texNavActive
@@ -706,6 +758,7 @@ public static partial class IPAMOverlay
                 if (markServerSortDirtyOnClick)
                 {
                     _serverSortListDirty = true;
+                    MarkCustomersTabServerBufferDirty();
                 }
                 else
                 {

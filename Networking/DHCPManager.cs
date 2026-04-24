@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
-using System.Threading;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 
@@ -29,9 +28,35 @@ public static class DHCPManager
 
     public static void ClearLastSetIpError() => LastSetIpError = null;
 
+    /// <summary>
+    /// One <see cref="UnityEngine.Object.FindObjectsOfType{Server}"/> per frame — used by Harmony empty-SetIP path
+    /// so hundreds of calls in the same frame do not each rescan the scene.
+    /// </summary>
+    private static int _sceneServersFrame = -1;
+    private static Server[] _sceneServersCache;
+
     public static void ClearCaches()
     {
+        InvalidateSceneServerFrameCache();
         GameSubnetHelper.ClearCaches();
+    }
+
+    private static void InvalidateSceneServerFrameCache()
+    {
+        _sceneServersFrame = -1;
+        _sceneServersCache = null;
+    }
+
+    internal static Server[] GetSceneServersForFrame()
+    {
+        var f = Time.frameCount;
+        if (_sceneServersFrame != f)
+        {
+            _sceneServersFrame = f;
+            _sceneServersCache = UnityEngine.Object.FindObjectsOfType<Server>();
+        }
+
+        return _sceneServersCache ?? Array.Empty<Server>();
     }
 
     /// <summary>IPAM customer-assign and batch actions can surface errors the same way as <see cref="SetServerIP"/>.</summary>
@@ -714,7 +739,7 @@ public static class DHCPManager
                 return;
             }
 
-            var autoIp = GetNextFreeIpForServer(server, null);
+            var autoIp = GetNextFreeIpForServer(server, GetSceneServersForFrame());
             if (string.IsNullOrEmpty(autoIp))
             {
                 return;
@@ -736,8 +761,6 @@ public static class DHCPManager
     [HarmonyPatch]
     public static class FlowPausePatch
     {
-        private static int _addAppPerformancePrefixHits;
-
         public static MethodBase TargetMethod()
         {
             return AccessTools.Method(typeof(CustomerBase), "AddAppPerformance");
@@ -745,16 +768,9 @@ public static class DHCPManager
 
         public static bool Prefix(CustomerBase __instance)
         {
-            var hit = Interlocked.Increment(ref _addAppPerformancePrefixHits);
-            if (hit == 1)
-            {
-                ModDebugLog.WriteLine(
-                    "IOPS: first AddAppPerformance call observed — Harmony gate is active (see IPAM Pause flow / L3 / DHCPSwitches-debug.log).");
-            }
-
-            var cid = __instance != null ? __instance.customerID : -1;
             if (IsFlowPaused)
             {
+                var cid = __instance != null ? __instance.customerID : -1;
                 ModDebugLog.Trace("iops", "AddAppPerformance Prefix: blocked (IsFlowPaused)");
                 ModDebugLog.WriteThrottledIopsDeny(
                     cid,
@@ -764,12 +780,13 @@ public static class DHCPManager
 
             if (!ReachabilityService.AllowCustomerAddAppPerformance(__instance, out var denyReason))
             {
+                var cid = __instance != null ? __instance.customerID : -1;
                 ModDebugLog.Trace("iops", $"AddAppPerformance Prefix: blocked (ReachabilityService) {denyReason}");
                 ModDebugLog.WriteThrottledIopsDeny(cid, denyReason ?? "REACHABILITY: blocked (unknown reason)");
                 return false;
             }
 
-            ModDebugLog.WriteThrottledIopsAllow(cid, ReachabilityService.SummarizeServersForCustomer(cid));
+            // Hot path: do not lock/throttle-log every tick (AddAppPerformance can run very frequently).
             return true;
         }
     }

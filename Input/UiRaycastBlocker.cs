@@ -19,17 +19,24 @@ internal static class UiRaycastBlocker
             EnsureRoot();
         }
 
-        if (_root != null)
+        if (_root == null)
         {
-            // Must stay above the game's pause / system Overlay canvases (they were drawing over IMGUI IPAM).
-            var cv = _root.GetComponent<Canvas>();
-            if (cv != null)
-            {
-                cv.sortingOrder = 2_000_000;
-            }
-
-            _root.SetActive(block);
+            return;
         }
+
+        if (_root.activeSelf == block)
+        {
+            return;
+        }
+
+        // Must stay above the game's pause / system Overlay canvases (they were drawing over IMGUI IPAM).
+        var cv = _root.GetComponent<Canvas>();
+        if (cv != null)
+        {
+            cv.sortingOrder = 2_000_000;
+        }
+
+        _root.SetActive(block);
     }
 
     private static void EnsureRoot()

@@ -1,6 +1,5 @@
 using System;
 using System.Reflection;
-using System.Text;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -27,52 +26,94 @@ internal static class SetIpKeypadDhcpButton
     private static int _boundServerInstanceId;
     private static int _spawnNotBeforeFrame = -1;
 
-    private static string _lastDhcpVerboseState = "";
-
-    private static bool _loggedSetIpPick;
     private static bool _loggedResolveTotallyEmpty;
+
+    /// <summary>
+    /// Full scene scan is expensive; <see cref="LateUpdate"/> calls this every frame, so we throttle
+    /// <see cref="UnityEngine.Object.FindObjectsOfType{T}(bool)"/> and use cheap checks first.
+    /// </summary>
+    private const float ResolveFullScanInterval = 0.2f;
+
+    private static float _resolveNextFullScanTime;
+    private static SetIP _resolveStickyBest;
+
+    private static void ConsiderSetIpCandidate(SetIP candidate, ref SetIP best, ref int bestRank)
+    {
+        if (candidate == null)
+        {
+            return;
+        }
+
+        var r = RankSetIpCandidate(candidate);
+        if (r > bestRank)
+        {
+            bestRank = r;
+            best = candidate;
+        }
+    }
 
     /// <summary>
     /// Resolves <see cref="SetIP"/> for the physical keypad: <see cref="MainGameManager.setIP"/> first, then any instance
     /// in loaded scenes (including inactive). Ranks by <see cref="GameObject.activeInHierarchy"/>, then <see cref="SetIP.isActive"/>, then bound server.
     /// </summary>
-    internal static SetIP ResolveSetIPForTick()
+    /// <param name="forceFullScan">When true, runs a full scene scan immediately (e.g. DHCP button click).</param>
+    internal static SetIP ResolveSetIPForTick(bool forceFullScan = false)
+    {
+        if (forceFullScan)
+        {
+            var full = ResolveSetIPFullScan();
+            _resolveStickyBest = full;
+            _resolveNextFullScanTime = Time.realtimeSinceStartup + ResolveFullScanInterval;
+            return full;
+        }
+
+        SetIP best = null;
+        var bestRank = int.MinValue;
+
+        ConsiderSetIpCandidate(MainGameManager.instance?.setIP, ref best, ref bestRank);
+
+        if (best != null && best.gameObject != null && best.gameObject.activeInHierarchy)
+        {
+            _resolveStickyBest = best;
+            return best;
+        }
+
+        if ((UnityEngine.Object)_resolveStickyBest != null)
+        {
+            ConsiderSetIpCandidate(_resolveStickyBest, ref best, ref bestRank);
+            if (best != null && best.gameObject != null && best.gameObject.activeInHierarchy)
+            {
+                _resolveStickyBest = best;
+                return best;
+            }
+        }
+
+        var now = Time.realtimeSinceStartup;
+        if (now < _resolveNextFullScanTime)
+        {
+            return best;
+        }
+
+        best = ResolveSetIPFullScan();
+        _resolveStickyBest = best;
+        _resolveNextFullScanTime = now + ResolveFullScanInterval;
+        return best;
+    }
+
+    private static SetIP ResolveSetIPFullScan()
     {
         SetIP best = null;
         var bestRank = int.MinValue;
 
-        void Consider(SetIP candidate)
-        {
-            if (candidate == null)
-            {
-                return;
-            }
-
-            var r = RankSetIpCandidate(candidate);
-            if (r > bestRank)
-            {
-                bestRank = r;
-                best = candidate;
-            }
-        }
-
-        Consider(MainGameManager.instance?.setIP);
+        ConsiderSetIpCandidate(MainGameManager.instance?.setIP, ref best, ref bestRank);
 
         var allSetIp = UnityEngine.Object.FindObjectsOfType<SetIP>(true);
         if (allSetIp != null)
         {
             for (var i = 0; i < allSetIp.Length; i++)
             {
-                Consider(allSetIp[i]);
+                ConsiderSetIpCandidate(allSetIp[i], ref best, ref bestRank);
             }
-        }
-
-        if (ModDebugLog.IsSetIpKeypadDhcpLogEnabled && best != null && !_loggedSetIpPick)
-        {
-            _loggedSetIpPick = true;
-            LogDhcp(
-                $"resolve pick: {best.name} rank={bestRank} hierarchy={best.gameObject.activeInHierarchy} " +
-                $"isActive={best.isActive} server={(best.server != null ? best.server.GetInstanceID().ToString() : "null")}");
         }
 
         if (best == null && !_loggedResolveTotallyEmpty)
@@ -121,23 +162,22 @@ internal static class SetIpKeypadDhcpButton
     {
         if (setIp == null)
         {
-            _lastDhcpVerboseState = "";
             ResetSpawnState();
-            DestroyDhcpButton("setIP null");
+            DestroyDhcpButton();
             return;
         }
 
         if (!LicenseManager.IsDHCPUnlocked)
         {
             ResetSpawnState();
-            DestroyDhcpButton("DHCP locked (title bar or Ctrl+D)");
+            DestroyDhcpButton();
             return;
         }
 
         if (IPAMOverlay.IsVisible)
         {
             ResetSpawnState();
-            DestroyDhcpButton("IPAM overlay open");
+            DestroyDhcpButton();
             return;
         }
 
@@ -145,25 +185,14 @@ internal static class SetIpKeypadDhcpButton
         if (!setIp.gameObject.activeInHierarchy || setIp.server == null)
         {
             ResetSpawnState();
-            DestroyDhcpButton(!setIp.gameObject.activeInHierarchy ? "SetIP GameObject not in active hierarchy" : "setIP.server null");
+            DestroyDhcpButton();
             return;
         }
 
         var sid = setIp.server.GetInstanceID();
         if (_dhcpButtonGo != null && _boundServerInstanceId != sid)
         {
-            DestroyDhcpButton("bound server instance changed");
-        }
-
-        if (ModDebugLog.IsSetIpKeypadDhcpLogEnabled)
-        {
-            var st =
-                $"active={setIp.isActive},srv={sid},dhcpUnlock={LicenseManager.IsDHCPUnlocked},ipam={IPAMOverlay.IsVisible},spawnWait={Time.frameCount < _spawnNotBeforeFrame}";
-            if (st != _lastDhcpVerboseState)
-            {
-                _lastDhcpVerboseState = st;
-                LogDhcp($"tick {st}");
-            }
+            DestroyDhcpButton();
         }
 
         if (_dhcpButtonGo != null)
@@ -247,31 +276,26 @@ internal static class SetIpKeypadDhcpButton
         Vector2 localCenter;
         Vector2 sizeDelta;
         RectTransform parentRt;
-        string layoutMode;
 
         if (setRt != null && TryComputeFloatingDhcpLayoutUnderSetIp(setIp, setRt, out localCenter, out sizeDelta))
         {
             parentRt = setRt;
-            layoutMode = "under_SetIP_RectTransform";
         }
         else
         {
             var rootCanvas = TryResolveAnyCanvas(setIp);
             if (rootCanvas == null)
             {
-                LogDhcp("floating: no Canvas found");
                 return false;
             }
 
             var canvasRt = rootCanvas.transform as RectTransform;
             if (canvasRt == null || !TryComputeFloatingDhcpLayout(setIp, rootCanvas, out localCenter, out sizeDelta))
             {
-                LogDhcp("floating: canvas layout failed");
                 return false;
             }
 
             parentRt = canvasRt;
-            layoutMode = $"canvas_{rootCanvas.renderMode}";
         }
 
         var root = new GameObject("DHCPSwitches_FloatingDhcp");
@@ -351,13 +375,6 @@ internal static class SetIpKeypadDhcpButton
 
         _dhcpButtonGo = root;
         _boundServerInstanceId = sid;
-
-        if (ModDebugLog.IsSetIpKeypadDhcpLogEnabled)
-        {
-            LogDhcp(
-                $"spawn floating ok: parent={layoutMode} size={sizeDelta} pos={localCenter} " +
-                $"path={BuildTransformPath(GetFloatingWidthSourceRect(setIp), setIp.transform)}");
-        }
 
         return true;
     }
@@ -515,38 +532,6 @@ internal static class SetIpKeypadDhcpButton
             panelCenterScreen,
             cam,
             out localCenter);
-    }
-
-    private static void LogDhcp(string message)
-    {
-        if (!ModDebugLog.IsSetIpKeypadDhcpLogEnabled)
-        {
-            return;
-        }
-
-        ModDebugLog.Bootstrap();
-        ModDebugLog.WriteLine($"setip-dhcp: {message}");
-    }
-
-    private static string BuildTransformPath(Transform t, Transform stop)
-    {
-        if (t == null)
-        {
-            return "";
-        }
-
-        var sb = new StringBuilder();
-        for (var x = t; x != null && x != stop; x = x.parent)
-        {
-            if (sb.Length > 0)
-            {
-                sb.Insert(0, "/");
-            }
-
-            sb.Insert(0, x.name ?? "?");
-        }
-
-        return sb.ToString();
     }
 
     /// <summary>
@@ -993,14 +978,8 @@ internal static class SetIpKeypadDhcpButton
         }
     }
 
-    private static void DestroyDhcpButton(string reason = null)
+    private static void DestroyDhcpButton()
     {
-        if (ModDebugLog.IsSetIpKeypadDhcpLogEnabled && !string.IsNullOrEmpty(reason))
-        {
-            ModDebugLog.Bootstrap();
-            ModDebugLog.WriteLine($"setip-dhcp: destroy: {reason}");
-        }
-
         if (_dhcpButtonGo != null)
         {
             UnityEngine.Object.Destroy(_dhcpButtonGo);
@@ -1139,7 +1118,7 @@ internal static class SetIpKeypadDhcpButton
 
     private static void OnDhcpClicked()
     {
-        var setIp = ResolveSetIPForTick();
+        var setIp = ResolveSetIPForTick(forceFullScan: true);
         var srv = setIp?.server;
         if (srv == null)
         {

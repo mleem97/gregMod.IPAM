@@ -151,6 +151,7 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
             IPAMOverlay.TickInputSystemIopsToolbarClick();
             IPAMOverlay.TickIopsCalculatorInputSystem();
             IPAMOverlay.TickOctetInputSystem();
+            IPAMOverlay.TickIpamPerfLog();
         }
     }
 
@@ -160,11 +161,6 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
 
         var setIp = SetIpKeypadDhcpButton.ResolveSetIPForTick();
         SetIpKeypadDhcpButton.Tick(setIp);
-
-        if (setIp != null && setIp.isActive)
-        {
-            SetIpKeypadDiagnostics.MaybeDumpWhileKeypadOpen(setIp);
-        }
     }
 
     private void OnGUI()

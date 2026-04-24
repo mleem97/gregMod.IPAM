@@ -35,7 +35,8 @@ internal static class IpamMenuOcclusion
             return;
         }
 
-        _nextScanTime = Time.unscaledTime + 0.2f;
+        // Resources.FindObjectsOfTypeAll(typeof(Canvas)) is costly; 0.5s is enough to pick up newly opened pause menus.
+        _nextScanTime = Time.unscaledTime + 0.5f;
 
         try
         {

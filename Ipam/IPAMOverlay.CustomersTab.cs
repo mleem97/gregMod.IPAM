@@ -8,6 +8,13 @@ namespace DHCPSwitches;
 
 public static partial class IPAMOverlay
 {
+    private static bool _customersTabServerBufferDirty = true;
+
+    private static void MarkCustomersTabServerBufferDirty()
+    {
+        _customersTabServerBufferDirty = true;
+    }
+
     private static readonly List<(int customerId, string line)> CustomersTabFilterScratch = new();
 
     private static int CountServersMatchingCustomersTabFilter()
@@ -67,6 +74,12 @@ public static partial class IPAMOverlay
 
     private static void FillCustomersTabServersBuffer()
     {
+        if (!_customersTabServerBufferDirty)
+        {
+            return;
+        }
+
+        _customersTabServerBufferDirty = false;
         CustomersTabServersBuffer.Clear();
         foreach (var s in _cachedServers)
         {
@@ -113,6 +126,7 @@ public static partial class IPAMOverlay
 
     private static void PruneServerSelectionForCustomersTabView()
     {
+        MarkCustomersTabServerBufferDirty();
         FillCustomersTabServersBuffer();
         var keep = new HashSet<int>();
         foreach (var s in CustomersTabServersBuffer)
@@ -147,7 +161,7 @@ public static partial class IPAMOverlay
             return "Unassigned servers";
         }
 
-        foreach (var cb in UnityEngine.Object.FindObjectsOfType<CustomerBase>())
+        foreach (var cb in GameSubnetHelper.GetSceneCustomersForFrame())
         {
             if (cb == null)
             {
@@ -172,7 +186,7 @@ public static partial class IPAMOverlay
         CustomersTabFilterScratch.Clear();
         CustomersTabFilterScratch.Add((-1, "Unassigned servers"));
         var unique = new Dictionary<int, CustomerBase>();
-        foreach (var cb in UnityEngine.Object.FindObjectsOfType<CustomerBase>())
+        foreach (var cb in GameSubnetHelper.GetSceneCustomersForFrame())
         {
             if (cb == null)
             {
@@ -374,15 +388,34 @@ public static partial class IPAMOverlay
             }
 
             var ip = DHCPManager.GetServerIP(server);
-            var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
-            var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
-            var ipCol = CellTextForCol(3, ipRaw, cardW);
-            var status = CellTextForCol(5, hasIp ? "Assigned" : "No address", cardW);
-            var cust = CellTextForCol(1, GetCustomerDisplayName(server), cardW);
-            var eolCol = TableEolCellDisplay(server, cardW);
-            var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
-            var dispName = CellTextForCol(0, string.IsNullOrEmpty(dispRaw) ? "—" : dispRaw, cardW);
-            var typeCol = CellTextForCol(2, DeviceInventoryReflection.GetServerFormFactorLabel(server), cardW);
+            string dispName;
+            string cust;
+            string typeCol;
+            string ipCol;
+            string eolCol;
+            string status;
+            if (ShouldComputeTruncatedInventoryCellText && InventoryScrollRowWantsRepaintText(r.yMin, r.yMax))
+            {
+                var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
+                var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
+                ipCol = CellTextForCol(3, ipRaw, cardW);
+                status = CellTextForCol(5, hasIp ? "Assigned" : "No address", cardW);
+                cust = CellTextForCol(1, GetCustomerDisplayName(server), cardW);
+                eolCol = TableEolCellDisplay(server, cardW);
+                var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
+                dispName = CellTextForCol(0, string.IsNullOrEmpty(dispRaw) ? "—" : dispRaw, cardW);
+                typeCol = CellTextForCol(2, DeviceInventoryReflection.GetServerFormFactorLabel(server), cardW);
+            }
+            else
+            {
+                dispName = "";
+                cust = "";
+                typeCol = "";
+                ipCol = "";
+                eolCol = "";
+                status = "";
+            }
+
             if (TableDataRowClick(
                     r,
                     StableRowHint(8, server, i),

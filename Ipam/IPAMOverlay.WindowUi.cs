@@ -168,6 +168,7 @@ public static partial class IPAMOverlay
         const float btnH = 26f;
         float TW(GUIStyle st, string t) => ToolbarTextButtonWidth(st, t);
         var fitColsW = TW(_stMutedBtn, "Fit columns");
+        var perfW = Mathf.Max(TW(_stMutedBtn, "Perf: off"), TW(_stMutedBtn, "Perf: on"));
         var iopsCalcW = TW(_stMutedBtn, "IOPS calc");
         var tx = w - tr;
         tx -= g + fitColsW;
@@ -180,6 +181,26 @@ public static partial class IPAMOverlay
             else
             {
                 _tableColumnsAutoFitPending = true;
+            }
+        }
+
+        tx -= g + perfW;
+        var perfLabel = ModDebugLog.IpamPerfRuntimeEnabled ? "Perf: on" : "Perf: off";
+        if (ImguiButtonOnce(new Rect(tx, btnRowY + ty, perfW, btnH), perfLabel, 17, _stMutedBtn))
+        {
+            if (ModDebugLog.IpamPerfRuntimeEnabled)
+            {
+                ModDebugLog.WriteIpamPerf("Disabled from IPAM toolbar (runtime).");
+                ModDebugLog.IpamPerfRuntimeEnabled = false;
+                ShowIpamToast("Perf log off (no more lines written).");
+            }
+            else
+            {
+                ModDebugLog.IpamPerfRuntimeEnabled = true;
+                ModDebugLog.WriteIpamPerf("Enabled from IPAM toolbar (runtime).");
+                var perfPath = ModDebugLog.GetIpamPerfLogPath() ?? "(path unavailable)";
+                ShowIpamToast($"Perf log on — see file next to _Data: DHCPSwitches-ipam-perf.log");
+                ModLogging.Msg("[DHCPSwitches] IPAM perf log: " + perfPath);
             }
         }
 
@@ -254,6 +275,31 @@ public static partial class IPAMOverlay
             return;
         }
 
+        // IOPS sizing is a separate GUI.Window on top. Redrawing full inventory (hundreds of IMGUI rows) every
+        // Layout/Repaint pass while the user types still runs and can hitch input — skip heavy content until closed.
+        if (_iopsCalculatorOpen)
+        {
+            var pauseTop = bodyTop + 8f;
+            var pauseH = bodyH - 16f;
+            GUI.DrawTexture(new Rect(contentX + 2, pauseTop + 2, contentW - 4, pauseH - 4), _texCard);
+            GUI.Label(
+                new Rect(contentX + CardPad, pauseTop + CardPad, contentW - CardPad * 2, 40f),
+                "Organization  /  Inventory (paused)",
+                _stBreadcrumb);
+            GUI.Label(
+                new Rect(contentX + CardPad, pauseTop + CardPad + 48f, contentW - CardPad * 2, 140f),
+                "IOPS sizing is open.\n\nDevice tables are not redrawn while it is open (smoother typing). Close the sizing window (Esc, Close, or click outside) to use the list and detail panel again.",
+                _stMuted);
+            GUI.enabled = true;
+            GUI.DragWindow(new Rect(0, 0, w, TitleBarH + ToolbarH));
+            if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
+            {
+                Event.current.Use();
+            }
+
+            return;
+        }
+
         var scrollTop = bodyTop + 8f;
         var scrollH = bodyH - 16f;
         var scrollViewRect = new Rect(contentX, scrollTop, contentW, scrollH);
@@ -268,21 +314,28 @@ public static partial class IPAMOverlay
             scrollViewRect,
             _scroll,
             new Rect(0, 0, innerW, _cachedContentHeight));
-
-        switch (_navSection)
+        BeginInventoryScrollRowRepaintCull(_scroll.y, scrollH);
+        try
         {
-            case NavSection.Dashboard:
-                DrawDashboard(innerW);
-                break;
-            case NavSection.Devices:
-                DrawDeviceTables(innerW);
-                break;
-            case NavSection.IpAddresses:
-                DrawIpAddressTable(innerW);
-                break;
-            case NavSection.Customers:
-                DrawCustomersView(innerW);
-                break;
+            switch (_navSection)
+            {
+                case NavSection.Dashboard:
+                    DrawDashboard(innerW);
+                    break;
+                case NavSection.Devices:
+                    DrawDeviceTables(innerW);
+                    break;
+                case NavSection.IpAddresses:
+                    DrawIpAddressTable(innerW);
+                    break;
+                case NavSection.Customers:
+                    DrawCustomersView(innerW);
+                    break;
+            }
+        }
+        finally
+        {
+            EndInventoryScrollRowRepaintCull();
         }
 
         GUI.EndScrollView();
@@ -666,6 +719,11 @@ public static partial class IPAMOverlay
 
         if (ImguiButtonOnce(r, text, 300 + (int)target, _stNavBtn))
         {
+            if (target == NavSection.Customers)
+            {
+                MarkCustomersTabServerBufferDirty();
+            }
+
             _navSection = target;
             _scroll = Vector2.zero;
             _customersTabFilterMenuOpen = false;
@@ -788,11 +846,26 @@ public static partial class IPAMOverlay
         {
             var sw = SortedSwitchesBuffer[i];
             var r = new Rect(x0, y, cardW, TableRowH);
-            var nameRaw = sw != null ? DeviceInventoryReflection.GetDisplayName(sw) : "(removed)";
-            var name = CellTextForCol(0, string.IsNullOrEmpty(nameRaw) ? "—" : nameRaw, cardW);
-            var roleRaw = "Switch";
-            var role = CellTextForCol(2, roleRaw, cardW);
-            var eolCol = TableEolCellDisplay(sw, cardW);
+            string name;
+            string role;
+            string eolCol;
+            string statusCol;
+            if (ShouldComputeTruncatedInventoryCellText && InventoryScrollRowWantsRepaintText(r.yMin, r.yMax))
+            {
+                var nameRaw = sw != null ? DeviceInventoryReflection.GetDisplayName(sw) : "(removed)";
+                name = CellTextForCol(0, string.IsNullOrEmpty(nameRaw) ? "—" : nameRaw, cardW);
+                role = CellTextForCol(2, "Switch", cardW);
+                eolCol = TableEolCellDisplay(sw, cardW);
+                statusCol = CellTextForCol(5, "Active", cardW);
+            }
+            else
+            {
+                name = "";
+                role = "";
+                eolCol = "";
+                statusCol = "";
+            }
+
             if (TableDataRowClick(
                     r,
                     StableRowHint(1, sw, i),
@@ -803,7 +876,7 @@ public static partial class IPAMOverlay
                     role,
                     "—",
                     eolCol,
-                    CellTextForCol(5, "Active", cardW),
+                    statusCol,
                     cardW))
             {
                 HandleSwitchRowClick(sw, i);
@@ -857,15 +930,34 @@ public static partial class IPAMOverlay
             }
 
             var ip = DHCPManager.GetServerIP(server);
-            var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
-            var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
-            var ipCol = CellTextForCol(3, ipRaw, cardW);
-            var status = CellTextForCol(5, hasIp ? "Assigned" : "No address", cardW);
-            var cust = CellTextForCol(1, GetCustomerDisplayName(server), cardW);
-            var eolCol = TableEolCellDisplay(server, cardW);
-            var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
-            var dispName = CellTextForCol(0, string.IsNullOrEmpty(dispRaw) ? "—" : dispRaw, cardW);
-            var typeCol = CellTextForCol(2, DeviceInventoryReflection.GetServerFormFactorLabel(server), cardW);
+            string dispName;
+            string cust;
+            string typeCol;
+            string ipCol;
+            string eolCol;
+            string status;
+            if (ShouldComputeTruncatedInventoryCellText && InventoryScrollRowWantsRepaintText(r.yMin, r.yMax))
+            {
+                var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
+                var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
+                ipCol = CellTextForCol(3, ipRaw, cardW);
+                status = CellTextForCol(5, hasIp ? "Assigned" : "No address", cardW);
+                cust = CellTextForCol(1, GetCustomerDisplayName(server), cardW);
+                eolCol = TableEolCellDisplay(server, cardW);
+                var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
+                dispName = CellTextForCol(0, string.IsNullOrEmpty(dispRaw) ? "—" : dispRaw, cardW);
+                typeCol = CellTextForCol(2, DeviceInventoryReflection.GetServerFormFactorLabel(server), cardW);
+            }
+            else
+            {
+                dispName = "";
+                cust = "";
+                typeCol = "";
+                ipCol = "";
+                eolCol = "";
+                status = "";
+            }
+
             if (TableDataRowClick(
                     r,
                     StableRowHint(2, server, i),
@@ -902,7 +994,7 @@ public static partial class IPAMOverlay
         ratedIopsSum = 0;
 
         var seen = new Dictionary<int, byte>();
-        foreach (var cb in UnityEngine.Object.FindObjectsOfType<CustomerBase>())
+        foreach (var cb in GameSubnetHelper.GetSceneCustomersForFrame())
         {
             if (cb == null)
             {
@@ -1216,15 +1308,34 @@ public static partial class IPAMOverlay
             }
 
             var ip = DHCPManager.GetServerIP(server);
-            var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
-            var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
-            var ipCol = CellTextForCol(3, ipRaw, cardW);
-            var status = CellTextForCol(5, hasIp ? "Assigned" : "No address", cardW);
-            var cust = CellTextForCol(1, GetCustomerDisplayName(server), cardW);
-            var eolCol = TableEolCellDisplay(server, cardW);
-            var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
-            var dispName = CellTextForCol(0, string.IsNullOrEmpty(dispRaw) ? "—" : dispRaw, cardW);
-            var typeCol = CellTextForCol(2, DeviceInventoryReflection.GetServerFormFactorLabel(server), cardW);
+            string dispName;
+            string cust;
+            string typeCol;
+            string ipCol;
+            string eolCol;
+            string status;
+            if (ShouldComputeTruncatedInventoryCellText && InventoryScrollRowWantsRepaintText(r.yMin, r.yMax))
+            {
+                var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
+                var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
+                ipCol = CellTextForCol(3, ipRaw, cardW);
+                status = CellTextForCol(5, hasIp ? "Assigned" : "No address", cardW);
+                cust = CellTextForCol(1, GetCustomerDisplayName(server), cardW);
+                eolCol = TableEolCellDisplay(server, cardW);
+                var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
+                dispName = CellTextForCol(0, string.IsNullOrEmpty(dispRaw) ? "—" : dispRaw, cardW);
+                typeCol = CellTextForCol(2, DeviceInventoryReflection.GetServerFormFactorLabel(server), cardW);
+            }
+            else
+            {
+                dispName = "";
+                cust = "";
+                typeCol = "";
+                ipCol = "";
+                eolCol = "";
+                status = "";
+            }
+
             if (TableDataRowClick(
                     r,
                     StableRowHint(4, server, i),
@@ -1559,7 +1670,7 @@ public static partial class IPAMOverlay
     {
         CustomerPickBuffer.Clear();
         var uniqueCustomers = new Dictionary<int, CustomerBase>();
-        foreach (var cb in UnityEngine.Object.FindObjectsOfType<CustomerBase>())
+        foreach (var cb in GameSubnetHelper.GetSceneCustomersForFrame())
         {
             if (cb == null)
             {

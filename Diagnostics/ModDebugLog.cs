@@ -9,8 +9,6 @@ namespace DHCPSwitches;
 /// <summary>
 /// Debug log in the game install folder (directory containing the <c>_Data</c> folder). The file <c>DHCPSwitches-debug.log</c>
 /// is replaced (truncated) at the start of each game launch; later lines append during that session.
-/// Create an empty file <c>DHCPSwitches-setip.flag</c> beside the game <c>_Data</c> folder to dump the vanilla IP keypad UI hierarchy once when the keypad opens (see <c>SetIpKeypadDiagnostics</c>).
-/// Create <c>DHCPSwitches-setip-dhcp.flag</c> there to append <c>setip-dhcp:</c> lines (spawn, destroy reason, border/canvas) while debugging the keypad DHCP button.
 /// Create an empty file <c>DHCPSwitches-trace.flag</c> in that same folder to enable verbose step traces
 /// (<c>[trace:…]</c> lines) for ping routing, cable checks, and IOPS reachability.
 /// <c>IOPS ALLOW</c> lines in this file omit per-server IP samples by default; create <c>DHCPSwitches-iops-allow-ips.flag</c> to restore the long sample (server=name=ip) on those lines.
@@ -20,6 +18,7 @@ namespace DHCPSwitches;
 /// <c>DHCPSwitches-dhcp-assign.flag</c> beside <c>_Data</c> for extra subnet/reflection detail on those lines.
 /// During explicit IPAM DHCP (assign all / batch / single), <c>dhcp-step:</c> lines record try-order construction and per-CIDR picks.
 /// Create <c>DHCPSwitches-dhcp-trace.flag</c> for maximum detail (every string field scanned, every usable-IP skip reason).
+/// IPAM perf: use the <b>Perf: on/off</b> button in the IPAM toolbar, or create <c>DHCPSwitches-ipam-perf.flag</c> beside <c>_Data</c>; throttled lines append to <c>DHCPSwitches-ipam-perf.log</c>.
 /// </summary>
 internal static class ModDebugLog
 {
@@ -33,10 +32,12 @@ internal static class ModDebugLog
     private static bool _traceCached;
     private static DateTime _ipamFlagCacheUntilUtc;
     private static bool _ipamFlagCached;
-    private static DateTime _setIpFlagCacheUntilUtc;
-    private static bool _setIpFlagCached;
-    private static DateTime _setIpDhcpFlagCacheUntilUtc;
-    private static bool _setIpDhcpFlagCached;
+    private static DateTime _ipamPerfFlagCacheUntilUtc;
+    private static bool _ipamPerfFlagCached;
+    private static bool _ipamPerfLogBannerWritten;
+
+    /// <summary>When true (set from the IPAM toolbar), performance samples append to <c>DHCPSwitches-ipam-perf.log</c> without any flag file.</summary>
+    public static bool IpamPerfRuntimeEnabled { get; set; }
     private static DateTime _iopsAllowIpsFlagCacheUntilUtc;
     private static bool _iopsAllowIpsFlagCached;
     private static DateTime _dhcpAssignVerboseFlagCacheUntilUtc;
@@ -93,6 +94,95 @@ internal static class ModDebugLog
             }
 
             return _ipamFlagCached;
+        }
+    }
+
+    /// <summary>
+    /// True when <see cref="IpamPerfRuntimeEnabled"/> is on or <c>DHCPSwitches-ipam-perf.flag</c> exists beside <c>_Data</c> (flag checked every ~2s).
+    /// Throttled lines go to <c>DHCPSwitches-ipam-perf.log</c>.
+    /// </summary>
+    internal static bool IsIpamPerfLoggingEnabled
+    {
+        get
+        {
+            if (IpamPerfRuntimeEnabled)
+            {
+                return true;
+            }
+
+            var now = DateTime.UtcNow;
+            if (now < _ipamPerfFlagCacheUntilUtc)
+            {
+                return _ipamPerfFlagCached;
+            }
+
+            _ipamPerfFlagCacheUntilUtc = now.AddSeconds(2);
+            try
+            {
+                var dir = Path.GetDirectoryName(Application.dataPath);
+                if (string.IsNullOrEmpty(dir))
+                {
+                    _ipamPerfFlagCached = false;
+                    return false;
+                }
+
+                _ipamPerfFlagCached = File.Exists(Path.Combine(dir, "DHCPSwitches-ipam-perf.flag"));
+            }
+            catch
+            {
+                _ipamPerfFlagCached = false;
+            }
+
+            return _ipamPerfFlagCached;
+        }
+    }
+
+    /// <summary>Full path to the IPAM performance append log (same folder as <c>DHCPSwitches-debug.log</c>).</summary>
+    internal static string GetIpamPerfLogPath()
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(Application.dataPath);
+            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "DHCPSwitches-ipam-perf.log");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Append-only; enable with <see cref="IsIpamPerfLoggingEnabled"/>.</summary>
+    internal static void WriteIpamPerf(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message) || !IsIpamPerfLoggingEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var dir = Path.GetDirectoryName(Application.dataPath);
+            if (string.IsNullOrEmpty(dir))
+            {
+                return;
+            }
+
+            var perfPath = Path.Combine(dir, "DHCPSwitches-ipam-perf.log");
+            lock (Sync)
+            {
+                if (!_ipamPerfLogBannerWritten)
+                {
+                    _ipamPerfLogBannerWritten = true;
+                    File.AppendAllText(
+                        perfPath,
+                        $"\r\n======== DHCPSwitches IPAM performance log {DateTime.UtcNow:u} ========\r\n");
+                }
+
+                File.AppendAllText(perfPath, $"{DateTime.UtcNow:HH:mm:ss.fff} {message}\r\n");
+            }
+        }
+        catch
+        {
         }
     }
 
@@ -207,84 +297,6 @@ internal static class ModDebugLog
             {
                 // ignore disk / permission errors
             }
-        }
-    }
-
-    /// <summary>True when <c>DHCPSwitches-setip.flag</c> exists next to the main debug log (checked every ~2s).</summary>
-    internal static bool IsSetIpKeypadInspectEnabled
-    {
-        get
-        {
-            var now = DateTime.UtcNow;
-            if (now < _setIpFlagCacheUntilUtc)
-            {
-                return _setIpFlagCached;
-            }
-
-            Bootstrap();
-            _setIpFlagCacheUntilUtc = now.AddSeconds(2);
-            try
-            {
-                if (string.IsNullOrEmpty(_path))
-                {
-                    _setIpFlagCached = false;
-                    return false;
-                }
-
-                var dir = Path.GetDirectoryName(_path);
-                if (string.IsNullOrEmpty(dir))
-                {
-                    _setIpFlagCached = false;
-                    return false;
-                }
-
-                _setIpFlagCached = File.Exists(Path.Combine(dir, "DHCPSwitches-setip.flag"));
-            }
-            catch
-            {
-                _setIpFlagCached = false;
-            }
-
-            return _setIpFlagCached;
-        }
-    }
-
-    /// <summary>True when <c>DHCPSwitches-setip-dhcp.flag</c> exists beside <c>_Data</c> (checked every ~2s).</summary>
-    internal static bool IsSetIpKeypadDhcpLogEnabled
-    {
-        get
-        {
-            var now = DateTime.UtcNow;
-            if (now < _setIpDhcpFlagCacheUntilUtc)
-            {
-                return _setIpDhcpFlagCached;
-            }
-
-            Bootstrap();
-            _setIpDhcpFlagCacheUntilUtc = now.AddSeconds(2);
-            try
-            {
-                if (string.IsNullOrEmpty(_path))
-                {
-                    _setIpDhcpFlagCached = false;
-                    return false;
-                }
-
-                var dir = Path.GetDirectoryName(_path);
-                if (string.IsNullOrEmpty(dir))
-                {
-                    _setIpDhcpFlagCached = false;
-                    return false;
-                }
-
-                _setIpDhcpFlagCached = File.Exists(Path.Combine(dir, "DHCPSwitches-setip-dhcp.flag"));
-            }
-            catch
-            {
-                _setIpDhcpFlagCached = false;
-            }
-
-            return _setIpDhcpFlagCached;
         }
     }
 

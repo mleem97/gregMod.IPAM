@@ -32,12 +32,99 @@ public static class GameSubnetHelper
     /// <summary>Instance IDs of <see cref="Server"/> referenced by <see cref="AssetManagementDeviceLine.server"/> (rack / contract UI).</summary>
     private static readonly HashSet<int> ServerInstanceIdsOnAssetManagementDeviceLines = new();
 
+    /// <summary>
+    /// <see cref="FindObjectsOfType{T}"/> for <see cref="CustomerBase"/> is extremely expensive when called from Harmony
+    /// (empty <c>SetIP</c>) or IMGUI every repaint. Refresh at most once per Unity frame.
+    /// </summary>
+    private static int _sceneCustomersFrame = -1;
+    private static CustomerBase[] _sceneCustomers;
+    private static readonly Dictionary<int, CustomerBase> _customerBaseByCustomerId = new();
+
     public static void ClearCaches()
     {
+        InvalidateSceneCustomerFrameCache();
         SubnetsCacheByCustomerId.Clear();
         _cachedUsableIpMethod = null;
         _cachedUsableIpTarget = null;
         ServerInstanceIdsOnAssetManagementDeviceLines.Clear();
+    }
+
+    internal static void InvalidateSceneCustomerFrameCache()
+    {
+        _sceneCustomersFrame = -1;
+        _sceneCustomers = null;
+        _customerBaseByCustomerId.Clear();
+    }
+
+    /// <summary>Scene <see cref="CustomerBase"/> snapshot for the current frame (same array for the whole frame).</summary>
+    internal static CustomerBase[] GetSceneCustomersForFrame()
+    {
+        EnsureSceneCustomersForFrame();
+        return _sceneCustomers ?? Array.Empty<CustomerBase>();
+    }
+
+    /// <summary>First <see cref="CustomerBase"/> in the scene for <paramref name="customerId"/> (stable when duplicate IDs exist).</summary>
+    internal static CustomerBase FindCustomerBaseByCustomerId(int customerId)
+    {
+        if (customerId < 0)
+        {
+            return null;
+        }
+
+        EnsureSceneCustomersForFrame();
+        return _customerBaseByCustomerId.TryGetValue(customerId, out var cb) ? cb : null;
+    }
+
+    private static void EnsureSceneCustomersForFrame()
+    {
+        var f = Time.frameCount;
+        if (_sceneCustomersFrame == f)
+        {
+            return;
+        }
+
+        _sceneCustomersFrame = f;
+        _customerBaseByCustomerId.Clear();
+        try
+        {
+            _sceneCustomers = UnityEngine.Object.FindObjectsOfType<CustomerBase>();
+        }
+        catch
+        {
+            _sceneCustomers = Array.Empty<CustomerBase>();
+            return;
+        }
+
+        if (_sceneCustomers == null)
+        {
+            return;
+        }
+
+        foreach (var cb in _sceneCustomers)
+        {
+            if (cb == null)
+            {
+                continue;
+            }
+
+            try
+            {
+                var id = cb.customerID;
+                if (id < 0)
+                {
+                    continue;
+                }
+
+                if (!_customerBaseByCustomerId.ContainsKey(id))
+                {
+                    _customerBaseByCustomerId[id] = cb;
+                }
+            }
+            catch
+            {
+                // Il2Cpp: property may throw if object is stale
+            }
+        }
     }
 
     /// <summary>Rebuilds the set of servers currently tied to an asset-management row (O(n) scene scan).</summary>
@@ -120,27 +207,8 @@ public static class GameSubnetHelper
             return null;
         }
 
-        foreach (var cb in UnityEngine.Object.FindObjectsOfType<CustomerBase>())
-        {
-            if (cb == null)
-            {
-                continue;
-            }
-
-            try
-            {
-                if (cb.customerID == cid)
-                {
-                    return cb;
-                }
-            }
-            catch
-            {
-                // Il2Cpp: property may throw if object is stale
-            }
-        }
-
-        return null;
+        EnsureSceneCustomersForFrame();
+        return _customerBaseByCustomerId.TryGetValue(cid, out var hit) ? hit : null;
     }
 
     /// <summary>
