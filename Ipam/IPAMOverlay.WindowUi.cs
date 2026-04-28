@@ -103,10 +103,20 @@ public static partial class IPAMOverlay
             _iopsToolbarRectLogHash = 0;
         }
 
+        var scale = Mathf.Clamp(UiFontScale, 0.5f, 2.0f);
+        float Sp(float px) => Mathf.Round(px * scale);
+
         GUI.DrawTexture(new Rect(0, 0, w, TitleBarH), _texSidebar);
-        GUI.Label(new Rect(12, 6, w - 280, 22), "IPAM  ·  Data Center", _stWindowTitle);
+        GUI.Label(new Rect(12, Sp(6), w - 280, Mathf.Max(18f, Sp(22))), "IPAM  ·  Data Center", _stWindowTitle);
         var maxLabel = _windowMaximized ? "Restore" : "Maximize";
-        if (GUI.Button(new Rect(w - 178, 4, 82, 22), maxLabel, _stMutedBtn))
+        var topBtnH = Mathf.Max(18f, Sp(22));
+        var topBtnWMax = Mathf.Max(82f, TW(_stMutedBtn, "Maximize"));
+        var topBtnWClose = Mathf.Max(78f, TW(_stMutedBtn, "Close"));
+        var topRightPad = Mathf.Max(10f, Sp(10f));
+        var topY = Sp(4);
+        var closeX = w - topRightPad - topBtnWClose;
+        var maxX = closeX - Sp(8f) - topBtnWMax;
+        if (GUI.Button(new Rect(maxX, topY, topBtnWMax, topBtnH), maxLabel, _stMutedBtn))
         {
             if (_windowMaximized)
             {
@@ -123,19 +133,21 @@ public static partial class IPAMOverlay
             }
         }
 
-        if (GUI.Button(new Rect(w - 86, 4, 78, 22), "Close", _stMutedBtn))
+        if (GUI.Button(new Rect(closeX, topY, topBtnWClose, topBtnH), "Close", _stMutedBtn))
         {
             IsVisible = false;
         }
 
-        const float licBtnW = 84f;
-        const float licBtnH = 22f;
-        const float licY = 28f;
-        var licIpamX = w - 90f;
+        var licBtnH = Mathf.Max(18f, Sp(22));
+        var licY = Mathf.Max(topY + topBtnH + Sp(6f), TitleBarH - licBtnH - Sp(4));
+        var ipamLabel = ipamUnlocked ? "IPAM: ON" : "IPAM: locked";
+        var dhcpLabel = dhcpUnlocked ? "DHCP: ON" : "DHCP: locked";
+        var licBtnW = Mathf.Max(84f, Mathf.Max(TW(_stMutedBtn, "IPAM: locked"), TW(_stPrimaryBtn, "DHCP: locked")));
+        var licIpamX = w - topRightPad - licBtnW;
         if (ImguiButtonOnce(
                 new Rect(licIpamX, licY, licBtnW, licBtnH),
                 new GUIContent(
-                    ipamUnlocked ? "IPAM: ON" : "IPAM: locked",
+                    ipamLabel,
                     "Toggle IPAM (inventory tables, IP editor, navigation). Ctrl+D toggles DHCP+IPAM together."),
                 8801,
                 ipamUnlocked ? _stPrimaryBtn : _stMutedBtn))
@@ -143,11 +155,11 @@ public static partial class IPAMOverlay
             LicenseManager.ToggleIpamUnlock();
         }
 
-        var licDhcpX = licIpamX - licBtnW - 8f;
+        var licDhcpX = licIpamX - licBtnW - Sp(8f);
         if (ImguiButtonOnce(
                 new Rect(licDhcpX, licY, licBtnW, licBtnH),
                 new GUIContent(
-                    dhcpUnlocked ? "DHCP: ON" : "DHCP: locked",
+                    dhcpLabel,
                     "Toggle DHCP (per-server DHCP, detail panel). Ctrl+D toggles DHCP+IPAM together."),
                 8802,
                 dhcpUnlocked ? _stPrimaryBtn : _stMutedBtn))
@@ -157,15 +169,17 @@ public static partial class IPAMOverlay
 
         var toolbarY = TitleBarH;
         GUI.DrawTexture(new Rect(0, toolbarY, w, ToolbarH), _texToolbar);
-        GUI.Label(new Rect(16, toolbarY + 6, w - 32f, 22), "Inventory", _stToolbarTitle);
-        GUI.Label(new Rect(16, toolbarY + 26, w - 32f, 16), "Live devices · IPv4 assignments", _stToolbarSub);
+        var toolbarTitleH = Mathf.Max(18f, Sp(22));
+        var toolbarSubH = Mathf.Max(14f, Sp(16));
+        GUI.Label(new Rect(16, toolbarY + Sp(6), w - 32f, toolbarTitleH), "Inventory", _stToolbarTitle);
+        GUI.Label(new Rect(16, toolbarY + Sp(6) + toolbarTitleH, w - 32f, toolbarSubH), "Live devices · IPv4 assignments", _stToolbarSub);
 
         var btnRowY = toolbarY + ToolbarTitleBlockH;
         // Pack from the right on the second row only (keeps row 1 clear for the title).
         const float tr = 14f;
-        const float ty = 4f;
+        var ty = Sp(4f);
         const float g = 8f;
-        const float btnH = 26f;
+        var btnH = Mathf.Max(20f, Sp(26f));
         float TW(GUIStyle st, string t) => ToolbarTextButtonWidth(st, t);
         var fitColsW = TW(_stMutedBtn, "Fit columns");
         var perfW = Mathf.Max(TW(_stMutedBtn, "Perf: off"), TW(_stMutedBtn, "Perf: on"));
@@ -248,12 +262,19 @@ public static partial class IPAMOverlay
 
         // Sidebar
         GUI.DrawTexture(new Rect(0, bodyTop, SidebarW, bodyH), _texSidebar);
-        GUI.Label(new Rect(12, bodyTop + 10, SidebarW - 16, 16), "NAVIGATION", _stNavHint);
-        DrawNavEntry(new Rect(8, bodyTop + 30, SidebarW - 8, 32), NavSection.Dashboard, "Dashboard");
-        DrawNavEntry(new Rect(8, bodyTop + 64, SidebarW - 8, 32), NavSection.Devices, "Devices");
-        DrawNavEntry(new Rect(8, bodyTop + 98, SidebarW - 8, 32), NavSection.IpAddresses, "IP addresses");
-        DrawNavEntry(new Rect(8, bodyTop + 132, SidebarW - 8, 32), NavSection.Customers, "Customers");
-        var tipY = bodyTop + 172f;
+        var navX = 8f;
+        var navW = SidebarW - navX;
+        var navHeaderY = bodyTop + Sp(10f);
+        var navHeaderH = Mathf.Max(16f, _stNavHint != null ? _stNavHint.CalcHeight(new GUIContent("NAVIGATION"), SidebarW - 16f) : 16f);
+        GUI.Label(new Rect(12, navHeaderY, SidebarW - 16, navHeaderH), "NAVIGATION", _stNavHint);
+        var navRowH = Mathf.Max(28f, Sp(32f));
+        var navStartY = navHeaderY + navHeaderH + Sp(6f);
+        DrawNavEntry(new Rect(navX, navStartY + navRowH * 0, navW, navRowH), NavSection.Dashboard, "Dashboard");
+        DrawNavEntry(new Rect(navX, navStartY + navRowH * 1, navW, navRowH), NavSection.Devices, "Devices");
+        DrawNavEntry(new Rect(navX, navStartY + navRowH * 2, navW, navRowH), NavSection.IpAddresses, "IP addresses");
+        DrawNavEntry(new Rect(navX, navStartY + navRowH * 3, navW, navRowH), NavSection.Customers, "Customers");
+        DrawNavEntry(new Rect(navX, navStartY + navRowH * 4, navW, navRowH), NavSection.Settings, "Settings");
+        var tipY = navStartY + navRowH * 5 + Sp(6f);
         var tipH = Mathf.Max(36f, bodyTop + bodyH - tipY - 8f);
         GUI.Label(
             new Rect(8, tipY, SidebarW - 12, tipH),
@@ -330,6 +351,9 @@ public static partial class IPAMOverlay
                     break;
                 case NavSection.Customers:
                     DrawCustomersView(innerW);
+                    break;
+                case NavSection.Settings:
+                    DrawSettingsView(innerW);
                     break;
             }
         }
@@ -738,6 +762,9 @@ public static partial class IPAMOverlay
             case NavSection.Dashboard:
                 _cachedContentHeight = ComputeDashboardContentHeight();
                 return;
+            case NavSection.Settings:
+                _cachedContentHeight = 420f;
+                return;
             case NavSection.IpAddresses:
             {
                 var sv = _cachedServers.Length;
@@ -762,6 +789,45 @@ public static partial class IPAMOverlay
         yd += SectionTitleH + 4f + TableHeaderH + sw * TableRowH;
         yd += 18f + SectionTitleH + 4f + TableHeaderH + sv2 * TableRowH;
         _cachedContentHeight = Mathf.Max(260f, yd + CardPad);
+    }
+
+    private static void DrawSettingsView(float innerW)
+    {
+        var x0 = CardPad;
+        var y = CardPad;
+        var cardW = innerW - CardPad * 2f;
+
+        GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), "Organization  /  Settings", _stBreadcrumb);
+        y += SectionTitleH + 2f;
+        GUI.DrawTexture(new Rect(x0, y, cardW, 1f), _texTableHeader);
+        y += 10f;
+
+        GUI.Label(new Rect(x0, y, cardW, SectionTitleH), "UI font scale", _stSectionTitle);
+        y += SectionTitleH + 6f;
+
+        var pct = Mathf.RoundToInt(UiFontScale * 100f);
+        GUI.Label(new Rect(x0, y, 180f, 22f), $"Scale: {pct}%", _stMuted);
+
+        var sliderW = Mathf.Max(220f, cardW - 260f);
+        var sliderX = x0 + 180f;
+        var sliderRect = new Rect(sliderX, y + 3f, sliderW, 18f);
+        var newScale = GUI.HorizontalSlider(sliderRect, UiFontScale, 0.5f, 2.0f);
+        if (Mathf.Abs(newScale - UiFontScale) > 0.0001f)
+        {
+            UiFontScale = newScale;
+        }
+
+        var resetRect = new Rect(sliderRect.xMax + 14f, y, 64f, 22f);
+        if (GUI.Button(resetRect, "100%", _stMutedBtn))
+        {
+            UiFontScale = 1f;
+        }
+
+        y += 34f;
+        GUI.Label(
+            new Rect(x0, y, cardW, 72f),
+            "Adjusts the IPAM overlay font sizes (live). Range is 50% to 200%.",
+            _stHint);
     }
 
     private static NetworkSwitch[] FilterAlive(NetworkSwitch[] raw)
@@ -1044,11 +1110,11 @@ public static partial class IPAMOverlay
 
     private static float ComputeDashboardContentHeight()
     {
-        const float heroH = 92f;
+        var heroH = Mathf.Max(72f, Mathf.Round(92f * UiFontScale));
         const float sectionGap = 18f;
-        const float barH = 28f;
-        const float legendBlockH = 72f;
-        const float sceneCardH = 68f;
+        var barH = Mathf.Max(22f, Mathf.Round(28f * UiFontScale));
+        var legendBlockH = Mathf.Max(58f, Mathf.Round(72f * UiFontScale));
+        var sceneCardH = Mathf.Max(58f, Mathf.Round(68f * UiFontScale));
         var y = CardPad;
         y += SectionTitleH + 2f + 1f + 6f;
         y += heroH + sectionGap;
@@ -1081,16 +1147,18 @@ public static partial class IPAMOverlay
             GUI.DrawTexture(new Rect(r.x, r.y, 4f, r.height), _texNavActive, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
         }
 
-        var padX = 14f;
+        var padX = Mathf.Max(10f, Mathf.Round(14f * UiFontScale));
         var innerW = Mathf.Max(40f, r.width - padX - 10f);
         var tx = r.x + padX;
-        var ty = r.y + 10f;
-        GUI.Label(new Rect(tx, ty, innerW, 16f), title, _stMuted);
-        ty += 18f;
+        var ty = r.y + Mathf.Max(6f, Mathf.Round(10f * UiFontScale));
+        var titleH = Mathf.Max(14f, Mathf.Round(16f * UiFontScale));
+        GUI.Label(new Rect(tx, ty, innerW, titleH), title, _stMuted);
+        ty += titleH + Mathf.Max(2f, Mathf.Round(2f * UiFontScale));
         var valSt = _stDashboardHeroValue ?? _stIopsResultCounts;
-        GUI.Label(new Rect(tx, ty, innerW, 36f), value, valSt);
-        ty += 38f;
-        GUI.Label(new Rect(tx, ty, innerW, 22f), subtitle, _stMuted);
+        var valH = Mathf.Max(30f, Mathf.Round(36f * UiFontScale));
+        GUI.Label(new Rect(tx, ty, innerW, valH), value, valSt);
+        ty += valH + Mathf.Max(2f, Mathf.Round(2f * UiFontScale));
+        GUI.Label(new Rect(tx, ty, innerW, Mathf.Max(18f, Mathf.Round(22f * UiFontScale))), subtitle, _stMuted);
     }
 
     private static void DrawDashboardServerMixBar(float x0, float y, float w, float h, int n4u, int n2u, int nOther)
@@ -1140,16 +1208,18 @@ public static partial class IPAMOverlay
             GUI.DrawTexture(r, _texCard, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
         }
 
-        var pad = 12f;
+        var pad = Mathf.Max(8f, Mathf.Round(12f * UiFontScale));
         var innerW = Mathf.Max(40f, r.width - pad * 2f);
         var tx = r.x + pad;
-        var ty = r.y + 8f;
-        GUI.Label(new Rect(tx, ty, innerW, 16f), title, _stMuted);
-        ty += 18f;
+        var ty = r.y + Mathf.Max(5f, Mathf.Round(8f * UiFontScale));
+        var titleH = Mathf.Max(14f, Mathf.Round(16f * UiFontScale));
+        GUI.Label(new Rect(tx, ty, innerW, titleH), title, _stMuted);
+        ty += titleH + Mathf.Max(2f, Mathf.Round(2f * UiFontScale));
         var valSt = _stIopsResultCounts ?? _stTableCell;
-        GUI.Label(new Rect(tx, ty, innerW, 30f), count.ToString("N0"), valSt);
-        ty += 32f;
-        var track = new Rect(tx, ty, innerW, 8f);
+        var countH = Mathf.Max(24f, Mathf.Round(30f * UiFontScale));
+        GUI.Label(new Rect(tx, ty, innerW, countH), count.ToString("N0"), valSt);
+        ty += countH + Mathf.Max(2f, Mathf.Round(2f * UiFontScale));
+        var track = new Rect(tx, ty, innerW, Mathf.Max(6f, Mathf.Round(8f * UiFontScale)));
         DashboardDrawTintedRect(track, DashboardTrackDim);
         var fill = Mathf.Clamp01(fill01);
         if (fill > 0.001f)
@@ -1171,12 +1241,12 @@ public static partial class IPAMOverlay
         var x0 = CardPad;
         var y = CardPad;
         var w = innerW - CardPad * 2f;
-        const float heroH = 92f;
+        var heroH = Mathf.Max(72f, Mathf.Round(92f * UiFontScale));
         const float heroGap = 12f;
         const float sectionGap = 18f;
-        const float barH = 28f;
-        const float legendRowH = 22f;
-        const float sceneCardH = 68f;
+        var barH = Mathf.Max(22f, Mathf.Round(28f * UiFontScale));
+        var legendRowH = Mathf.Max(18f, Mathf.Round(22f * UiFontScale));
+        var sceneCardH = Mathf.Max(58f, Mathf.Round(68f * UiFontScale));
 
         GUI.Label(new Rect(x0, y - 2, w, SectionTitleH), "Organization  /  Dashboard", _stBreadcrumb);
         y += SectionTitleH + 2f;

@@ -16,6 +16,13 @@ public class DHCPSwitchesMod : MelonMod
     public const string DHCP_LICENSE_GUID = "dhcp-auto-assign-v1";
     public const string IPAM_LICENSE_GUID = "ipam-remote-view-v1";
 
+    private const string PrefCategoryId = "DHCPSwitches";
+    private const string PrefCategoryName = "DHCP Switches & IPAM";
+    private const string PrefUiFontScaleKey = "IpamUiFontScale";
+
+    private static MelonPreferences_Category _prefs;
+    private static MelonPreferences_Entry<float> _prefUiFontScale;
+
     public override void OnInitializeMelon()
     {
         try
@@ -23,6 +30,11 @@ public class DHCPSwitchesMod : MelonMod
             ModLogging.Instance = LoggerInstance;
             ModDebugLog.Bootstrap();
             DeviceConfigRegistry.BootstrapLoadDisk();
+
+            _prefs = MelonPreferences.CreateCategory(PrefCategoryId, PrefCategoryName);
+            _prefUiFontScale = _prefs.CreateEntry(PrefUiFontScaleKey, 1f, "IPAM UI font scale");
+            IPAMOverlay.UiFontScale = _prefUiFontScale.Value;
+            IPAMOverlay.UiFontScaleChanged += OnUiFontScaleChanged;
 
             ClassInjector.RegisterTypeInIl2Cpp<DHCPController>();
             ClassInjector.RegisterTypeInIl2Cpp<DHCPSwitchesBehaviour>();
@@ -68,6 +80,17 @@ public class DHCPSwitchesMod : MelonMod
             LoggerInstance.Error(ex);
             throw;
         }
+    }
+
+    private static void OnUiFontScaleChanged(float newScale)
+    {
+        if (_prefUiFontScale == null)
+        {
+            return;
+        }
+
+        _prefUiFontScale.Value = newScale;
+        MelonPreferences.Save();
     }
 
     public override void OnUpdate()

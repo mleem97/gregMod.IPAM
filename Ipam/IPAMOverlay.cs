@@ -16,6 +16,7 @@ namespace DHCPSwitches;
 
 public static partial class IPAMOverlay
 {
+    internal static event Action<float> UiFontScaleChanged;
     private static bool _visible;
 
     /// <summary>Matches <see cref="Time.frameCount"/> when F1 toggled IPAM this frame (legacy input suppression).</summary>
@@ -244,9 +245,33 @@ public static partial class IPAMOverlay
         Devices = 1,
         IpAddresses = 2,
         Customers = 3,
+        Settings = 4,
     }
 
     private static NavSection _navSection = NavSection.Devices;
+
+    /// <summary>
+    /// IPAM IMGUI font scale (applied when styles are rebuilt). 1.0 = current default.
+    /// </summary>
+    private static float _uiFontScale = 1f;
+
+    internal static float UiFontScale
+    {
+        get => _uiFontScale;
+        set
+        {
+            var clamped = Mathf.Clamp(value, 0.5f, 2.0f);
+            if (Mathf.Abs(clamped - _uiFontScale) < 0.0001f)
+            {
+                return;
+            }
+
+            _uiFontScale = clamped;
+            _stylesReady = false;
+            _tableColumnsAutoFitPending = true;
+            UiFontScaleChanged?.Invoke(_uiFontScale);
+        }
+    }
 
     private static Server[] _cachedServers = System.Array.Empty<Server>();
     private static NetworkSwitch[] _cachedSwitches = System.Array.Empty<NetworkSwitch>();
@@ -277,11 +302,11 @@ public static partial class IPAMOverlay
 
     // Layout (NetBox-style shell)
     /// <summary>Title/subtitle row + button row so actions never cover “Inventory”.</summary>
-    private const float ToolbarH = 74f;
-    private const float ToolbarTitleBlockH = 44f;
+    private const float ToolbarHBase = 74f;
+    private const float ToolbarTitleBlockHBase = 44f;
     /// <summary>Two rows: title + window buttons, then DHCP/IPAM license toggles on the right.</summary>
-    private const float TitleBarH = 54f;
-    private const float SidebarW = 208f;
+    private const float TitleBarHBase = 54f;
+    private const float SidebarWBase = 208f;
 
     private static readonly float[] TableColWeight = { 0.2f, 0.17f, 0.08f, 0.17f, 0.14f, 0.24f };
     private static float _columnGripMouseStartX;
@@ -290,10 +315,22 @@ public static partial class IPAMOverlay
     private static float _lastInventoryCardWidth;
     private const float MinColWeight = 0.045f;
     private const float MaxColWeight = 0.52f;
-    private const float TableRowH = 30f;
-    private const float SectionTitleH = 22f;
-    private const float TableHeaderH = 26f;
-    private const float CardPad = 14f;
+    private const float TableRowHBase = 30f;
+    private const float SectionTitleHBase = 22f;
+    private const float TableHeaderHBase = 26f;
+    private const float CardPadBase = 14f;
+
+    private static float S(float px) => Mathf.Round(px * Mathf.Clamp(UiFontScale, 0.5f, 2.0f));
+
+    private static float ToolbarH => Mathf.Max(48f, S(ToolbarHBase));
+    private static float ToolbarTitleBlockH => Mathf.Max(28f, S(ToolbarTitleBlockHBase));
+    private static float TitleBarH => Mathf.Max(38f, S(TitleBarHBase));
+    private static float SidebarW => Mathf.Max(160f, S(SidebarWBase));
+
+    private static float TableRowH => Mathf.Max(24f, S(TableRowHBase));
+    private static float SectionTitleH => Mathf.Max(18f, S(SectionTitleHBase));
+    private static float TableHeaderH => Mathf.Max(20f, S(TableHeaderHBase));
+    private static float CardPad => Mathf.Max(10f, S(CardPadBase));
 
     /// <summary>Editable IP as four octets — GUI.TextField breaks under IL2CPP (TextEditor unstripping).</summary>
     private static int _oct0 = 192, _oct1 = 168, _oct2 = 1, _oct3 = 10;

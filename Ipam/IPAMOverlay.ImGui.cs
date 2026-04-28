@@ -198,10 +198,12 @@ public static partial class IPAMOverlay
 
         var lf = GUI.skin.label.font;
         var bf = GUI.skin.button.font;
+        var scale = Mathf.Clamp(UiFontScale, 0.5f, 2.0f);
+        int Fs(int basePx) => Mathf.Clamp(Mathf.RoundToInt(basePx * scale), 8, 64);
 
         _stWindowTitle = new GUIStyle();
         _stWindowTitle.font = lf;
-        _stWindowTitle.fontSize = 13;
+        _stWindowTitle.fontSize = Fs(13);
         _stWindowTitle.fontStyle = FontStyle.Bold;
         _stWindowTitle.alignment = TextAnchor.MiddleLeft;
         _stWindowTitle.padding = Ro(10, 8, 0, 0);
@@ -209,20 +211,20 @@ public static partial class IPAMOverlay
 
         _stToolbarTitle = new GUIStyle();
         _stToolbarTitle.font = lf;
-        _stToolbarTitle.fontSize = 15;
+        _stToolbarTitle.fontSize = Fs(15);
         _stToolbarTitle.fontStyle = FontStyle.Bold;
         _stToolbarTitle.alignment = TextAnchor.MiddleLeft;
         _stToolbarTitle.normal.textColor = new Color32(236, 240, 247, 255);
 
         _stToolbarSub = new GUIStyle();
         _stToolbarSub.font = lf;
-        _stToolbarSub.fontSize = 11;
+        _stToolbarSub.fontSize = Fs(11);
         _stToolbarSub.alignment = TextAnchor.MiddleLeft;
         _stToolbarSub.normal.textColor = new Color32(154, 164, 178, 255);
 
         _stBadgeOn = new GUIStyle();
         _stBadgeOn.font = lf;
-        _stBadgeOn.fontSize = 9;
+        _stBadgeOn.fontSize = Fs(9);
         _stBadgeOn.fontStyle = FontStyle.Bold;
         _stBadgeOn.alignment = TextAnchor.MiddleCenter;
         _stBadgeOn.normal.textColor = new Color32(110, 231, 210, 255);
@@ -231,7 +233,7 @@ public static partial class IPAMOverlay
 
         _stBadgeOff = new GUIStyle();
         _stBadgeOff.font = lf;
-        _stBadgeOff.fontSize = 9;
+        _stBadgeOff.fontSize = Fs(9);
         _stBadgeOff.fontStyle = FontStyle.Bold;
         _stBadgeOff.alignment = TextAnchor.MiddleCenter;
         _stBadgeOff.normal.textColor = new Color32(140, 148, 160, 255);
@@ -240,14 +242,14 @@ public static partial class IPAMOverlay
 
         _stNavItemActive = new GUIStyle();
         _stNavItemActive.font = lf;
-        _stNavItemActive.fontSize = 12;
+        _stNavItemActive.fontSize = Fs(12);
         _stNavItemActive.alignment = TextAnchor.MiddleLeft;
         _stNavItemActive.padding = Ro(16, 8, 0, 0);
         _stNavItemActive.normal.textColor = Color.white;
 
         _stNavHint = new GUIStyle();
         _stNavHint.font = lf;
-        _stNavHint.fontSize = 10;
+        _stNavHint.fontSize = Fs(10);
         _stNavHint.alignment = TextAnchor.UpperLeft;
         _stNavHint.wordWrap = true;
         _stNavHint.padding = Ro(14, 10, 8, 4);
@@ -255,20 +257,20 @@ public static partial class IPAMOverlay
 
         _stBreadcrumb = new GUIStyle();
         _stBreadcrumb.font = lf;
-        _stBreadcrumb.fontSize = 11;
+        _stBreadcrumb.fontSize = Fs(11);
         _stBreadcrumb.alignment = TextAnchor.MiddleLeft;
         _stBreadcrumb.normal.textColor = new Color32(140, 152, 168, 255);
 
         _stSectionTitle = new GUIStyle();
         _stSectionTitle.font = lf;
-        _stSectionTitle.fontSize = 12;
+        _stSectionTitle.fontSize = Fs(12);
         _stSectionTitle.fontStyle = FontStyle.Bold;
         _stSectionTitle.alignment = TextAnchor.MiddleLeft;
         _stSectionTitle.normal.textColor = new Color32(226, 232, 240, 255);
 
         _stTableHeaderText = new GUIStyle();
         _stTableHeaderText.font = lf;
-        _stTableHeaderText.fontSize = 10;
+        _stTableHeaderText.fontSize = Fs(10);
         _stTableHeaderText.fontStyle = FontStyle.Bold;
         _stTableHeaderText.alignment = TextAnchor.MiddleLeft;
         _stTableHeaderText.padding = Ro(12, 8, 0, 0);
@@ -276,7 +278,7 @@ public static partial class IPAMOverlay
 
         _stHeaderSortBtn = new GUIStyle();
         _stHeaderSortBtn.font = lf;
-        _stHeaderSortBtn.fontSize = 10;
+        _stHeaderSortBtn.fontSize = Fs(10);
         _stHeaderSortBtn.fontStyle = FontStyle.Bold;
         _stHeaderSortBtn.alignment = TextAnchor.MiddleLeft;
         _stHeaderSortBtn.padding = Ro(10, 6, 0, 0);
@@ -288,7 +290,7 @@ public static partial class IPAMOverlay
 
         _stTableCell = new GUIStyle();
         _stTableCell.font = lf;
-        _stTableCell.fontSize = 12;
+        _stTableCell.fontSize = Fs(12);
         _stTableCell.alignment = TextAnchor.MiddleLeft;
         _stTableCell.padding = Ro(12, 8, 0, 0);
         _stTableCell.clipping = TextClipping.Clip;
@@ -296,7 +298,7 @@ public static partial class IPAMOverlay
 
         _stNavBtn = new GUIStyle();
         _stNavBtn.font = lf;
-        _stNavBtn.fontSize = 12;
+        _stNavBtn.fontSize = Fs(12);
         _stNavBtn.alignment = TextAnchor.MiddleLeft;
         _stNavBtn.padding = Ro(16, 8, 0, 0);
         _stNavBtn.normal.background = _texSidebar;
@@ -309,47 +311,47 @@ public static partial class IPAMOverlay
 
         _stMuted = new GUIStyle();
         _stMuted.font = lf;
-        _stMuted.fontSize = 11;
+        _stMuted.fontSize = Fs(11);
         _stMuted.alignment = TextAnchor.MiddleLeft;
         _stMuted.normal.textColor = new Color32(154, 164, 178, 255);
 
         _stMutedCenter = new GUIStyle();
         _stMutedCenter.font = lf;
-        _stMutedCenter.fontSize = 11;
+        _stMutedCenter.fontSize = Fs(11);
         _stMutedCenter.alignment = TextAnchor.MiddleCenter;
         _stMutedCenter.normal.textColor = new Color32(154, 164, 178, 255);
 
         _stHint = new GUIStyle();
         _stHint.font = lf;
-        _stHint.fontSize = 10;
+        _stHint.fontSize = Fs(10);
         _stHint.alignment = TextAnchor.UpperLeft;
         _stHint.wordWrap = true;
         _stHint.normal.textColor = new Color32(130, 170, 255, 255);
 
         _stError = new GUIStyle();
         _stError.font = lf;
-        _stError.fontSize = 10;
+        _stError.fontSize = Fs(10);
         _stError.alignment = TextAnchor.UpperLeft;
         _stError.wordWrap = true;
         _stError.normal.textColor = new Color32(255, 130, 120, 255);
 
         _stFormLabel = new GUIStyle();
         _stFormLabel.font = lf;
-        _stFormLabel.fontSize = 11;
+        _stFormLabel.fontSize = Fs(11);
         _stFormLabel.fontStyle = FontStyle.Bold;
         _stFormLabel.alignment = TextAnchor.MiddleLeft;
         _stFormLabel.normal.textColor = new Color32(200, 208, 218, 255);
 
         _stOctetVal = new GUIStyle();
         _stOctetVal.font = lf;
-        _stOctetVal.fontSize = 12;
+        _stOctetVal.fontSize = Fs(12);
         _stOctetVal.fontStyle = FontStyle.Bold;
         _stOctetVal.alignment = TextAnchor.MiddleCenter;
         _stOctetVal.normal.textColor = new Color32(240, 242, 248, 255);
 
         _stPrimaryBtn = new GUIStyle();
         _stPrimaryBtn.font = bf;
-        _stPrimaryBtn.fontSize = 11;
+        _stPrimaryBtn.fontSize = Fs(11);
         _stPrimaryBtn.fontStyle = FontStyle.Bold;
         _stPrimaryBtn.alignment = TextAnchor.MiddleCenter;
         _stPrimaryBtn.padding = Ro(12, 12, 6, 6);
@@ -363,7 +365,7 @@ public static partial class IPAMOverlay
 
         _stMutedBtn = new GUIStyle();
         _stMutedBtn.font = bf;
-        _stMutedBtn.fontSize = 11;
+        _stMutedBtn.fontSize = Fs(11);
         _stMutedBtn.alignment = TextAnchor.MiddleCenter;
         _stMutedBtn.padding = Ro(10, 10, 5, 5);
         _stMutedBtn.normal.background = _texMutedBtn;
@@ -376,7 +378,7 @@ public static partial class IPAMOverlay
 
         _stIopsResult = new GUIStyle();
         _stIopsResult.font = lf;
-        _stIopsResult.fontSize = 12;
+        _stIopsResult.fontSize = Fs(12);
         _stIopsResult.fontStyle = FontStyle.Normal;
         _stIopsResult.alignment = TextAnchor.UpperLeft;
         _stIopsResult.wordWrap = true;
@@ -386,7 +388,7 @@ public static partial class IPAMOverlay
 
         _stIopsResultCounts = new GUIStyle();
         _stIopsResultCounts.font = lf;
-        _stIopsResultCounts.fontSize = 20;
+        _stIopsResultCounts.fontSize = Fs(20);
         _stIopsResultCounts.fontStyle = FontStyle.Bold;
         _stIopsResultCounts.alignment = TextAnchor.UpperLeft;
         _stIopsResultCounts.wordWrap = true;
@@ -396,7 +398,7 @@ public static partial class IPAMOverlay
 
         _stDashboardHeroValue = new GUIStyle();
         _stDashboardHeroValue.font = lf;
-        _stDashboardHeroValue.fontSize = 28;
+        _stDashboardHeroValue.fontSize = Fs(28);
         _stDashboardHeroValue.fontStyle = FontStyle.Bold;
         _stDashboardHeroValue.alignment = TextAnchor.UpperLeft;
         _stDashboardHeroValue.wordWrap = false;
@@ -406,7 +408,7 @@ public static partial class IPAMOverlay
 
         _stIopsResultPlaceholder = new GUIStyle();
         _stIopsResultPlaceholder.font = lf;
-        _stIopsResultPlaceholder.fontSize = 11;
+        _stIopsResultPlaceholder.fontSize = Fs(11);
         _stIopsResultPlaceholder.fontStyle = FontStyle.Normal;
         _stIopsResultPlaceholder.alignment = TextAnchor.UpperLeft;
         _stIopsResultPlaceholder.wordWrap = true;

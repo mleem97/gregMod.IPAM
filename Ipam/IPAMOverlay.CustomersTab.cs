@@ -263,11 +263,15 @@ public static partial class IPAMOverlay
 
     private static void DrawCustomersTabCustomerFilter(float px, ref float py, float w)
     {
-        GUI.Label(new Rect(px, py + 3, 78, 22), "Customer:", _stFormLabel);
-        var fieldW = Mathf.Min(w - px - 100, 520f);
-        var dropBtnRect = new Rect(px + 82, py, fieldW, 24);
-        const float listH = 120f;
-        var dropListRect = new Rect(px + 82, py + 26, fieldW, listH);
+        var labelH = Mathf.Max(18f, SectionTitleH);
+        var fieldH = Mathf.Max(20f, TableHeaderH);
+        var rowGap = Mathf.Max(4f, Mathf.Round(UiFontScale * 4f));
+        var labelW = Mathf.Max(78f, Mathf.Round(UiFontScale * 78f));
+        GUI.Label(new Rect(px, py + rowGap * 0.75f, labelW, labelH), "Customer:", _stFormLabel);
+        var fieldW = Mathf.Min(w - px - (labelW + 22f), 520f);
+        var dropBtnRect = new Rect(px + (labelW + 4f), py, fieldW, fieldH);
+        var listH = Mathf.Clamp(Mathf.RoundToInt(120f * UiFontScale), 120f, 260f);
+        var dropListRect = new Rect(dropBtnRect.xMin, py + fieldH + rowGap, fieldW, listH);
 
         var e = Event.current;
         if (_customersTabFilterMenuOpen && e.type == EventType.MouseDown && e.button == 0)
@@ -286,7 +290,7 @@ public static partial class IPAMOverlay
             _customersTabFilterMenuOpen = !_customersTabFilterMenuOpen;
         }
 
-        py += 28f;
+        py += fieldH + rowGap;
         if (!_customersTabFilterMenuOpen)
         {
             return;
@@ -299,14 +303,15 @@ public static partial class IPAMOverlay
         }
 
         GUI.Box(dropListRect, GUIContent.none);
+        var itemH = Mathf.Max(22f, Mathf.Round(TableRowH * 0.95f));
         _customersTabFilterScroll = GUI.BeginScrollView(
             dropListRect,
             _customersTabFilterScroll,
-            new Rect(0, 0, fieldW - 22, CustomersTabFilterScratch.Count * 28f));
+            new Rect(0, 0, fieldW - 22, CustomersTabFilterScratch.Count * (itemH + 2f)));
         for (var i = 0; i < CustomersTabFilterScratch.Count; i++)
         {
             var entry = CustomersTabFilterScratch[i];
-            if (GUI.Button(new Rect(4, i * 28f, fieldW - 28, 26), entry.line, _stMutedBtn))
+            if (GUI.Button(new Rect(4, i * (itemH + 2f), fieldW - 28, itemH), entry.line, _stMutedBtn))
             {
                 if (_customersTabFilterCustomerId != entry.customerId)
                 {
@@ -320,7 +325,7 @@ public static partial class IPAMOverlay
         }
 
         GUI.EndScrollView();
-        py += listH + 4f;
+        py += listH + rowGap;
     }
 
     private static void DrawCustomersView(float innerW)
