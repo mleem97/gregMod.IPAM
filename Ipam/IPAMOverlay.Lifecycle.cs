@@ -15,6 +15,40 @@ public static partial class IPAMOverlay
     private static double _ipamPerfAccWindowMs;
     private static int _ipamPerfWindowPasses;
     private static float _ipamPerfNextLogTime = -1f;
+    private static float _ipamNextPlayerInputRescanTime;
+
+    /// <summary>
+    /// Rising-edge detection for Escape using <see cref="Keyboard.escapeKey.isPressed"/> so IPAM still sees Escape
+    /// while Harmony strips <see cref="Keyboard.escapeKey.wasPressedThisFrame"/> from the game.
+    /// </summary>
+    internal static bool IpamEscapePressedThisFrame { get; private set; }
+
+    private static bool _ipamPrevEscapeIsPressed;
+
+    internal static void TickIpamEscapeEdgeDetection()
+    {
+        if (!IsVisible)
+        {
+            IpamEscapePressedThisFrame = false;
+            _ipamPrevEscapeIsPressed = false;
+            return;
+        }
+
+        var kb = Keyboard.current;
+        var down = kb != null && kb.escapeKey.isPressed;
+        IpamEscapePressedThisFrame = down && !_ipamPrevEscapeIsPressed;
+        _ipamPrevEscapeIsPressed = down;
+        if (IpamEscapePressedThisFrame)
+        {
+            IpamMenuOcclusion.BumpScanPriority();
+        }
+    }
+
+    internal static void ResetIpamEscapeKeyboardLatchForOverlayOpen()
+    {
+        _ipamPrevEscapeIsPressed = false;
+        IpamEscapePressedThisFrame = false;
+    }
 
     private static bool HardwarePointerInWindowLocalRect(Rect windowRect, Rect localRect, out Vector2 localPointer)
     {
@@ -35,6 +69,24 @@ public static partial class IPAMOverlay
         localPointer = new Vector2(guiScreen.x - windowRect.x, guiScreen.y - windowRect.y);
         return localRect.Contains(localPointer);
     }
+    /// <summary>
+    /// Deactivates any <see cref="UnityEngine.InputSystem.PlayerInput"/> spawned after IPAM opened so letter keys
+    /// (e.g. pause bound to P) do not reach gameplay while the overlay is up.
+    /// </summary>
+    internal static void TickIpamGameInputSuppression()
+    {
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        if (Time.unscaledTime >= _ipamNextPlayerInputRescanTime)
+        {
+            _ipamNextPlayerInputRescanTime = Time.unscaledTime + 2.5f;
+            GameInputSuppression.RefreshWhileActive();
+        }
+    }
+
     public static void TickDeviceListCache()
     {
         if (!IsVisible)
@@ -156,7 +208,7 @@ public static partial class IPAMOverlay
     /// </summary>
     public static void TickInputSystemIopsToolbarClick()
     {
-        if (!IsVisible || !LicenseManager.IsIPAMUnlocked || _iopsCalculatorOpen)
+        if (!IsVisible || !LicenseManager.IsIPAMUnlocked || _iopsCalculatorOpen || _customersTabAddServerWizardOpen)
         {
             return;
         }
@@ -205,7 +257,7 @@ public static partial class IPAMOverlay
             return;
         }
 
-        if (kb.escapeKey.wasPressedThisFrame)
+        if (IpamEscapePressedThisFrame)
         {
             CloseIopsCalculatorModal("Escape");
             return;
@@ -256,7 +308,7 @@ public static partial class IPAMOverlay
             return;
         }
 
-        if (kb.escapeKey.wasPressedThisFrame)
+        if (IpamEscapePressedThisFrame)
         {
             _activeOctetSlot = -1;
             return;

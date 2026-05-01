@@ -320,18 +320,137 @@ public static partial class IPAMOverlay
 
                     break;
                 case EventType.Repaint:
+                {
+                    var lineH = Mathf.Max(1f, headerRect.height);
+                    var lineY = headerRect.y;
+                    var xMid = x - 1f;
+                    var oc = GUI.color;
+                    GUI.color = new Color(0f, 0.78f, 0.66f, 1f);
+                    GUI.DrawTexture(new Rect(xMid, lineY, 2f, lineH), Texture2D.whiteTexture, ScaleMode.StretchToFill);
                     var hover = grip.Contains(e.mousePosition) || GUIUtility.hotControl == id;
-                    if (hover && _texPrimaryBtn != null)
+                    if (hover)
                     {
-                        var oc = GUI.color;
-                        GUI.color = new Color(1f, 1f, 1f, 0.45f);
-                        GUI.DrawTexture(new Rect(grip.x + 2f, grip.y + 5f, 2f, grip.height - 10f), _texPrimaryBtn);
-                        GUI.color = oc;
+                        GUI.color = new Color(0.4f, 1f, 0.92f, 1f);
+                        GUI.DrawTexture(new Rect(xMid - 1f, lineY, 4f, lineH), Texture2D.whiteTexture, ScaleMode.StretchToFill);
                     }
 
+                    GUI.color = oc;
                     break;
+                }
             }
         }
+    }
+
+    /// <summary>Customers tab (customer list): fit the shared six weights to these headers and row text — not inventory columns.</summary>
+    private static void AutoFitCustomersTabCustomerListColumns(float cardWidth)
+    {
+        if (!_stylesReady || cardWidth < 200f || _stTableCell == null)
+        {
+            return;
+        }
+
+        EnsureCustomersTabCustomerListRows();
+        var minPx = new float[6];
+        void BumpHeader(int col, string label)
+        {
+            var w = _stTableCell.CalcSize(new GUIContent(label)).x + 20f;
+            if (w > minPx[col])
+            {
+                minPx[col] = w;
+            }
+        }
+
+        BumpHeader(0, "Customer");
+        BumpHeader(1, "Servers");
+        BumpHeader(2, "X VLAN");
+        BumpHeader(3, "RISC VLAN");
+        BumpHeader(4, "Mainframe VLAN");
+        BumpHeader(5, "GPU VLAN");
+
+        void BumpCell(int col, string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+
+            var w = _stTableCell.CalcSize(new GUIContent(text)).x + 16f;
+            if (w > minPx[col])
+            {
+                minPx[col] = w;
+            }
+        }
+
+        foreach (var row in CustomersTabCustomerListRows)
+        {
+            BumpCell(0, row.title);
+            BumpCell(1, row.serverCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture));
+            BumpCell(2, row.vlanX);
+            BumpCell(3, row.vlanRisc);
+            BumpCell(4, row.vlanMf);
+            BumpCell(5, row.vlanGpu);
+        }
+
+        BumpCell(2, "4094");
+        BumpCell(3, "4094");
+        BumpCell(4, "4094");
+        BumpCell(5, "4094");
+
+        for (var i = 0; i < 6; i++)
+        {
+            minPx[i] = Mathf.Clamp(minPx[i], 56f, cardWidth * 0.40f);
+        }
+
+        var sum = minPx[0] + minPx[1] + minPx[2] + minPx[3] + minPx[4] + minPx[5];
+        if (sum < cardWidth)
+        {
+            var slack = cardWidth - sum;
+            minPx[0] += slack * 0.30f;
+            minPx[1] += slack * 0.08f;
+            minPx[2] += slack * 0.12f;
+            minPx[3] += slack * 0.12f;
+            minPx[4] += slack * 0.20f;
+            minPx[5] += slack * 0.18f;
+        }
+        else
+        {
+            var scale = cardWidth / sum;
+            for (var i = 0; i < 6; i++)
+            {
+                minPx[i] *= scale;
+            }
+        }
+
+        for (var i = 0; i < 6; i++)
+        {
+            TableColWeight[i] = minPx[i] / cardWidth;
+        }
+
+        NormalizeTableColWeights();
+    }
+
+    /// <summary>Solid vertical guides through data rows (header already has guides from <see cref="ProcessTableColumnGrips"/>).</summary>
+    private static void DrawCustomersTableColumnBodyGuides(float x0, float yTop, float yBottom, float cardWidth)
+    {
+        if (Event.current.type != EventType.Repaint || yBottom <= yTop + 0.5f || cardWidth < 120f)
+        {
+            return;
+        }
+
+        GetTableColumnWidths(cardWidth, out var w0, out var w1, out var w2, out var w3, out var w4, out var w5);
+        var ws = new[] { w0, w1, w2, w3, w4, w5 };
+        var x = x0;
+        var oc = GUI.color;
+        GUI.color = new Color(0f, 0.78f, 0.66f, 1f);
+        var h = yBottom - yTop;
+        for (var boundary = 0; boundary < 5; boundary++)
+        {
+            x += ws[boundary];
+            var line = new Rect(x - 1f, yTop, 2f, h);
+            GUI.DrawTexture(line, Texture2D.whiteTexture, ScaleMode.StretchToFill);
+        }
+
+        GUI.color = oc;
     }
 
     private static void AutoFitInventoryTableColumns(float cardWidth)
@@ -463,6 +582,7 @@ public static partial class IPAMOverlay
     }
 
     /// <summary>One IMGUI control per row; columns drawn on Repaint to align with headers.</summary>
+    /// <param name="suppressPointer">When true, row still repaints but ignores mouse (e.g. IPAM page-size menu overlaps).</param>
     private static bool TableDataRowClick(
         Rect rowRect,
         int controlHint,
@@ -474,7 +594,8 @@ public static partial class IPAMOverlay
         string col4,
         string col5,
         string col6,
-        float cardWidth)
+        float cardWidth,
+        bool suppressPointer = false)
     {
         var id = GUIUtility.GetControlID(controlHint, FocusType.Passive, rowRect);
         var e = Event.current;
@@ -484,7 +605,7 @@ public static partial class IPAMOverlay
         switch (e.GetTypeForControl(id))
         {
             case EventType.MouseDown:
-                if (e.button == 0 && rowRect.Contains(e.mousePosition))
+                if (!suppressPointer && e.button == 0 && rowRect.Contains(e.mousePosition))
                 {
                     GUIUtility.hotControl = id;
                     e.Use();
@@ -499,7 +620,7 @@ public static partial class IPAMOverlay
 
                 GUIUtility.hotControl = 0;
                 e.Use();
-                if (rowRect.Contains(e.mousePosition))
+                if (!suppressPointer && rowRect.Contains(e.mousePosition))
                 {
                     return true;
                 }
@@ -515,7 +636,7 @@ public static partial class IPAMOverlay
                     }
                 }
 
-                var hover = rowRect.Contains(e.mousePosition);
+                var hover = !suppressPointer && rowRect.Contains(e.mousePosition);
                 var bg = rowSelected
                     ? _texNavActive
                     : (hover || GUIUtility.hotControl == id ? _texRowHover : bgBase);

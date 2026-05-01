@@ -17,6 +17,13 @@ public class DHCPSwitchesMod : MelonMod
     public const string DHCP_LICENSE_GUID = "dhcp-auto-assign-v1";
     public const string IPAM_LICENSE_GUID = "ipam-remote-view-v1";
 
+    private const string PrefCategoryId = "DHCPSwitches";
+    private const string PrefCategoryName = "DHCP Switches & IPAM";
+    private const string PrefUiFontScaleKey = "IpamUiFontScale";
+
+    private static MelonPreferences_Category _prefs;
+    private static MelonPreferences_Entry<float> _prefUiFontScale;
+
     public override void OnInitializeMelon()
     {
         try
@@ -24,6 +31,11 @@ public class DHCPSwitchesMod : MelonMod
             ModLogging.Instance = LoggerInstance;
             ModDebugLog.Bootstrap();
             DeviceConfigRegistry.BootstrapLoadDisk();
+
+            _prefs = MelonPreferences.CreateCategory(PrefCategoryId, PrefCategoryName);
+            _prefUiFontScale = _prefs.CreateEntry(PrefUiFontScaleKey, 1f, "IPAM UI font scale");
+            IPAMOverlay.UiFontScale = _prefUiFontScale.Value;
+            IPAMOverlay.UiFontScaleChanged += OnUiFontScaleChanged;
 
             ClassInjector.RegisterTypeInIl2Cpp<DHCPController>();
             ClassInjector.RegisterTypeInIl2Cpp<DHCPSwitchesBehaviour>();
@@ -38,6 +50,7 @@ public class DHCPSwitchesMod : MelonMod
             harmony.CreateClassProcessor(typeof(DHCPManager.FlowPausePatch)).Patch();
             LegacyInputBlockPatches.TryApply(harmony);
             InputSystemUiCancelPatches.TryApply(harmony);
+            InputSystemEscapeBlockPatches.TryApply(harmony);
 
             LoggerInstance.Msg(
                 "DHCP Switches & IPAM loaded. F1 = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles or Ctrl+D = lock (debug). Rack switch/router red menu = CLI, or IPAM → device → Open CLI.");
@@ -71,6 +84,17 @@ public class DHCPSwitchesMod : MelonMod
         }
     }
 
+    private static void OnUiFontScaleChanged(float newScale)
+    {
+        if (_prefUiFontScale == null)
+        {
+            return;
+        }
+
+        _prefUiFontScale.Value = newScale;
+        MelonPreferences.Save();
+    }
+
     public override void OnUpdate()
     {
         // Melon OnUpdate runs before most Unity behaviours — sync uGUI blocker early so pause menus do not eat the first click under IPAM.
@@ -99,7 +123,7 @@ public class DHCPSwitchesMod : MelonMod
             return;
         }
 
-        // IPAM does not suspend PlayerInput
+        IPAMOverlay.TickIpamGameInputSuppression();
     }
 }
 
@@ -136,6 +160,8 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
 
         if (IPAMOverlay.IsVisible)
         {
+            IPAMOverlay.TickIpamEscapeEdgeDetection();
+
             // NEW: Check if the selected server was updated elsewhere (like a keypad)
             if (IPAMOverlay._selectedServer != null)
             {
@@ -151,6 +177,8 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
             IPAMOverlay.TickDeviceListCache();
             IPAMOverlay.TickInputSystemIopsToolbarClick();
             IPAMOverlay.TickIopsCalculatorInputSystem();
+            IPAMOverlay.TickCustomersAddServerWizardInput();
+            IPAMOverlay.TickIpamFormInputSystem();
             IPAMOverlay.TickOctetInputSystem();
             IPAMOverlay.TickIpamPerfLog();
         }

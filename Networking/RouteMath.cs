@@ -103,4 +103,125 @@ public static class RouteMath
             yield return string.Format(CultureInfo.InvariantCulture, "{0}.{1}.{2}.{3}", a, b, c, d);
         }
     }
+
+    /// <summary>IPv4 dotted-quad to big-endian uint (network byte order as integer).</summary>
+    public static bool TryIpv4StringToUint(string s, out uint be)
+    {
+        be = 0;
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            return false;
+        }
+
+        if (!IPAddress.TryParse(s.Trim(), out var ip) || ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            return false;
+        }
+
+        var bytes = ip.GetAddressBytes();
+        if (bytes.Length != 4)
+        {
+            return false;
+        }
+
+        be = ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
+        return true;
+    }
+
+    public static bool IsIpv4InCidr(string ip, string cidr)
+    {
+        if (!TryParseIpv4Cidr(cidr, out var networkBe, out var prefixLen))
+        {
+            return false;
+        }
+
+        if (!TryIpv4StringToUint(ip, out var ipBe))
+        {
+            return false;
+        }
+
+        return IsIpv4UintInPrefix(ipBe, networkBe, prefixLen);
+    }
+
+    public static bool IsIpv4UintInPrefix(uint ipBe, uint networkBe, int prefixLen)
+    {
+        if (prefixLen < 0 || prefixLen > 32)
+        {
+            return false;
+        }
+
+        if (prefixLen == 0)
+        {
+            return true;
+        }
+
+        if (prefixLen == 32)
+        {
+            return ipBe == networkBe;
+        }
+
+        var mask = uint.MaxValue << (32 - prefixLen);
+        return (ipBe & mask) == (networkBe & mask);
+    }
+
+    /// <summary>Counts addresses yielded by <see cref="EnumerateDhcpCandidates"/> (same gateway skip rule).</summary>
+    public static int CountDhcpUsableHosts(string cidr, bool skipTypicalGatewayLastOctet = true)
+    {
+        var n = 0;
+        foreach (var _ in EnumerateDhcpCandidates(cidr, skipTypicalGatewayLastOctet))
+        {
+            n++;
+        }
+
+        return n;
+    }
+
+    /// <summary>True if <paramref name="childCidr"/> is a strictly more specific subnet inside <paramref name="parentCidr"/>.</summary>
+    public static bool IsStrictChildOf(string childCidr, string parentCidr)
+    {
+        if (!TryParseIpv4Cidr(parentCidr, out var pNet, out var pLen))
+        {
+            return false;
+        }
+
+        if (!TryParseIpv4Cidr(childCidr, out var cNet, out var cLen))
+        {
+            return false;
+        }
+
+        if (cLen <= pLen || cLen > 32)
+        {
+            return false;
+        }
+
+        return IsIpv4UintInPrefix(cNet, pNet, pLen);
+    }
+
+    /// <summary>Human-readable reason when <see cref="IsStrictChildOf"/> would be false (for IPAM UI).</summary>
+    public static string ExplainStrictChildFailure(string childCidr, string parentCidr)
+    {
+        var child = (childCidr ?? "").Trim();
+        var parent = (parentCidr ?? "").Trim();
+        if (!TryParseIpv4Cidr(parent, out var pNet, out var pLen))
+        {
+            return "Parent CIDR is invalid.";
+        }
+
+        if (!TryParseIpv4Cidr(child, out var cNet, out var cLen))
+        {
+            return "Child CIDR is invalid.";
+        }
+
+        if (cLen <= pLen)
+        {
+            return $"Child must be more specific than parent /{pLen} (you used /{cLen}). Try e.g. /{Math.Min(32, pLen + 1)} or longer inside the parent range.";
+        }
+
+        if (!IsIpv4UintInPrefix(cNet, pNet, pLen))
+        {
+            return $"Network {child} is not inside parent {parent}. The child’s addresses must all fall in the parent’s range.";
+        }
+
+        return "That combination is not allowed.";
+    }
 }

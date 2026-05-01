@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace DHCPSwitches;
@@ -13,6 +14,9 @@ internal static class DeviceInventoryReflection
 {
     private static readonly string[] DisplayNameMembers =
     {
+        "lastDisplayedLabel", "LastDisplayedLabel",
+        "configuredServerName", "ConfiguredServerName", "rackServerName", "RackServerName",
+        "contractServerName", "ContractServerName", "userServerName", "UserServerName",
         "displayName", "DisplayName", "serverName", "ServerName", "deviceName", "DeviceName",
         "label", "Label", "itemName", "ItemName", "objectName", "ObjectName", "friendlyName", "FriendlyName",
         "hostName", "HostName", "hostname", "Hostname", "rackName", "RackName", "rackLabel", "RackLabel",
@@ -60,7 +64,9 @@ internal static class DeviceInventoryReflection
         "MuteAlarms", "SuppressAlarms", "ClearIncident", "ClearIncidents",
     };
 
-    /// <summary>Rack form factor for inventory (2 U / 4 U) when the name or game fields hint at it; otherwise "—".</summary>
+    /// <summary>
+    /// Rack form factor (3 U / 7 U). Uses <see cref="MainGameManager.GetServerPrefab"/> so renamed servers still resolve from catalog index <c>server.serverType</c>.
+    /// </summary>
     internal static string GetServerFormFactorLabel(Server server)
     {
         if (server == null)
@@ -70,11 +76,37 @@ internal static class DeviceInventoryReflection
 
         try
         {
-            var blob = ((server.name ?? "") + " " + GetDisplayName(server)).Trim();
-            var fromName = ClassifyFormFactorFromText(blob);
-            if (fromName != null)
+            if (TryGetServerFormFactorFromPrefabCatalog(server, out var fromPrefab))
             {
-                return fromName;
+                return fromPrefab;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        try
+        {
+            var sceneAssetName = server.name ?? "";
+            var fromSceneObject = ClassifyServerPrefabAssetName(sceneAssetName);
+            if (fromSceneObject != null)
+            {
+                return fromSceneObject;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        try
+        {
+            var blob = ((server.name ?? "") + " " + GetDisplayName(server)).Trim();
+            var fromText = ClassifyFormFactorFromText(blob);
+            if (fromText != null)
+            {
+                return fromText;
             }
         }
         catch
@@ -86,17 +118,150 @@ internal static class DeviceInventoryReflection
                  {
                      "rackUnits", "RackUnits", "rackUnitHeight", "RackUnitHeight", "unitHeight", "UnitHeight",
                      "uHeight", "UHeight", "heightU", "HeightU", "ru", "RU", "formFactor", "FormFactor",
-                     "serverFormFactor", "ServerFormFactor", "serverType", "ServerType", "hardwareType", "HardwareType",
+                     "serverFormFactor", "ServerFormFactor", "hardwareType", "HardwareType",
                      "serverLine", "ServerLine", "modelName", "ModelName",
                  })
         {
-            if (TryReadIntMember(server, name, out var u) && (u == 2 || u == 4))
+            if (TryReadIntMember(server, name, out var u))
             {
-                return u == 4 ? "4 U" : "2 U";
+                return MapServerRackUnitsIntToLabel(u);
             }
         }
 
         return "—";
+    }
+
+    /// <summary>
+    /// Game prefabs are named <c>Server.{Color}1</c> (3 U) vs <c>Server.{Color}2</c> (7 U). <see cref="Server.serverType"/> indexes that catalog.
+    /// </summary>
+    private static bool TryGetServerFormFactorFromPrefabCatalog(Server server, out string label)
+    {
+        label = null;
+        if (server == null)
+        {
+            return false;
+        }
+
+        int typeIdx;
+        try
+        {
+            typeIdx = server.serverType;
+        }
+        catch
+        {
+            return false;
+        }
+
+        MainGameManager mgr = null;
+        try
+        {
+            mgr = MainGameManager.instance;
+        }
+        catch
+        {
+            mgr = null;
+        }
+
+        if (mgr == null)
+        {
+            return false;
+        }
+
+        GameObject prefab = null;
+        try
+        {
+            prefab = mgr.GetServerPrefab(typeIdx);
+        }
+        catch
+        {
+            prefab = null;
+        }
+
+        if (prefab == null)
+        {
+            return false;
+        }
+
+        string prefabName;
+        try
+        {
+            prefabName = prefab.name;
+        }
+        catch
+        {
+            return false;
+        }
+
+        label = ClassifyServerPrefabAssetName(prefabName);
+        return label != null;
+    }
+
+    /// <summary>Parses stable prefab / scene object names like <c>Server.Yellow1</c> or <c>Server.Purple2_-123</c>.</summary>
+    private static string ClassifyServerPrefabAssetName(string assetName)
+    {
+        if (string.IsNullOrEmpty(assetName))
+        {
+            return null;
+        }
+
+        var n = StripCloneSuffix(assetName.Trim());
+        var m = ServerPrefabTierRx.Match(n);
+        if (!m.Success)
+        {
+            return null;
+        }
+
+        var tier = m.Groups[1].Value;
+        return tier == "2" ? "7 U" : "3 U";
+    }
+
+    private static readonly Regex ServerPrefabTierRx = new(
+        @"Server\.[A-Za-z]+([12])(?:_|$|\(|[^\w])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Rack height fields in this game often use 2 for compact servers even though the product line is 3 U / 7 U only.
+    /// </summary>
+    private static string MapServerRackUnitsIntToLabel(int u)
+    {
+        return u switch
+        {
+            7 => "7 U",
+            3 => "3 U",
+            2 => "3 U",
+            _ => "—",
+        };
+    }
+
+    private static bool BlobContainsStandaloneUnitToken(string blob, string tokenDigitsU)
+    {
+        if (string.IsNullOrEmpty(blob) || string.IsNullOrEmpty(tokenDigitsU))
+        {
+            return false;
+        }
+
+        for (var i = 0; i <= blob.Length - tokenDigitsU.Length; i++)
+        {
+            if (string.Compare(blob, i, tokenDigitsU, 0, tokenDigitsU.Length, StringComparison.OrdinalIgnoreCase) != 0)
+            {
+                continue;
+            }
+
+            if (i > 0 && char.IsDigit(blob[i - 1]))
+            {
+                continue;
+            }
+
+            var end = i + tokenDigitsU.Length;
+            if (end < blob.Length && char.IsDigit(blob[end]))
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     private static string ClassifyFormFactorFromText(string blob)
@@ -106,16 +271,16 @@ internal static class DeviceInventoryReflection
             return null;
         }
 
-        if (blob.IndexOf("4u", StringComparison.OrdinalIgnoreCase) >= 0
-            || blob.IndexOf("4 u", StringComparison.OrdinalIgnoreCase) >= 0)
+        if (blob.IndexOf("7 u", StringComparison.OrdinalIgnoreCase) >= 0
+            || BlobContainsStandaloneUnitToken(blob, "7u"))
         {
-            return "4 U";
+            return "7 U";
         }
 
-        if (blob.IndexOf("2u", StringComparison.OrdinalIgnoreCase) >= 0
-            || blob.IndexOf("2 u", StringComparison.OrdinalIgnoreCase) >= 0)
+        if (blob.IndexOf("3 u", StringComparison.OrdinalIgnoreCase) >= 0
+            || BlobContainsStandaloneUnitToken(blob, "3u"))
         {
-            return "2 U";
+            return "3 U";
         }
 
         return null;
@@ -200,6 +365,36 @@ internal static class DeviceInventoryReflection
         if (o == null)
         {
             return "";
+        }
+
+        try
+        {
+            if (o is NetworkSwitch nsw)
+            {
+                var swLabel = nsw.lastDisplayedLabel;
+                if (!string.IsNullOrWhiteSpace(swLabel))
+                {
+                    return StripCloneSuffix(swLabel.Trim());
+                }
+            }
+            else if (o is Server srvUi)
+            {
+                var srvLabel = srvUi.lastDisplayedLabel;
+                if (!string.IsNullOrWhiteSpace(srvLabel))
+                {
+                    return StripCloneSuffix(srvLabel.Trim());
+                }
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        if (o is Server srvLine && GameSubnetHelper.TryGetServerAssetLineConfiguredDisplayName(srvLine, out var rackLine)
+            && !string.IsNullOrWhiteSpace(rackLine))
+        {
+            return StripCloneSuffix(rackLine.Trim());
         }
 
         if (TryReadStringMember(o, DisplayNameMembers, out var s) && !string.IsNullOrWhiteSpace(s))
@@ -1222,7 +1417,7 @@ internal static class DeviceInventoryReflection
                || name.IndexOf("Resolve", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-    private static bool TryReadStringMember(object o, string[] names, out string value)
+    internal static bool TryReadStringMember(object o, string[] names, out string value)
     {
         value = null;
         var t = o.GetType();

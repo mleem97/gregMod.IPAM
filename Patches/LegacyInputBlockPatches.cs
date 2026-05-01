@@ -25,6 +25,18 @@ internal static class LegacyInputBlockPatches
             return true;
         }
 
+        // Many builds bind pause / in-game menu to P on the legacy Input Manager path; block while IPAM is focused.
+        if (ipam && key == KeyCode.P)
+        {
+            return true;
+        }
+
+        // Escape toggles pause / menu on the legacy Input Manager path; IPAM snapshots Escape separately.
+        if (ipam && key == KeyCode.Escape)
+        {
+            return true;
+        }
+
         return false;
     }
 
@@ -37,6 +49,27 @@ internal static class LegacyInputBlockPatches
         }
 
         return buttonName.Equals("Cancel", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ShouldBlockNamedAxisButton(string buttonName)
+    {
+        if (!IPAMOverlay.IsVisible || string.IsNullOrEmpty(buttonName))
+        {
+            return false;
+        }
+
+        if (buttonName.Equals("Cancel", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Many Unity templates bind Escape to a virtual "Pause" button as well as Cancel.
+        if (buttonName.Equals("Pause", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     [HarmonyPatch]
@@ -112,7 +145,10 @@ internal static class LegacyInputBlockPatches
 
         private static void Postfix(string buttonName, ref bool __result)
         {
-            // No CLI
+            if (__result && ShouldBlockNamedAxisButton(buttonName))
+            {
+                __result = false;
+            }
         }
     }
 
@@ -129,7 +165,10 @@ internal static class LegacyInputBlockPatches
 
         private static void Postfix(string buttonName, ref bool __result)
         {
-            // No CLI
+            if (__result && ShouldBlockNamedAxisButton(buttonName))
+            {
+                __result = false;
+            }
         }
     }
 
@@ -146,7 +185,10 @@ internal static class LegacyInputBlockPatches
 
         private static void Postfix(string buttonName, ref bool __result)
         {
-            // No CLI
+            if (__result && ShouldBlockNamedAxisButton(buttonName))
+            {
+                __result = false;
+            }
         }
     }
 

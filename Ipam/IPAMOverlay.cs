@@ -13,9 +13,12 @@ namespace DHCPSwitches;
 // - IPAMOverlay.Lifecycle.cs: scene cache ticks, Input System IOPS fallback, IMGUI recovery, FilterAlive.
 // - IPAMOverlay.IopsModal.cs: standalone IOPS window + IMGUI keyboard pump + debug mouse line.
 // - IPAMOverlay.WindowUi.cs: main GUI.Window callback, nav/sections, selection + detail panel + octet editor.
+// - IPAMOverlay.IpamTabs.cs: IPAM section (prefixes tree, VLANs list) + ipam_data.json persistence.
+// - IPAMOverlay.IpamFormInput.cs: text-in fields without GUI.TextField (IL2CPP / TextEditor unstripping).
 
 public static partial class IPAMOverlay
 {
+    internal static event Action<float> UiFontScaleChanged;
     private static bool _visible;
 
     /// <summary>Matches <see cref="Time.frameCount"/> when F1 toggled IPAM this frame (legacy input suppression).</summary>
@@ -56,12 +59,21 @@ public static partial class IPAMOverlay
                 _iopsToolbarScreenRect = default;
                 _iopsToolbarRectLogHash = 0;
                 _nextEolSnapshotRefreshTime = 0f;
+                UiRaycastBlocker.SetBlocking(true);
+                GameInputSuppression.SetSuppressed(true);
+                GameInputSuppression.RefreshWhileActive();
+                _ipamNextPlayerInputRescanTime = Time.unscaledTime + 2.5f;
+                IpamMenuOcclusion.BumpScanPriority();
+                ResetIpamEscapeKeyboardLatchForOverlayOpen();
             }
 
             if (!value)
             {
                 _customerDropdownOpen = false;
                 CloseIopsCalculatorModal("IPAM hidden");
+                _customersTabAddServerWizardOpen = false;
+                _customersTabScreen = CustomersTabScreen.CustomerList;
+                _customersTabAddServerSelectedInstanceId = -1;
                 _iopsToolbarRectWindowLocal = default;
                 _iopsToolbarScreenRect = default;
                 _serverRangeAnchorInstanceId = -1;
@@ -72,9 +84,19 @@ public static partial class IPAMOverlay
                 _ipamResizeDrag = false;
                 _columnGripWeightsStart = null;
                 _activeOctetSlot = -1;
+                _ipamFormFieldFocus = IpamFormFocusNone;
+                _ipamPrefixesDrillParentId = null;
+                _ipamPrefixAddAsRoot = false;
+                _ipamIpAddressFilterCidr = null;
+                _ipamIpAddressPageIndex = 0;
+                _ipamIpAddrPageMenuOpen = false;
+                _ipamPrefixEditId = null;
+                _ipamPrefixEditSaveError = null;
+                IpamIpAddressViewBuffer.Clear();
                 BeginImGuiInputRecoveryBurst();
                 UiRaycastBlocker.SetBlocking(false);
                 GameInputSuppression.SetSuppressed(false);
+                _ipamNextPlayerInputRescanTime = 0f;
                 IpamMenuOcclusion.Tick(false);
                 ModDebugLog.WriteIpam($"IPAM close frame={Time.frameCount} recoverUntil={_imguiRecoverUntilExclusive}");
             }
@@ -204,8 +226,30 @@ public static partial class IPAMOverlay
     /// <summary>Customers tab: sentinel <c>-1</c> = servers with no customer (<see cref="IsServerWithoutCustomerAssignment"/>); else match <see cref="Server.GetCustomerID"/> (including 0).</summary>
     private static int _customersTabFilterCustomerId = -1;
 
-    private static bool _customersTabFilterMenuOpen;
-    private static Vector2 _customersTabFilterScroll;
+    private enum CustomersTabScreen
+    {
+        CustomerList = 0,
+        CustomerServers = 1,
+    }
+
+    private static CustomersTabScreen _customersTabScreen = CustomersTabScreen.CustomerList;
+
+    /// <summary>Top-level modal: pick an unassigned server and assign it to the drilled-in customer.</summary>
+    private static bool _customersTabAddServerWizardOpen;
+
+    private static int _customersTabAddServerTargetCustomerId;
+    private static Rect _customersTabAddServerWindowRect = new(160f, 120f, 800f, 560f);
+    private static Vector2 _customersTabAddServerWizardScroll;
+    private static int _customersTabAddServerSelectedInstanceId = -1;
+
+    private static readonly List<(int customerId, string title, int serverCount, string vlanX, string vlanRisc, string vlanMf, string vlanGpu)> CustomersTabCustomerListRows = new();
+    private static readonly List<Server> CustomersTabAddServerCandidateBuffer = new();
+
+    /// <summary>When false, <see cref="CustomersTabCustomerListRows"/> is reused (avoid O(customers×servers) work every IMGUI pass).</summary>
+    private static bool _customersTabCustomerListRowsDirty = true;
+
+    /// <summary>Content signature for <see cref="CustomersTabCustomerListRows"/> — skip rebuild on mouse moves when scene data unchanged.</summary>
+    private static ulong _customersTabCustomerListSourceSign = ulong.MaxValue;
 
     private static bool _ipamResizeDrag;
     private static Vector2 _ipamResizeStartMouse;
@@ -242,11 +286,90 @@ public static partial class IPAMOverlay
     {
         Dashboard = 0,
         Devices = 1,
-        IpAddresses = 2,
+        /// <summary>NetBox-style IPAM hub: use <see cref="_ipamSub"/> for Addresses / Prefixes / VLANs.</summary>
+        Ipam = 2,
         Customers = 3,
+        Settings = 4,
+    }
+
+    private enum IpamSubSection
+    {
+        IpAddresses = 0,
+        Prefixes = 1,
+        Vlans = 2,
     }
 
     private static NavSection _navSection = NavSection.Devices;
+    private static IpamSubSection _ipamSub = IpamSubSection.IpAddresses;
+
+    /// <summary>Sidebar: show IP addresses / Prefixes / VLANs under the IPAM header.</summary>
+    private static bool _ipamSidebarExpanded = true;
+
+    private const int IpamFormFocusNone = -1;
+    private const int IpamFormFocusPrefixCidr = 0;
+    private const int IpamFormFocusPrefixName = 1;
+    private const int IpamFormFocusVlanId = 2;
+    private const int IpamFormFocusVlanName = 3;
+    private const int IpamFormFocusEditPrefixName = 4;
+    private const int IpamFormFocusEditPrefixTenant = 5;
+    private static int _ipamFormFieldFocus = IpamFormFocusNone;
+
+    /// <summary>When set, IP addresses tab lists only servers whose IP lies in this CIDR.</summary>
+    private static string _ipamIpAddressFilterCidr;
+
+    /// <summary>IPv4 assignments tab and Devices tab: rows per page (25, 50, or 100).</summary>
+    private static int _ipamIpAddressPageSize = 25;
+
+    private static int _ipamIpAddressPageIndex;
+    private static bool _ipamIpAddrPageMenuOpen;
+
+    private static int _ipamDevicesSwitchPageIndex;
+    private static int _ipamDevicesServerPageIndex;
+    private static bool _ipamDevicesSwitchPageMenuOpen;
+    private static bool _ipamDevicesServerPageMenuOpen;
+
+    /// <summary>Reserved width on the right of table headers for the page-size (gear) control.</summary>
+    private const float IpamIpAddressGearColW = 28f;
+
+    internal static readonly List<Server> IpamIpAddressViewBuffer = new();
+
+    /// <summary>Prefixes table: column weight sum = 1 (Prefix, Role, Children, Utilization, Tenant, Actions).</summary>
+    private static readonly float[] IpamPrefixTableColWeight = { 0.26f, 0.10f, 0.07f, 0.24f, 0.17f, 0.16f };
+
+    private static string _ipamPrefixEditId;
+    private static string _ipamPrefixEditNameBuf = "";
+    private static string _ipamPrefixEditTenantBuf = "";
+    private static string _ipamPrefixEditSaveError;
+
+    /// <summary>Prefixes tab: show only subtree under this prefix id (double-click row). Null = full tree.</summary>
+    private static string _ipamPrefixesDrillParentId;
+
+    private static string _ipamPrefixLastClickedRowId;
+    private static float _ipamPrefixLastClickTime = -1f;
+    private static bool _ipamPrefixAddAsRoot;
+
+    /// <summary>
+    /// IPAM IMGUI font scale (applied when styles are rebuilt). 1.0 = current default.
+    /// </summary>
+    private static float _uiFontScale = 1f;
+
+    internal static float UiFontScale
+    {
+        get => _uiFontScale;
+        set
+        {
+            var clamped = Mathf.Clamp(value, 0.5f, 2.0f);
+            if (Mathf.Abs(clamped - _uiFontScale) < 0.0001f)
+            {
+                return;
+            }
+
+            _uiFontScale = clamped;
+            _stylesReady = false;
+            _tableColumnsAutoFitPending = true;
+            UiFontScaleChanged?.Invoke(_uiFontScale);
+        }
+    }
 
     private static Server[] _cachedServers = System.Array.Empty<Server>();
     private static NetworkSwitch[] _cachedSwitches = System.Array.Empty<NetworkSwitch>();
@@ -277,11 +400,11 @@ public static partial class IPAMOverlay
 
     // Layout (NetBox-style shell)
     /// <summary>Title/subtitle row + button row so actions never cover “Inventory”.</summary>
-    private const float ToolbarH = 74f;
-    private const float ToolbarTitleBlockH = 44f;
+    private const float ToolbarHBase = 74f;
+    private const float ToolbarTitleBlockHBase = 44f;
     /// <summary>Two rows: title + window buttons, then DHCP/IPAM license toggles on the right.</summary>
-    private const float TitleBarH = 54f;
-    private const float SidebarW = 208f;
+    private const float TitleBarHBase = 54f;
+    private const float SidebarWBase = 208f;
 
     private static readonly float[] TableColWeight = { 0.2f, 0.17f, 0.08f, 0.17f, 0.14f, 0.24f };
     private static float _columnGripMouseStartX;
@@ -290,10 +413,22 @@ public static partial class IPAMOverlay
     private static float _lastInventoryCardWidth;
     private const float MinColWeight = 0.045f;
     private const float MaxColWeight = 0.52f;
-    private const float TableRowH = 30f;
-    private const float SectionTitleH = 22f;
-    private const float TableHeaderH = 26f;
-    private const float CardPad = 14f;
+    private const float TableRowHBase = 30f;
+    private const float SectionTitleHBase = 22f;
+    private const float TableHeaderHBase = 26f;
+    private const float CardPadBase = 14f;
+
+    private static float S(float px) => Mathf.Round(px * Mathf.Clamp(UiFontScale, 0.5f, 2.0f));
+
+    private static float ToolbarH => Mathf.Max(48f, S(ToolbarHBase));
+    private static float ToolbarTitleBlockH => Mathf.Max(28f, S(ToolbarTitleBlockHBase));
+    private static float TitleBarH => Mathf.Max(38f, S(TitleBarHBase));
+    private static float SidebarW => Mathf.Max(160f, S(SidebarWBase));
+
+    private static float TableRowH => Mathf.Max(24f, S(TableRowHBase));
+    private static float SectionTitleH => Mathf.Max(18f, S(SectionTitleHBase));
+    private static float TableHeaderH => Mathf.Max(20f, S(TableHeaderHBase));
+    private static float CardPad => Mathf.Max(10f, S(CardPadBase));
 
     /// <summary>Editable IP as four octets — GUI.TextField breaks under IL2CPP (TextEditor unstripping).</summary>
     private static int _oct0 = 192, _oct1 = 168, _oct2 = 1, _oct3 = 10;
@@ -473,6 +608,33 @@ public static partial class IPAMOverlay
             winSt.onNormal.background = oldWinOnBg;
             winSt.normal.textColor = oldWinTxt;
             winSt.onNormal.textColor = oldWinOnTxt;
+        }
+
+        if (LicenseManager.IsIPAMUnlocked && _customersTabAddServerWizardOpen)
+        {
+            GUI.depth = 0;
+            var dimCol2 = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, 0.5f);
+            if (Event.current.type == EventType.Repaint)
+            {
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _texModalDim, ScaleMode.StretchToFill);
+            }
+
+            GUI.color = dimCol2;
+            var winSt2 = GUI.skin.window;
+            var oldWinBg2 = winSt2.normal.background;
+            var oldWinOnBg2 = winSt2.onNormal.background;
+            var oldWinTxt2 = winSt2.normal.textColor;
+            var oldWinOnTxt2 = winSt2.onNormal.textColor;
+            winSt2.normal.background = _texBackdrop;
+            winSt2.onNormal.background = _texBackdrop;
+            winSt2.normal.textColor = new Color32(248, 250, 252, 255);
+            winSt2.onNormal.textColor = new Color32(248, 250, 252, 255);
+            _customersTabAddServerWindowRect = GUI.Window(9003, _customersTabAddServerWindowRect, (GUI.WindowFunction)DrawCustomersAddServerWindow, "Add server");
+            winSt2.normal.background = oldWinBg2;
+            winSt2.onNormal.background = oldWinOnBg2;
+            winSt2.normal.textColor = oldWinTxt2;
+            winSt2.onNormal.textColor = oldWinOnTxt2;
         }
 
         GUI.backgroundColor = oldBg;
