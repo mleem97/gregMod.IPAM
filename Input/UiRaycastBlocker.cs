@@ -33,7 +33,8 @@ internal static class UiRaycastBlocker
         var cv = _root.GetComponent<Canvas>();
         if (cv != null)
         {
-            cv.sortingOrder = 2_000_000;
+            cv.sortingOrder = 2_147_000_000;
+            cv.overrideSorting = true;
         }
 
         _root.SetActive(block);
@@ -58,7 +59,7 @@ internal static class UiRaycastBlocker
 
         var canvas = _root.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 2_000_000;
+        canvas.sortingOrder = 2_147_000_000;
         canvas.overrideSorting = true;
 
         var scaler = _root.AddComponent<CanvasScaler>();

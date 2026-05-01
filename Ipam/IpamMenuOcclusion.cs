@@ -17,10 +17,17 @@ internal static class IpamMenuOcclusion
     {
         "PauseMenu", "Pause_", "_Pause", "Paused", "GamePause", "InGameMenu", "EscapeMenu",
         "SystemMenu", "System_", "_System", "OptionsMenu", "SettingsMenu", "MenuPause",
+        "GameMenu", "MainMenu", "MenuRoot",
     };
 
     private static readonly List<(Canvas Canvas, bool WasEnabled)> Suppressed = new();
     private static float _nextScanTime;
+
+    /// <summary>Lets the next <see cref="Tick"/> run a full scan immediately (e.g. IPAM just opened).</summary>
+    internal static void BumpScanPriority()
+    {
+        _nextScanTime = 0f;
+    }
 
     internal static void Tick(bool anyModOverlayVisible)
     {
@@ -35,8 +42,9 @@ internal static class IpamMenuOcclusion
             return;
         }
 
-        // Resources.FindObjectsOfTypeAll(typeof(Canvas)) is costly; 0.5s is enough to pick up newly opened pause menus.
-        _nextScanTime = Time.unscaledTime + 0.5f;
+        // Resources.FindObjectsOfTypeAll(typeof(Canvas)) is costly; scan more often while IPAM is up so pause menus
+        // opened mid-session are hidden before the user clicks through to them.
+        _nextScanTime = Time.unscaledTime + 0.15f;
 
         try
         {
@@ -64,7 +72,7 @@ internal static class IpamMenuOcclusion
                     continue;
                 }
 
-                if (c.renderMode != RenderMode.ScreenSpaceOverlay)
+                if (c.renderMode != RenderMode.ScreenSpaceOverlay && c.renderMode != RenderMode.ScreenSpaceCamera)
                 {
                     continue;
                 }

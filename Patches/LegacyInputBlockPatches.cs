@@ -25,6 +25,12 @@ internal static class LegacyInputBlockPatches
             return true;
         }
 
+        // Many builds bind pause / in-game menu to P on the legacy Input Manager path; block while IPAM is focused.
+        if (ipam && key == KeyCode.P)
+        {
+            return true;
+        }
+
         return false;
     }
 

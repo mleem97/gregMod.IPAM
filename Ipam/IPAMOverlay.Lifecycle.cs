@@ -15,6 +15,7 @@ public static partial class IPAMOverlay
     private static double _ipamPerfAccWindowMs;
     private static int _ipamPerfWindowPasses;
     private static float _ipamPerfNextLogTime = -1f;
+    private static float _ipamNextPlayerInputRescanTime;
 
     private static bool HardwarePointerInWindowLocalRect(Rect windowRect, Rect localRect, out Vector2 localPointer)
     {
@@ -35,6 +36,24 @@ public static partial class IPAMOverlay
         localPointer = new Vector2(guiScreen.x - windowRect.x, guiScreen.y - windowRect.y);
         return localRect.Contains(localPointer);
     }
+    /// <summary>
+    /// Deactivates any <see cref="UnityEngine.InputSystem.PlayerInput"/> spawned after IPAM opened so letter keys
+    /// (e.g. pause bound to P) do not reach gameplay while the overlay is up.
+    /// </summary>
+    internal static void TickIpamGameInputSuppression()
+    {
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        if (Time.unscaledTime >= _ipamNextPlayerInputRescanTime)
+        {
+            _ipamNextPlayerInputRescanTime = Time.unscaledTime + 2.5f;
+            GameInputSuppression.RefreshWhileActive();
+        }
+    }
+
     public static void TickDeviceListCache()
     {
         if (!IsVisible)

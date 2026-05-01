@@ -121,7 +121,7 @@ public class DHCPSwitchesMod : MelonMod
             return;
         }
 
-        // IPAM does not suspend PlayerInput
+        IPAMOverlay.TickIpamGameInputSuppression();
     }
 }
 
@@ -173,6 +173,7 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
             IPAMOverlay.TickDeviceListCache();
             IPAMOverlay.TickInputSystemIopsToolbarClick();
             IPAMOverlay.TickIopsCalculatorInputSystem();
+            IPAMOverlay.TickIpamFormInputSystem();
             IPAMOverlay.TickOctetInputSystem();
             IPAMOverlay.TickIpamPerfLog();
         }

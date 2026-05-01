@@ -13,6 +13,8 @@ namespace DHCPSwitches;
 // - IPAMOverlay.Lifecycle.cs: scene cache ticks, Input System IOPS fallback, IMGUI recovery, FilterAlive.
 // - IPAMOverlay.IopsModal.cs: standalone IOPS window + IMGUI keyboard pump + debug mouse line.
 // - IPAMOverlay.WindowUi.cs: main GUI.Window callback, nav/sections, selection + detail panel + octet editor.
+// - IPAMOverlay.IpamTabs.cs: IPAM section (prefixes tree, VLANs list) + ipam_data.json persistence.
+// - IPAMOverlay.IpamFormInput.cs: text-in fields without GUI.TextField (IL2CPP / TextEditor unstripping).
 
 public static partial class IPAMOverlay
 {
@@ -57,6 +59,11 @@ public static partial class IPAMOverlay
                 _iopsToolbarScreenRect = default;
                 _iopsToolbarRectLogHash = 0;
                 _nextEolSnapshotRefreshTime = 0f;
+                UiRaycastBlocker.SetBlocking(true);
+                GameInputSuppression.SetSuppressed(true);
+                GameInputSuppression.RefreshWhileActive();
+                _ipamNextPlayerInputRescanTime = Time.unscaledTime + 2.5f;
+                IpamMenuOcclusion.BumpScanPriority();
             }
 
             if (!value)
@@ -73,9 +80,19 @@ public static partial class IPAMOverlay
                 _ipamResizeDrag = false;
                 _columnGripWeightsStart = null;
                 _activeOctetSlot = -1;
+                _ipamFormFieldFocus = IpamFormFocusNone;
+                _ipamPrefixesDrillParentId = null;
+                _ipamPrefixAddAsRoot = false;
+                _ipamIpAddressFilterCidr = null;
+                _ipamIpAddressPageIndex = 0;
+                _ipamIpAddrPageMenuOpen = false;
+                _ipamPrefixEditId = null;
+                _ipamPrefixEditSaveError = null;
+                IpamIpAddressViewBuffer.Clear();
                 BeginImGuiInputRecoveryBurst();
                 UiRaycastBlocker.SetBlocking(false);
                 GameInputSuppression.SetSuppressed(false);
+                _ipamNextPlayerInputRescanTime = 0f;
                 IpamMenuOcclusion.Tick(false);
                 ModDebugLog.WriteIpam($"IPAM close frame={Time.frameCount} recoverUntil={_imguiRecoverUntilExclusive}");
             }
@@ -243,12 +260,62 @@ public static partial class IPAMOverlay
     {
         Dashboard = 0,
         Devices = 1,
-        IpAddresses = 2,
+        /// <summary>NetBox-style IPAM hub: use <see cref="_ipamSub"/> for Addresses / Prefixes / VLANs.</summary>
+        Ipam = 2,
         Customers = 3,
         Settings = 4,
     }
 
+    private enum IpamSubSection
+    {
+        IpAddresses = 0,
+        Prefixes = 1,
+        Vlans = 2,
+    }
+
     private static NavSection _navSection = NavSection.Devices;
+    private static IpamSubSection _ipamSub = IpamSubSection.IpAddresses;
+
+    /// <summary>Sidebar: show IP addresses / Prefixes / VLANs under the IPAM header.</summary>
+    private static bool _ipamSidebarExpanded = true;
+
+    private const int IpamFormFocusNone = -1;
+    private const int IpamFormFocusPrefixCidr = 0;
+    private const int IpamFormFocusPrefixName = 1;
+    private const int IpamFormFocusVlanId = 2;
+    private const int IpamFormFocusVlanName = 3;
+    private const int IpamFormFocusEditPrefixName = 4;
+    private const int IpamFormFocusEditPrefixTenant = 5;
+    private static int _ipamFormFieldFocus = IpamFormFocusNone;
+
+    /// <summary>When set, IP addresses tab lists only servers whose IP lies in this CIDR.</summary>
+    private static string _ipamIpAddressFilterCidr;
+
+    /// <summary>IPv4 assignments tab: rows per page (25, 50, or 100).</summary>
+    private static int _ipamIpAddressPageSize = 25;
+
+    private static int _ipamIpAddressPageIndex;
+    private static bool _ipamIpAddrPageMenuOpen;
+
+    /// <summary>Reserved width on the right of the IP-addresses table header for the page-size (gear) control.</summary>
+    private const float IpamIpAddressGearColW = 28f;
+
+    internal static readonly List<Server> IpamIpAddressViewBuffer = new();
+
+    /// <summary>Prefixes table: column weight sum = 1 (Prefix, Role, Children, Utilization, Tenant, Actions).</summary>
+    private static readonly float[] IpamPrefixTableColWeight = { 0.26f, 0.10f, 0.07f, 0.24f, 0.17f, 0.16f };
+
+    private static string _ipamPrefixEditId;
+    private static string _ipamPrefixEditNameBuf = "";
+    private static string _ipamPrefixEditTenantBuf = "";
+    private static string _ipamPrefixEditSaveError;
+
+    /// <summary>Prefixes tab: show only subtree under this prefix id (double-click row). Null = full tree.</summary>
+    private static string _ipamPrefixesDrillParentId;
+
+    private static string _ipamPrefixLastClickedRowId;
+    private static float _ipamPrefixLastClickTime = -1f;
+    private static bool _ipamPrefixAddAsRoot;
 
     /// <summary>
     /// IPAM IMGUI font scale (applied when styles are rebuilt). 1.0 = current default.
