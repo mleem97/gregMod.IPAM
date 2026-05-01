@@ -15,16 +15,23 @@ public static partial class IPAMOverlay
         Name,
     }
 
+    private const float IpamBackspaceRepeatInitialDelay = 0.48f;
+    private const float IpamBackspaceRepeatSlowInterval = 0.075f;
+    private const float IpamBackspaceRepeatFastInterval = 0.035f;
+    private static float _ipamFormBackspaceHeldSince = -1f;
+    private static float _ipamFormLastBackspaceRepeatTime;
+
     public static void TickIpamFormInputSystem()
     {
         if (!IsVisible || !LicenseManager.IsIPAMUnlocked)
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamFormBackspaceHeldSince = -1f;
             return;
         }
 
         var kb = Keyboard.current;
-        if (kb != null && !string.IsNullOrEmpty(_ipamPrefixEditId) && kb.escapeKey.wasPressedThisFrame)
+        if (kb != null && !string.IsNullOrEmpty(_ipamPrefixEditId) && IpamEscapePressedThisFrame)
         {
             IpamClosePrefixEditPanel();
             return;
@@ -38,6 +45,7 @@ public static partial class IPAMOverlay
         if (_navSection != NavSection.Ipam || (_ipamSub != IpamSubSection.Prefixes && _ipamSub != IpamSubSection.Vlans))
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamFormBackspaceHeldSince = -1f;
             return;
         }
 
@@ -45,6 +53,7 @@ public static partial class IPAMOverlay
             && (_ipamSub != IpamSubSection.Prefixes || string.IsNullOrEmpty(_ipamPrefixEditId)))
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamFormBackspaceHeldSince = -1f;
             return;
         }
 
@@ -53,15 +62,17 @@ public static partial class IPAMOverlay
             return;
         }
 
-        if (kb.escapeKey.wasPressedThisFrame || kb.tabKey.wasPressedThisFrame)
+        if (IpamEscapePressedThisFrame || kb.tabKey.wasPressedThisFrame)
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamFormBackspaceHeldSince = -1f;
             return;
         }
 
         if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamFormBackspaceHeldSince = -1f;
             return;
         }
 
@@ -72,10 +83,37 @@ public static partial class IPAMOverlay
             return;
         }
 
-        if (kb.backspaceKey.wasPressedThisFrame)
+        if (kb.backspaceKey.wasReleasedThisFrame)
+        {
+            _ipamFormBackspaceHeldSince = -1f;
+        }
+        else if (kb.backspaceKey.wasPressedThisFrame)
         {
             IpamFormBackspaceFocused();
+            _ipamFormBackspaceHeldSince = Time.realtimeSinceStartup;
+            _ipamFormLastBackspaceRepeatTime = Time.realtimeSinceStartup;
             return;
+        }
+        else if (_ipamFormBackspaceHeldSince >= 0f && kb.backspaceKey.isPressed)
+        {
+            var buf = GetIpamFormFocusBuffer();
+            if (string.IsNullOrEmpty(buf))
+            {
+                _ipamFormBackspaceHeldSince = -1f;
+            }
+            else
+            {
+                var held = Time.realtimeSinceStartup - _ipamFormBackspaceHeldSince;
+                if (held >= IpamBackspaceRepeatInitialDelay)
+                {
+                    var interval = held >= 1.15f ? IpamBackspaceRepeatFastInterval : IpamBackspaceRepeatSlowInterval;
+                    if (Time.realtimeSinceStartup - _ipamFormLastBackspaceRepeatTime >= interval)
+                    {
+                        _ipamFormLastBackspaceRepeatTime = Time.realtimeSinceStartup;
+                        IpamFormBackspaceFocused();
+                    }
+                }
+            }
         }
 
         if (kind == IpamTextFieldKind.VlanIdDigits)

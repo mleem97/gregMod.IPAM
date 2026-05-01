@@ -16,6 +16,7 @@ public static partial class IPAMOverlay
         _ipamPrefixEditNameBuf = "";
         _ipamPrefixEditTenantBuf = "";
         _ipamPrefixEditSaveError = null;
+        _ipamFormBackspaceHeldSince = -1f;
         if (_ipamFormFieldFocus == IpamFormFocusEditPrefixName || _ipamFormFieldFocus == IpamFormFocusEditPrefixTenant)
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
@@ -36,7 +37,7 @@ public static partial class IPAMOverlay
         _navSection = NavSection.Ipam;
         _ipamSub = IpamSubSection.IpAddresses;
         _scroll = Vector2.zero;
-        _customersTabFilterMenuOpen = false;
+        _customersTabAddServerWizardOpen = false;
         RecomputeContentHeight();
     }
 
@@ -63,6 +64,9 @@ public static partial class IPAMOverlay
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
             _ipamIpAddrPageMenuOpen = false;
+            _ipamDevicesSwitchPageMenuOpen = false;
+            _ipamDevicesServerPageMenuOpen = false;
+            _customersTabAddServerWizardOpen = false;
             if (sub != IpamSubSection.Prefixes)
             {
                 _ipamPrefixesDrillParentId = null;
@@ -78,7 +82,6 @@ public static partial class IPAMOverlay
             _navSection = NavSection.Ipam;
             _ipamSub = sub;
             _scroll = Vector2.zero;
-            _customersTabFilterMenuOpen = false;
             RecomputeContentHeight();
         }
     }

@@ -49,6 +49,7 @@ public class DHCPSwitchesMod : MelonMod
             harmony.CreateClassProcessor(typeof(DHCPManager.FlowPausePatch)).Patch();
             LegacyInputBlockPatches.TryApply(harmony);
             InputSystemUiCancelPatches.TryApply(harmony);
+            InputSystemEscapeBlockPatches.TryApply(harmony);
 
             LoggerInstance.Msg(
                 "DHCP Switches & IPAM loaded. F1 = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles or Ctrl+D = lock (debug). Rack switch/router red menu = CLI, or IPAM → device → Open CLI.");
@@ -158,6 +159,8 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
 
         if (IPAMOverlay.IsVisible)
         {
+            IPAMOverlay.TickIpamEscapeEdgeDetection();
+
             // NEW: Check if the selected server was updated elsewhere (like a keypad)
             if (IPAMOverlay._selectedServer != null)
             {
@@ -173,6 +176,7 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
             IPAMOverlay.TickDeviceListCache();
             IPAMOverlay.TickInputSystemIopsToolbarClick();
             IPAMOverlay.TickIopsCalculatorInputSystem();
+            IPAMOverlay.TickCustomersAddServerWizardInput();
             IPAMOverlay.TickIpamFormInputSystem();
             IPAMOverlay.TickOctetInputSystem();
             IPAMOverlay.TickIpamPerfLog();

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 
@@ -25,12 +26,31 @@ public static class GameSubnetHelper
         Unknown = 99
     }
 
+    /// <summary>LCD / debug strings like <c>VLAN: 802</c> or <c>VLAN 425</c>.</summary>
+    private static readonly Regex VlanDigitsInTextRx = new(
+        @"\bvlan\s*[:#]?\s*(\d{1,4})\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     private static readonly Dictionary<int, List<(object Key, string Cidr)>> SubnetsCacheByCustomerId = new();
     private static MethodInfo _cachedUsableIpMethod;
     private static object _cachedUsableIpTarget;
 
     /// <summary>Instance IDs of <see cref="Server"/> referenced by <see cref="AssetManagementDeviceLine.server"/> (rack / contract UI).</summary>
     private static readonly HashSet<int> ServerInstanceIdsOnAssetManagementDeviceLines = new();
+
+    /// <summary>
+    /// Optional display strings read from matching <see cref="AssetManagementDeviceLine"/> rows (rack UI), keyed by
+    /// <see cref="Server.GetInstanceID"/>. Filled in <see cref="RebuildAssetManagementDeviceLineServerCache"/>.
+    /// </summary>
+    private static readonly Dictionary<int, string> ServerAssetLineConfiguredDisplayNameByInstanceId = new();
+
+    private static readonly string[] AssetMgmtDeviceLineNameHints =
+    {
+        "configuredServerName", "ConfiguredServerName", "serverDisplayName", "ServerDisplayName",
+        "deviceDisplayName", "DeviceDisplayName", "lineCaption", "LineCaption", "captionText", "CaptionText",
+        "customName", "CustomName", "userLabel", "UserLabel", "editedName", "EditedName",
+        "serverNickname", "ServerNickname", "displayLabel", "DisplayLabel", "rackName", "RackName",
+    };
 
     /// <summary>
     /// <see cref="FindObjectsOfType{T}"/> for <see cref="CustomerBase"/> is extremely expensive when called from Harmony
@@ -40,6 +60,12 @@ public static class GameSubnetHelper
     private static CustomerBase[] _sceneCustomers;
     private static readonly Dictionary<int, CustomerBase> _customerBaseByCustomerId = new();
 
+    /// <summary>
+    /// Resolved VLAN cell strings per <c>customerID</c>. In the base game these are fixed for a save once the contract exists;
+    /// clear only via <see cref="InvalidateCustomerVlanDisplayCache"/> (scene / customer invalidation), not on routine IPAM list refresh.
+    /// </summary>
+    private static readonly Dictionary<int, (string x, string r, string m, string g)> VlanDisplayStringCacheByCustomerId = new();
+
     public static void ClearCaches()
     {
         InvalidateSceneCustomerFrameCache();
@@ -47,6 +73,13 @@ public static class GameSubnetHelper
         _cachedUsableIpMethod = null;
         _cachedUsableIpTarget = null;
         ServerInstanceIdsOnAssetManagementDeviceLines.Clear();
+        InvalidateCustomerVlanDisplayCache();
+    }
+
+    /// <summary>Clears cached VLAN strings when scene servers or contracts may have changed.</summary>
+    public static void InvalidateCustomerVlanDisplayCache()
+    {
+        VlanDisplayStringCacheByCustomerId.Clear();
     }
 
     internal static void InvalidateSceneCustomerFrameCache()
@@ -54,6 +87,7 @@ public static class GameSubnetHelper
         _sceneCustomersFrame = -1;
         _sceneCustomers = null;
         _customerBaseByCustomerId.Clear();
+        InvalidateCustomerVlanDisplayCache();
     }
 
     /// <summary>Scene <see cref="CustomerBase"/> snapshot for the current frame (same array for the whole frame).</summary>
@@ -73,6 +107,1294 @@ public static class GameSubnetHelper
 
         EnsureSceneCustomersForFrame();
         return _customerBaseByCustomerId.TryGetValue(customerId, out var cb) ? cb : null;
+    }
+
+    /// <summary>
+    /// VLAN IDs from contract data (<c>vlanIdsPerApp</c> / <c>GetVlanIdsPerApp</c>): keys 0–3 =
+    /// System X, RISC, Mainframe, GPU — same ordering as <see cref="ServerHardwareFamily"/>.
+    /// </summary>
+    public static void GetCustomerVlanIdsDisplay(
+        CustomerBase cb,
+        out string vlanSystemX,
+        out string vlanRisc,
+        out string vlanMainframe,
+        out string vlanGpu)
+    {
+        GetCustomerVlanIdsDisplay(cb, null, out vlanSystemX, out vlanRisc, out vlanMainframe, out vlanGpu);
+    }
+
+    /// <param name="sceneServersForAugmentation">When contract reflection misses VLANs, read from placed servers for this customer (LCD / network fields).</param>
+    public static void GetCustomerVlanIdsDisplay(
+        CustomerBase cb,
+        IEnumerable<Server> sceneServersForAugmentation,
+        out string vlanSystemX,
+        out string vlanRisc,
+        out string vlanMainframe,
+        out string vlanGpu)
+    {
+        vlanSystemX = "—";
+        vlanRisc = "—";
+        vlanMainframe = "—";
+        vlanGpu = "—";
+        if (cb == null)
+        {
+            return;
+        }
+
+        int cidKey;
+        try
+        {
+            cidKey = cb.customerID;
+        }
+        catch
+        {
+            cidKey = int.MinValue;
+        }
+
+        if (VlanDisplayStringCacheByCustomerId.TryGetValue(cidKey, out var cached))
+        {
+            vlanSystemX = cached.x;
+            vlanRisc = cached.r;
+            vlanMainframe = cached.m;
+            vlanGpu = cached.g;
+            return;
+        }
+
+        var map = new Dictionary<int, int>();
+        TryFillVlanIdsPerAppFromCustomer(cb, map);
+        TryAugmentVlanMapFromCustomerServers(cb, sceneServersForAugmentation, map);
+        TryAugmentVlanMapFromDistinctVlansHeuristic(cb, sceneServersForAugmentation, map);
+        if (map.Count == 0)
+        {
+            VlanDisplayStringCacheByCustomerId[cidKey] = ("—", "—", "—", "—");
+            return;
+        }
+
+        TryResolveFourVlanSlotValues(map, out var s0, out var s1, out var s2, out var s3);
+        if (s0.HasValue)
+        {
+            vlanSystemX = FormatCustomerVlanIdCell(s0.Value);
+        }
+
+        if (s1.HasValue)
+        {
+            vlanRisc = FormatCustomerVlanIdCell(s1.Value);
+        }
+
+        if (s2.HasValue)
+        {
+            vlanMainframe = FormatCustomerVlanIdCell(s2.Value);
+        }
+
+        if (s3.HasValue)
+        {
+            vlanGpu = FormatCustomerVlanIdCell(s3.Value);
+        }
+
+        VlanDisplayStringCacheByCustomerId[cidKey] = (vlanSystemX, vlanRisc, vlanMainframe, vlanGpu);
+    }
+
+    /// <summary>
+    /// Maps game keys (often 0–3, sometimes 1–4 or app enum ordinals) to the four catalog slots in stable order.
+    /// </summary>
+    private static void TryResolveFourVlanSlotValues(
+        Dictionary<int, int> map,
+        out int? slot0,
+        out int? slot1,
+        out int? slot2,
+        out int? slot3)
+    {
+        slot0 = slot1 = slot2 = slot3 = null;
+        if (map == null || map.Count == 0)
+        {
+            return;
+        }
+
+        static bool ValidVlan(int v) => v > 0 && v <= 4094;
+
+        if (map.TryGetValue(0, out var a0) && ValidVlan(a0))
+        {
+            slot0 = a0;
+        }
+
+        if (map.TryGetValue(1, out var a1) && ValidVlan(a1))
+        {
+            slot1 = a1;
+        }
+
+        if (map.TryGetValue(2, out var a2) && ValidVlan(a2))
+        {
+            slot2 = a2;
+        }
+
+        if (map.TryGetValue(3, out var a3) && ValidVlan(a3))
+        {
+            slot3 = a3;
+        }
+
+        if (slot0.HasValue || slot1.HasValue || slot2.HasValue || slot3.HasValue)
+        {
+            return;
+        }
+
+        if (map.TryGetValue(1, out var b1) && map.TryGetValue(2, out var b2) && map.TryGetValue(3, out var b3) && map.TryGetValue(4, out var b4)
+            && ValidVlan(b1) && ValidVlan(b2) && ValidVlan(b3) && ValidVlan(b4))
+        {
+            slot0 = b1;
+            slot1 = b2;
+            slot2 = b3;
+            slot3 = b4;
+            return;
+        }
+
+        var keys = new List<int>(map.Count);
+        foreach (var kv in map)
+        {
+            if (ValidVlan(kv.Value))
+            {
+                keys.Add(kv.Key);
+            }
+        }
+
+        if (keys.Count == 0)
+        {
+            return;
+        }
+
+        keys.Sort();
+        var vals = new List<int>(keys.Count);
+        foreach (var k in keys)
+        {
+            if (map.TryGetValue(k, out var vv) && ValidVlan(vv))
+            {
+                vals.Add(vv);
+            }
+        }
+
+        if (vals.Count == 0)
+        {
+            return;
+        }
+
+        slot0 = vals[0];
+        if (vals.Count > 1)
+        {
+            slot1 = vals[1];
+        }
+
+        if (vals.Count > 2)
+        {
+            slot2 = vals[2];
+        }
+
+        if (vals.Count > 3)
+        {
+            slot3 = vals[3];
+        }
+    }
+
+    private static string FormatCustomerVlanIdCell(int vlanId)
+    {
+        if (vlanId <= 0 || vlanId > 4094)
+        {
+            return "—";
+        }
+
+        return vlanId.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static void TryAugmentVlanMapFromCustomerServers(
+        CustomerBase cb,
+        IEnumerable<Server> sceneServers,
+        Dictionary<int, int> map)
+    {
+        if (cb == null || map == null || sceneServers == null)
+        {
+            return;
+        }
+
+        int cid;
+        try
+        {
+            cid = cb.customerID;
+        }
+        catch
+        {
+            return;
+        }
+
+        if (cid < 0)
+        {
+            return;
+        }
+
+        static bool SlotFilled(Dictionary<int, int> m, int slot)
+        {
+            return m.TryGetValue(slot, out var v) && v > 0 && v <= 4094;
+        }
+
+        foreach (var s in sceneServers)
+        {
+            if (s == null)
+            {
+                continue;
+            }
+
+            int sid;
+            try
+            {
+                sid = s.GetCustomerID();
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (sid != cid)
+            {
+                continue;
+            }
+
+            var fam = TryDetectServerHardwareFamily(s);
+            if (fam == ServerHardwareFamily.Unknown || (int)fam > 3)
+            {
+                continue;
+            }
+
+            var slot = (int)fam;
+            if (SlotFilled(map, slot))
+            {
+                continue;
+            }
+
+            if (TryReadNetworkVlanFromServer(s, out var vlan))
+            {
+                map[slot] = vlan;
+            }
+        }
+    }
+
+    /// <summary>
+    /// When per-family classification still leaves slots empty, assign distinct VLANs found on any server for this customer
+    /// to slots 0..N-1 in ascending VLAN order (best-effort when the game hides contract maps).
+    /// </summary>
+    private static void TryAugmentVlanMapFromDistinctVlansHeuristic(
+        CustomerBase cb,
+        IEnumerable<Server> sceneServers,
+        Dictionary<int, int> map)
+    {
+        if (cb == null || map == null || sceneServers == null)
+        {
+            return;
+        }
+
+        int cid;
+        try
+        {
+            cid = cb.customerID;
+        }
+        catch
+        {
+            return;
+        }
+
+        if (cid < 0)
+        {
+            return;
+        }
+
+        static bool SlotFilled(Dictionary<int, int> m, int slot) =>
+            m.TryGetValue(slot, out var v) && v > 0 && v <= 4094;
+
+        var anyEmpty = false;
+        for (var slot = 0; slot < 4; slot++)
+        {
+            if (!SlotFilled(map, slot))
+            {
+                anyEmpty = true;
+                break;
+            }
+        }
+
+        if (!anyEmpty)
+        {
+            return;
+        }
+
+        var sorted = new SortedSet<int>();
+        foreach (var s in sceneServers)
+        {
+            if (s == null)
+            {
+                continue;
+            }
+
+            int sid;
+            try
+            {
+                sid = s.GetCustomerID();
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (sid != cid)
+            {
+                continue;
+            }
+
+            if (TryReadNetworkVlanFromServer(s, out var v))
+            {
+                sorted.Add(v);
+            }
+        }
+
+        if (sorted.Count == 0)
+        {
+            return;
+        }
+
+        var list = new List<int>(sorted);
+        var idx = 0;
+        for (var slot = 0; slot < 4 && idx < list.Count; slot++)
+        {
+            if (SlotFilled(map, slot))
+            {
+                continue;
+            }
+
+            map[slot] = list[idx++];
+        }
+    }
+
+    private static bool TryReadNetworkVlanFromServer(Server server, out int vlan)
+    {
+        vlan = 0;
+        if (server == null)
+        {
+            return false;
+        }
+
+        const BindingFlags inst = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var t = server.GetType();
+        foreach (var fi in t.GetFields(inst))
+        {
+            if (fi.Name.IndexOf("vlan", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                continue;
+            }
+
+            if (fi.FieldType == typeof(string))
+            {
+                continue;
+            }
+
+            object v;
+            try
+            {
+                v = fi.GetValue(server);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (v != null && TryCoerceInt(v, out vlan) && vlan > 0 && vlan <= 4094)
+            {
+                return true;
+            }
+        }
+
+        foreach (var pi in t.GetProperties(inst))
+        {
+            if (!pi.CanRead || pi.Name.IndexOf("vlan", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                continue;
+            }
+
+            if (pi.PropertyType == typeof(string))
+            {
+                continue;
+            }
+
+            object v;
+            try
+            {
+                v = pi.GetValue(server, null);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (v != null && TryCoerceInt(v, out vlan) && vlan > 0 && vlan <= 4094)
+            {
+                return true;
+            }
+        }
+
+        foreach (var m in t.GetMethods(inst))
+        {
+            if (m.GetParameters().Length != 0 || m.ReturnType == typeof(void))
+            {
+                continue;
+            }
+
+            var n = m.Name;
+            if (n.IndexOf("vlan", StringComparison.OrdinalIgnoreCase) < 0 || !n.StartsWith("Get", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            try
+            {
+                var o = m.Invoke(server, null);
+                if (o != null && TryCoerceInt(o, out vlan) && vlan > 0 && vlan <= 4094)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // Il2Cpp
+            }
+        }
+
+        if (TryExtractVlanFromNetworkLikeStringMembers(server, out vlan))
+        {
+            return true;
+        }
+
+        try
+        {
+            var go = server.gameObject;
+            if (go != null)
+            {
+                var comps = go.GetComponents<Component>();
+                for (var i = 0; i < comps.Length; i++)
+                {
+                    var c = comps[i];
+                    if (c == null || ReferenceEquals(c, server))
+                    {
+                        continue;
+                    }
+
+                    if (TryExtractVlanFromNetworkLikeStringMembers(c, out vlan))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        return false;
+    }
+
+    private static bool TryMatchVlanInText(string text, out int vlan)
+    {
+        vlan = 0;
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var m = VlanDigitsInTextRx.Match(text);
+        if (!m.Success)
+        {
+            return false;
+        }
+
+        return int.TryParse(m.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out vlan)
+               && vlan > 0
+               && vlan <= 4094;
+    }
+
+    private static bool TryExtractVlanFromNetworkLikeStringMembers(object host, out int vlan)
+    {
+        vlan = 0;
+        if (host == null)
+        {
+            return false;
+        }
+
+        static bool NameLooksNetworkish(string n)
+        {
+            if (string.IsNullOrEmpty(n))
+            {
+                return false;
+            }
+
+            if (n.IndexOf("vlan", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            if (n.IndexOf("lcd", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            if (n.IndexOf("display", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            if (n.IndexOf("screen", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            if (n.IndexOf("panel", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            if (n.IndexOf("network", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            if (n.IndexOf("subnet", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        const BindingFlags inst = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var t = host.GetType();
+        foreach (var fi in t.GetFields(inst))
+        {
+            if (!NameLooksNetworkish(fi.Name))
+            {
+                continue;
+            }
+
+            if (fi.FieldType != typeof(string))
+            {
+                continue;
+            }
+
+            string s;
+            try
+            {
+                s = (string)fi.GetValue(host);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (TryMatchVlanInText(s, out vlan))
+            {
+                return true;
+            }
+        }
+
+        foreach (var pi in t.GetProperties(inst))
+        {
+            if (!pi.CanRead || pi.PropertyType != typeof(string))
+            {
+                continue;
+            }
+
+            if (!NameLooksNetworkish(pi.Name))
+            {
+                continue;
+            }
+
+            string s;
+            try
+            {
+                s = (string)pi.GetValue(host, null);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (TryMatchVlanInText(s, out vlan))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryFillVlanIdsPerAppFromCustomer(CustomerBase cb, Dictionary<int, int> sink)
+    {
+        sink.Clear();
+        var raw = TryGetVlanIdsPerAppRaw(cb);
+        if (raw != null)
+        {
+            if (TryEnumerateIntIntDictionary(raw, sink) && sink.Count > 0)
+            {
+                return true;
+            }
+
+            sink.Clear();
+            if (TryEnumerateIntIntDictionaryViaEnumerator(raw, sink) && sink.Count > 0)
+            {
+                return true;
+            }
+
+            sink.Clear();
+            if (TryFillVlanMapByDictionaryIntIndexer(raw, sink) && sink.Count > 0)
+            {
+                return true;
+            }
+        }
+
+        sink.Clear();
+        if (TryScanObjectForVlanIntMap((object)cb, sink) && sink.Count > 0)
+        {
+            return true;
+        }
+
+        sink.Clear();
+        return TryReadVlanMapFromNestedContractLike(cb, sink) && sink.Count > 0;
+    }
+
+    private static object TryGetVlanIdsPerAppRaw(CustomerBase cb)
+    {
+        if (cb == null)
+        {
+            return null;
+        }
+
+        var t = cb.GetType();
+        foreach (var methodName in new[] { "GetVlanIdsPerApp", "GetVlanIDsPerApp", "GetVLANIDsPerApp", "GetVlansPerApp", "GetVlanPerApp" })
+        {
+            var m = t.GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                types: Type.EmptyTypes,
+                modifiers: null);
+            if (m == null)
+            {
+                continue;
+            }
+
+            try
+            {
+                var o = m.Invoke(cb, null);
+                if (o != null)
+                {
+                    return o;
+                }
+            }
+            catch
+            {
+                // Il2Cpp / missing contract
+            }
+        }
+
+        foreach (var m in t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            if (m.GetParameters().Length != 0)
+            {
+                continue;
+            }
+
+            var n = m.Name;
+            if (n.IndexOf("vlan", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                continue;
+            }
+
+            if (!n.StartsWith("Get", StringComparison.Ordinal) && !n.StartsWith("get_", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var hasAppOrPerContext = n.IndexOf("app", StringComparison.OrdinalIgnoreCase) >= 0
+                || n.IndexOf("per", StringComparison.OrdinalIgnoreCase) >= 0
+                || n.IndexOf("ids", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!hasAppOrPerContext)
+            {
+                continue;
+            }
+
+            try
+            {
+                var ret = m.ReturnType;
+                if (ret == typeof(void))
+                {
+                    continue;
+                }
+
+                var o = m.Invoke(cb, null);
+                if (o != null && LooksLikeIntKeyedMap(o))
+                {
+                    return o;
+                }
+            }
+            catch
+            {
+                // Il2Cpp
+            }
+        }
+
+        foreach (var name in new[]
+                 {
+                     "vlanIdsPerApp", "VlanIdsPerApp", "vlanIDsPerApp", "VlanIDsPerApp",
+                     "_vlanIdsPerApp", "appVlanIds", "AppVlanIds", "appVLANIds", "perAppVlanIds",
+                     "vlansPerApp", "VlansPerApp", "vlanPerApp", "VlanPerApp"
+                 })
+        {
+            var member = (MemberInfo)t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                         ?? t.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (member == null)
+            {
+                continue;
+            }
+
+            object raw = null;
+            try
+            {
+                raw = member is FieldInfo fi ? fi.GetValue(cb) : ((PropertyInfo)member).GetValue(cb);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (raw != null)
+            {
+                return raw;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool LooksLikeIntKeyedMap(object o)
+    {
+        if (o == null)
+        {
+            return false;
+        }
+
+        var type = o.GetType();
+        var n = type.Name ?? "";
+        if (n.IndexOf("Dictionary", StringComparison.Ordinal) >= 0)
+        {
+            return true;
+        }
+
+        return type.GetProperty("Keys", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) != null
+               && type.GetProperty("Values", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) != null;
+    }
+
+    private static bool TryScanObjectForVlanIntMap(object host, Dictionary<int, int> sink)
+    {
+        if (host == null)
+        {
+            return false;
+        }
+
+        var t = host.GetType();
+        foreach (var fi in t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            if (fi.Name.IndexOf("vlan", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                continue;
+            }
+
+            if (fi.FieldType == typeof(string))
+            {
+                continue;
+            }
+
+            object raw = null;
+            try
+            {
+                raw = fi.GetValue(host);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (raw == null || !LooksLikeIntKeyedMap(raw))
+            {
+                continue;
+            }
+
+            if (TryEnumerateIntIntDictionary(raw, sink) && sink.Count > 0)
+            {
+                return true;
+            }
+
+            if (TryEnumerateIntIntDictionaryViaEnumerator(raw, sink) && sink.Count > 0)
+            {
+                return true;
+            }
+
+            sink.Clear();
+        }
+
+        foreach (var pi in t.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            if (pi.Name.IndexOf("vlan", StringComparison.OrdinalIgnoreCase) < 0 || !pi.CanRead)
+            {
+                continue;
+            }
+
+            if (pi.PropertyType == typeof(string))
+            {
+                continue;
+            }
+
+            object raw = null;
+            try
+            {
+                raw = pi.GetValue(host);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (raw == null || !LooksLikeIntKeyedMap(raw))
+            {
+                continue;
+            }
+
+            if (TryEnumerateIntIntDictionary(raw, sink) && sink.Count > 0)
+            {
+                return true;
+            }
+
+            if (TryEnumerateIntIntDictionaryViaEnumerator(raw, sink) && sink.Count > 0)
+            {
+                return true;
+            }
+
+            sink.Clear();
+        }
+
+        return false;
+    }
+
+    private static bool TryReadVlanMapFromNestedContractLike(CustomerBase cb, Dictionary<int, int> sink)
+    {
+        if (cb == null)
+        {
+            return false;
+        }
+
+        var t = cb.GetType();
+        foreach (var nestName in new[]
+                 {
+                     "contract", "Contract", "activeContract", "ActiveContract",
+                     "customerContract", "CustomerContract", "currentContract", "CurrentContract"
+                 })
+        {
+            object nested = null;
+            var nf = t.GetField(nestName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (nf != null)
+            {
+                try
+                {
+                    nested = nf.GetValue(cb);
+                }
+                catch
+                {
+                    nested = null;
+                }
+            }
+
+            if (nested == null)
+            {
+                var np = t.GetProperty(nestName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (np != null && np.CanRead)
+                {
+                    try
+                    {
+                        nested = np.GetValue(cb);
+                    }
+                    catch
+                    {
+                        nested = null;
+                    }
+                }
+            }
+
+            if (nested == null)
+            {
+                continue;
+            }
+
+            if (TryScanObjectForVlanIntMapOnHost(nested, sink))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryScanObjectForVlanIntMapOnHost(object host, Dictionary<int, int> sink)
+    {
+        if (host == null)
+        {
+            return false;
+        }
+
+        var t = host.GetType();
+        foreach (var name in new[]
+                 {
+                     "vlanIdsPerApp", "VlanIdsPerApp", "vlanIDsPerApp", "VlanIDsPerApp",
+                     "appVlanIds", "AppVlanIds", "vlansPerApp", "VlansPerApp", "vlanPerApp", "VlanPerApp"
+                 })
+        {
+            var member = (MemberInfo)t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                         ?? t.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (member == null)
+            {
+                continue;
+            }
+
+            object raw = null;
+            try
+            {
+                raw = member is FieldInfo fi ? fi.GetValue(host) : ((PropertyInfo)member).GetValue(host);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (raw == null)
+            {
+                continue;
+            }
+
+            if (TryEnumerateIntIntDictionary(raw, sink) && sink.Count > 0)
+            {
+                return true;
+            }
+
+            if (TryEnumerateIntIntDictionaryViaEnumerator(raw, sink) && sink.Count > 0)
+            {
+                return true;
+            }
+
+            sink.Clear();
+        }
+
+        return TryScanObjectForVlanIntMap(host, sink);
+    }
+
+    /// <summary>Il2Cpp dictionaries sometimes expose values only through the indexer, not paired enumerators.</summary>
+    private static bool TryFillVlanMapByDictionaryIntIndexer(object dict, Dictionary<int, int> sink)
+    {
+        if (dict == null || sink == null)
+        {
+            return false;
+        }
+
+        var start = sink.Count;
+        var t = dict.GetType();
+        var pItem = t.GetProperty(
+            "Item",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            returnType: null,
+            types: new[] { typeof(int) },
+            modifiers: null);
+        if (pItem == null || !pItem.CanRead)
+        {
+            return false;
+        }
+
+        for (var key = 0; key <= 15; key++)
+        {
+            object val;
+            try
+            {
+                val = pItem.GetValue(dict, new object[] { key });
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (val != null && TryCoerceInt(val, out var iv) && iv > 0 && iv <= 4094)
+            {
+                sink[key] = iv;
+            }
+        }
+
+        return sink.Count > start;
+    }
+
+    /// <summary>Populate <paramref name="sink"/> from Il2Cpp or managed <c>Dictionary&lt;int,int&gt;</c>-like maps.</summary>
+    private static bool TryEnumerateIntIntDictionary(object raw, Dictionary<int, int> sink)
+    {
+        if (raw == null || sink == null)
+        {
+            return false;
+        }
+
+        var start = sink.Count;
+        var type = raw.GetType();
+        var keysProp = type.GetProperty("Keys", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                         ?? type.GetProperty("keys", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        var valsProp = type.GetProperty("Values", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                         ?? type.GetProperty("values", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (keysProp != null && valsProp != null && keysProp.CanRead && valsProp.CanRead)
+        {
+            object keysObj;
+            object valsObj;
+            try
+            {
+                keysObj = keysProp.GetValue(raw);
+                valsObj = valsProp.GetValue(raw);
+            }
+            catch
+            {
+                keysObj = null;
+                valsObj = null;
+            }
+
+            if (keysObj is IEnumerable keysEn && valsObj is IEnumerable valsEn)
+            {
+                var ke = keysEn.GetEnumerator();
+                var ve = valsEn.GetEnumerator();
+                try
+                {
+                    while (ke.MoveNext())
+                    {
+                        if (!ve.MoveNext())
+                        {
+                            break;
+                        }
+
+                        if (!TryCoerceInt(ke.Current, out var k) || !TryCoerceInt(ve.Current, out var v))
+                        {
+                            continue;
+                        }
+
+                        sink[k] = v;
+                    }
+                }
+                finally
+                {
+                    (ke as IDisposable)?.Dispose();
+                    (ve as IDisposable)?.Dispose();
+                }
+
+                return sink.Count > start;
+            }
+        }
+
+        if (raw is IDictionary dict)
+        {
+            foreach (DictionaryEntry e in dict)
+            {
+                if (!TryCoerceInt(e.Key, out var k) || !TryCoerceInt(e.Value, out var v))
+                {
+                    continue;
+                }
+
+                sink[k] = v;
+            }
+
+            return sink.Count > start;
+        }
+
+        return TryEnumerateIntIntDictionaryViaEnumerator(raw, sink);
+    }
+
+    /// <summary>Il2Cpp <c>Dictionary</c> often enumerates reliably when parallel <c>Keys</c>/<c>Values</c> walks drop pairs.</summary>
+    private static bool TryEnumerateIntIntDictionaryViaEnumerator(object raw, Dictionary<int, int> sink)
+    {
+        if (raw == null || sink == null)
+        {
+            return false;
+        }
+
+        var start = sink.Count;
+        var m = raw.GetType().GetMethod(
+            "GetEnumerator",
+            BindingFlags.Public | BindingFlags.Instance,
+            binder: null,
+            types: Type.EmptyTypes,
+            modifiers: null);
+        if (m == null)
+        {
+            return false;
+        }
+
+        object enObj;
+        try
+        {
+            enObj = m.Invoke(raw, null);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (enObj is not IEnumerator en)
+        {
+            return false;
+        }
+
+        try
+        {
+            while (en.MoveNext())
+            {
+                var cur = en.Current;
+                if (cur == null)
+                {
+                    continue;
+                }
+
+                if (!TryExtractIntIntFromDictionaryEntryLike(cur, out var k, out var vv))
+                {
+                    continue;
+                }
+
+                sink[k] = vv;
+            }
+        }
+        finally
+        {
+            (en as IDisposable)?.Dispose();
+        }
+
+        return sink.Count > start;
+    }
+
+    private static bool TryExtractIntIntFromDictionaryEntryLike(object cur, out int k, out int v)
+    {
+        k = 0;
+        v = 0;
+        if (cur is DictionaryEntry de)
+        {
+            return TryCoerceInt(de.Key, out k) && TryCoerceInt(de.Value, out v);
+        }
+
+        var t = cur.GetType();
+        var kp = t.GetProperty("Key", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic)
+                 ?? t.GetProperty("key", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+        var vp = t.GetProperty("Value", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic)
+                 ?? t.GetProperty("value", BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+        if (kp != null && vp != null && kp.CanRead && vp.CanRead)
+        {
+            try
+            {
+                return TryCoerceInt(kp.GetValue(cur), out k) && TryCoerceInt(vp.GetValue(cur), out v);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        var kf = t.GetField("key", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                 ?? t.GetField("Key", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        var vf = t.GetField("value", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                 ?? t.GetField("Value", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (kf != null && vf != null)
+        {
+            try
+            {
+                return TryCoerceInt(kf.GetValue(cur), out k) && TryCoerceInt(vf.GetValue(cur), out v);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryCoerceInt(object o, out int v)
+    {
+        v = 0;
+        if (o == null)
+        {
+            return false;
+        }
+
+        switch (o)
+        {
+            case int i:
+                v = i;
+                return true;
+            case long l:
+                v = (int)l;
+                return true;
+            case short s:
+                v = s;
+                return true;
+            case ushort us:
+                v = us;
+                return true;
+            case byte b:
+                v = b;
+                return true;
+            case uint ui:
+                if (ui > int.MaxValue)
+                {
+                    return false;
+                }
+
+                v = (int)ui;
+                return true;
+            case Enum en:
+                try
+                {
+                    v = Convert.ToInt32(en);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+
+            case string s:
+                return int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out v)
+                       && v > 0
+                       && v <= 4094;
+
+            default:
+                if (o is IConvertible ic)
+                {
+                    try
+                    {
+                        v = ic.ToInt32(CultureInfo.InvariantCulture);
+                        return true;
+                    }
+                    catch
+                    {
+                        // fall through
+                    }
+                }
+
+                try
+                {
+                    v = Convert.ToInt32(o);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+        }
     }
 
     private static void EnsureSceneCustomersForFrame()
@@ -131,6 +1453,7 @@ public static class GameSubnetHelper
     public static void RebuildAssetManagementDeviceLineServerCache()
     {
         ServerInstanceIdsOnAssetManagementDeviceLines.Clear();
+        ServerAssetLineConfiguredDisplayNameByInstanceId.Clear();
         try
         {
             var lines = UnityEngine.Object.FindObjectsOfType<AssetManagementDeviceLine>(true);
@@ -169,12 +1492,56 @@ public static class GameSubnetHelper
                 {
                     // Il2Cpp
                 }
+
+                try
+                {
+                    if (TryReadConfiguredNameFromAssetManagementDeviceLine(line, out var label)
+                        && !string.IsNullOrWhiteSpace(label))
+                    {
+                        ServerAssetLineConfiguredDisplayNameByInstanceId[lineServer.GetInstanceID()] = label.Trim();
+                    }
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
             }
         }
         catch
         {
             // type or field mismatch across game versions
         }
+    }
+
+    /// <summary>User-facing name from the rack contract row, when the game exposes it on <see cref="AssetManagementDeviceLine"/>.</summary>
+    public static bool TryGetServerAssetLineConfiguredDisplayName(Server server, out string displayName)
+    {
+        displayName = null;
+        if (server == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return ServerAssetLineConfiguredDisplayNameByInstanceId.TryGetValue(server.GetInstanceID(), out displayName)
+                   && !string.IsNullOrWhiteSpace(displayName);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryReadConfiguredNameFromAssetManagementDeviceLine(AssetManagementDeviceLine line, out string value)
+    {
+        value = null;
+        if (line == null)
+        {
+            return false;
+        }
+
+        return DeviceInventoryReflection.TryReadStringMember(line, AssetMgmtDeviceLineNameHints, out value);
     }
 
     public static bool IsServerReferencedByAssetManagementDeviceLine(Server server)
@@ -1777,7 +3144,76 @@ public static class GameSubnetHelper
             return fromName;
         }
 
+        if (TryGetServerCatalogPrefabAssetName(server, out var prefabAssetName))
+        {
+            var fromPrefab = ClassifyHardwareFamilyFromString(prefabAssetName);
+            if (fromPrefab != ServerHardwareFamily.Unknown)
+            {
+                return fromPrefab;
+            }
+        }
+
         return ClassifyHardwareFamilyFromServerReflection(server);
+    }
+
+    /// <summary>Prefab names like <c>Server.Yellow1</c> carry color → product line (System X / RISC / …).</summary>
+    private static bool TryGetServerCatalogPrefabAssetName(Server server, out string assetName)
+    {
+        assetName = null;
+        if (server == null)
+        {
+            return false;
+        }
+
+        int typeIdx;
+        try
+        {
+            typeIdx = server.serverType;
+        }
+        catch
+        {
+            return false;
+        }
+
+        MainGameManager mgr = null;
+        try
+        {
+            mgr = MainGameManager.instance;
+        }
+        catch
+        {
+            mgr = null;
+        }
+
+        if (mgr == null)
+        {
+            return false;
+        }
+
+        GameObject prefab = null;
+        try
+        {
+            prefab = mgr.GetServerPrefab(typeIdx);
+        }
+        catch
+        {
+            prefab = null;
+        }
+
+        if (prefab == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            assetName = prefab.name;
+            return !string.IsNullOrEmpty(assetName);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static ServerHardwareFamily ClassifyHardwareFamilyFromString(string text)

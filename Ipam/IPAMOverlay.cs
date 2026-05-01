@@ -64,12 +64,16 @@ public static partial class IPAMOverlay
                 GameInputSuppression.RefreshWhileActive();
                 _ipamNextPlayerInputRescanTime = Time.unscaledTime + 2.5f;
                 IpamMenuOcclusion.BumpScanPriority();
+                ResetIpamEscapeKeyboardLatchForOverlayOpen();
             }
 
             if (!value)
             {
                 _customerDropdownOpen = false;
                 CloseIopsCalculatorModal("IPAM hidden");
+                _customersTabAddServerWizardOpen = false;
+                _customersTabScreen = CustomersTabScreen.CustomerList;
+                _customersTabAddServerSelectedInstanceId = -1;
                 _iopsToolbarRectWindowLocal = default;
                 _iopsToolbarScreenRect = default;
                 _serverRangeAnchorInstanceId = -1;
@@ -222,8 +226,30 @@ public static partial class IPAMOverlay
     /// <summary>Customers tab: sentinel <c>-1</c> = servers with no customer (<see cref="IsServerWithoutCustomerAssignment"/>); else match <see cref="Server.GetCustomerID"/> (including 0).</summary>
     private static int _customersTabFilterCustomerId = -1;
 
-    private static bool _customersTabFilterMenuOpen;
-    private static Vector2 _customersTabFilterScroll;
+    private enum CustomersTabScreen
+    {
+        CustomerList = 0,
+        CustomerServers = 1,
+    }
+
+    private static CustomersTabScreen _customersTabScreen = CustomersTabScreen.CustomerList;
+
+    /// <summary>Top-level modal: pick an unassigned server and assign it to the drilled-in customer.</summary>
+    private static bool _customersTabAddServerWizardOpen;
+
+    private static int _customersTabAddServerTargetCustomerId;
+    private static Rect _customersTabAddServerWindowRect = new(160f, 120f, 800f, 560f);
+    private static Vector2 _customersTabAddServerWizardScroll;
+    private static int _customersTabAddServerSelectedInstanceId = -1;
+
+    private static readonly List<(int customerId, string title, int serverCount, string vlanX, string vlanRisc, string vlanMf, string vlanGpu)> CustomersTabCustomerListRows = new();
+    private static readonly List<Server> CustomersTabAddServerCandidateBuffer = new();
+
+    /// <summary>When false, <see cref="CustomersTabCustomerListRows"/> is reused (avoid O(customers×servers) work every IMGUI pass).</summary>
+    private static bool _customersTabCustomerListRowsDirty = true;
+
+    /// <summary>Content signature for <see cref="CustomersTabCustomerListRows"/> — skip rebuild on mouse moves when scene data unchanged.</summary>
+    private static ulong _customersTabCustomerListSourceSign = ulong.MaxValue;
 
     private static bool _ipamResizeDrag;
     private static Vector2 _ipamResizeStartMouse;
@@ -291,13 +317,18 @@ public static partial class IPAMOverlay
     /// <summary>When set, IP addresses tab lists only servers whose IP lies in this CIDR.</summary>
     private static string _ipamIpAddressFilterCidr;
 
-    /// <summary>IPv4 assignments tab: rows per page (25, 50, or 100).</summary>
+    /// <summary>IPv4 assignments tab and Devices tab: rows per page (25, 50, or 100).</summary>
     private static int _ipamIpAddressPageSize = 25;
 
     private static int _ipamIpAddressPageIndex;
     private static bool _ipamIpAddrPageMenuOpen;
 
-    /// <summary>Reserved width on the right of the IP-addresses table header for the page-size (gear) control.</summary>
+    private static int _ipamDevicesSwitchPageIndex;
+    private static int _ipamDevicesServerPageIndex;
+    private static bool _ipamDevicesSwitchPageMenuOpen;
+    private static bool _ipamDevicesServerPageMenuOpen;
+
+    /// <summary>Reserved width on the right of table headers for the page-size (gear) control.</summary>
     private const float IpamIpAddressGearColW = 28f;
 
     internal static readonly List<Server> IpamIpAddressViewBuffer = new();
@@ -577,6 +608,33 @@ public static partial class IPAMOverlay
             winSt.onNormal.background = oldWinOnBg;
             winSt.normal.textColor = oldWinTxt;
             winSt.onNormal.textColor = oldWinOnTxt;
+        }
+
+        if (LicenseManager.IsIPAMUnlocked && _customersTabAddServerWizardOpen)
+        {
+            GUI.depth = 0;
+            var dimCol2 = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, 0.5f);
+            if (Event.current.type == EventType.Repaint)
+            {
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _texModalDim, ScaleMode.StretchToFill);
+            }
+
+            GUI.color = dimCol2;
+            var winSt2 = GUI.skin.window;
+            var oldWinBg2 = winSt2.normal.background;
+            var oldWinOnBg2 = winSt2.onNormal.background;
+            var oldWinTxt2 = winSt2.normal.textColor;
+            var oldWinOnTxt2 = winSt2.onNormal.textColor;
+            winSt2.normal.background = _texBackdrop;
+            winSt2.onNormal.background = _texBackdrop;
+            winSt2.normal.textColor = new Color32(248, 250, 252, 255);
+            winSt2.onNormal.textColor = new Color32(248, 250, 252, 255);
+            _customersTabAddServerWindowRect = GUI.Window(9003, _customersTabAddServerWindowRect, (GUI.WindowFunction)DrawCustomersAddServerWindow, "Add server");
+            winSt2.normal.background = oldWinBg2;
+            winSt2.onNormal.background = oldWinOnBg2;
+            winSt2.normal.textColor = oldWinTxt2;
+            winSt2.onNormal.textColor = oldWinOnTxt2;
         }
 
         GUI.backgroundColor = oldBg;
