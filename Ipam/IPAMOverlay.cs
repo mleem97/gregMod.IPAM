@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -90,8 +91,9 @@ public static partial class IPAMOverlay
                 _ipamIpAddressFilterCidr = null;
                 _ipamIpAddressPageIndex = 0;
                 _ipamIpAddrPageMenuOpen = false;
-                _ipamPrefixEditId = null;
-                _ipamPrefixEditSaveError = null;
+                _ipamChildPrefixWizardOpen = false;
+                _ipamChildPrefixWizardError = "";
+                _ipamChildPrefixWizardEditEntryId = null;
                 IpamIpAddressViewBuffer.Clear();
                 BeginImGuiInputRecoveryBurst();
                 UiRaycastBlocker.SetBlocking(false);
@@ -286,10 +288,12 @@ public static partial class IPAMOverlay
     {
         Dashboard = 0,
         Devices = 1,
+        /// <summary>Scene racks from asset / contract rows (<see cref="RackLayoutHelper"/>).</summary>
+        Racks = 2,
         /// <summary>NetBox-style IPAM hub: use <see cref="_ipamSub"/> for Addresses / Prefixes / VLANs.</summary>
-        Ipam = 2,
-        Customers = 3,
-        Settings = 4,
+        Ipam = 3,
+        Customers = 4,
+        Settings = 5,
     }
 
     private enum IpamSubSection
@@ -310,9 +314,37 @@ public static partial class IPAMOverlay
     private const int IpamFormFocusPrefixName = 1;
     private const int IpamFormFocusVlanId = 2;
     private const int IpamFormFocusVlanName = 3;
-    private const int IpamFormFocusEditPrefixName = 4;
-    private const int IpamFormFocusEditPrefixTenant = 5;
+    /// <summary>Search box for IPAM prefix list inside the server edit popup (inline assign).</summary>
+    private const int IpamFormFocusInlinePrefixSearch = 6;
+    private const int IpamFormFocusWizardChildCidr = 10;
+    private const int IpamFormFocusWizardChildName = 11;
+    private const int IpamFormFocusWizardChildTenant = 12;
+    /// <summary>Racks tab text boxes — must not use <see cref="GUI.TextField"/> (IL2CPP TextEditor unstripping).</summary>
+    private const int IpamFormFocusRackNewName = 20;
+    private const int IpamFormFocusRackRename = 21;
+    private const int IpamFormFocusRackMountStartU = 22;
+    private const int IpamFormFocusRackPatchLabel = 23;
+    private const int IpamFormFocusRackMountServerSearch = 24;
+    private const int IpamFormFocusRackMountSwitchSearch = 25;
     private static int _ipamFormFieldFocus = IpamFormFocusNone;
+
+    /// <summary>After clicking the rack &quot;Start U&quot; box, full replace on first key (highlight drawn by IPAM form text field).</summary>
+    private static bool _ipamFormRackMountStartUSelectAll;
+
+    /// <summary>When non-null, the "Assign + address" block is shown below the customer dropdown in the server edit popup.</summary>
+    private static CustomerBase _inlineAssignCustomer;
+    /// <summary>0 = Contract+DHCP batch; 1 = pick IPAM prefix and allocate first free IP.</summary>
+    private static int _inlineAssignMode;
+    private static string _inlineIpamPrefixPickId = "";
+    private static string _inlineIpamPrefixSearchBuf = "";
+    private static Vector2 _inlineIpamPrefixListScroll;
+    private static string _inlineAssignError = "";
+
+    /// <summary>User closed the floating server editor; cleared when the server selection set changes.</summary>
+    private static bool _serverEditPopupDismissed = true;
+
+    private static int _serverEditPopupSelectionSig = int.MinValue;
+    private static Rect _serverEditPopupRect = new(120f, 80f, 580f, 680f);
 
     /// <summary>When set, IP addresses tab lists only servers whose IP lies in this CIDR.</summary>
     private static string _ipamIpAddressFilterCidr;
@@ -323,7 +355,17 @@ public static partial class IPAMOverlay
     private static int _ipamIpAddressPageIndex;
     private static bool _ipamIpAddrPageMenuOpen;
 
+    /// <summary>Prefixes tab: drilled-folder merged rows only (25 / 50 / 100).</summary>
+    private static int _ipamPrefixPageSize = 50;
+
+    private static int _ipamPrefixPageIndex;
+    private static bool _ipamPrefixPageMenuOpen;
+
+    /// <summary>Clears prefix page index when drill target changes.</summary>
+    private static string _ipamPrefixPagingDrillSig = "\u0001";
+
     private static int _ipamDevicesSwitchPageIndex;
+    private static int _ipamDevicesRouterPageIndex;
     private static int _ipamDevicesServerPageIndex;
     private static bool _ipamDevicesSwitchPageMenuOpen;
     private static bool _ipamDevicesServerPageMenuOpen;
@@ -333,13 +375,20 @@ public static partial class IPAMOverlay
 
     internal static readonly List<Server> IpamIpAddressViewBuffer = new();
 
-    /// <summary>Prefixes table: column weight sum = 1 (Prefix, Role, Children, Utilization, Tenant, Actions).</summary>
-    private static readonly float[] IpamPrefixTableColWeight = { 0.26f, 0.10f, 0.07f, 0.24f, 0.17f, 0.16f };
+    /// <summary>Prefixes table: column weight sum = 1 (Prefix, Role, Children, Free/N, Utilization, Tenant, Actions).</summary>
+    private static readonly float[] IpamPrefixTableColWeight = { 0.22f, 0.09f, 0.06f, 0.10f, 0.20f, 0.15f, 0.18f };
 
-    private static string _ipamPrefixEditId;
-    private static string _ipamPrefixEditNameBuf = "";
-    private static string _ipamPrefixEditTenantBuf = "";
-    private static string _ipamPrefixEditSaveError;
+    /// <summary>Prefix ids whose subtree rows are hidden (collapsed). Absence means expanded.</summary>
+    private static readonly HashSet<string> _ipamPrefixCollapsedIds = new(StringComparer.Ordinal);
+
+    private static bool _ipamChildPrefixWizardOpen;
+    private static Rect _ipamChildPrefixWizardRect = new(140f, 90f, 500f, 360f);
+    private static string _ipamChildPrefixWizardParentFolderId;
+    private static string _ipamChildPrefixWizardEditEntryId;
+    private static string _ipamChildPrefixWizardCidrBuf = "";
+    private static string _ipamChildPrefixWizardNameBuf = "";
+    private static string _ipamChildPrefixWizardTenantBuf = "";
+    private static string _ipamChildPrefixWizardError = "";
 
     /// <summary>Prefixes tab: show only subtree under this prefix id (double-click row). Null = full tree.</summary>
     private static string _ipamPrefixesDrillParentId;
@@ -386,6 +435,8 @@ public static partial class IPAMOverlay
 
     private static readonly List<Server> SortedServersBuffer = new();
     private static readonly List<NetworkSwitch> SortedSwitchesBuffer = new();
+    private static readonly List<NetworkSwitch> DeviceTabSwitchesOnlyScratch = new();
+    private static readonly List<NetworkSwitch> DeviceTabRoutersOnlyScratch = new();
     private static bool _serverSortListDirty = true;
     private static bool _switchSortListDirty = true;
     private static int _serverSortColumn;
@@ -536,6 +587,83 @@ public static partial class IPAMOverlay
     }
 
 
+    private static void RefreshServerEditPopupSelectionSignature()
+    {
+        unchecked
+        {
+            var h = 23;
+            foreach (var id in _selectedServerInstanceIds.OrderBy(x => x))
+            {
+                h = h * 397 ^ id;
+            }
+
+            h = h * 397 ^ (_selectedServerInstanceIds.Count + 1);
+            if (h != _serverEditPopupSelectionSig)
+            {
+                _serverEditPopupSelectionSig = h;
+                _serverEditPopupDismissed = true;
+                ClearInlineCustomerAssign();
+            }
+        }
+    }
+
+    /// <summary>Floating server editor (9005): opened from toolbar “Edit servers”, not automatically on selection.</summary>
+    private static bool ShouldDrawServerEditPopup()
+    {
+        return (LicenseManager.IsDHCPUnlocked || LicenseManager.IsIPAMUnlocked)
+               && _selectedServerInstanceIds.Count > 0
+               && !_serverEditPopupDismissed;
+    }
+
+    internal static void OpenServerEditPopupForSelection()
+    {
+        if (_selectedServerInstanceIds.Count == 0)
+        {
+            return;
+        }
+
+        _serverEditPopupDismissed = false;
+        RecomputeContentHeight();
+    }
+
+    /// <summary>IPAM → IP addresses tab, filtered to a host (/32) or prefix CIDR.</summary>
+    private static void NavigateIpAddressesToCidrFilter(string cidrFilter)
+    {
+        if (string.IsNullOrWhiteSpace(cidrFilter))
+        {
+            return;
+        }
+
+        _ipamIpAddressFilterCidr = cidrFilter.Trim();
+        _ipamIpAddressPageIndex = 0;
+        IpamIpAddressViewBuffer.Clear();
+        _navSection = NavSection.Ipam;
+        _ipamSub = IpamSubSection.IpAddresses;
+        _scroll = Vector2.zero;
+        _ipamFormFieldFocus = IpamFormFocusNone;
+        RecomputeContentHeight();
+    }
+
+    private static void ClampServerEditPopupRectIntoView()
+    {
+        var r = _serverEditPopupRect;
+        const float minW = 480f;
+        const float minH = 400f;
+        if (r.width < minW * 0.5f || r.height < minH * 0.5f || r.x + r.width < 40f || r.y + r.height < 40f)
+        {
+            r.width = Mathf.Max(r.width, minW);
+            r.height = Mathf.Max(r.height, minH);
+            r.x = (Screen.width - r.width) * 0.5f;
+            r.y = (Screen.height - r.height) * 0.5f;
+            _serverEditPopupRect = r;
+            return;
+        }
+
+        r.x = Mathf.Clamp(r.x, 8f, Mathf.Max(8f, Screen.width - r.width - 8f));
+        r.y = Mathf.Clamp(r.y, 8f, Mathf.Max(8f, Screen.height - r.height - 8f));
+        _serverEditPopupRect = r;
+    }
+
     public static void Draw()
     {
         if (!IsVisible)
@@ -546,6 +674,7 @@ public static partial class IPAMOverlay
         EnsureTextures();
         EnsureStyles();
         PumpIpamDebugOnGuiMouse();
+        RefreshServerEditPopupSelectionSignature();
 
         var oldDepth = GUI.depth;
         // Prefer drawing after other IMGUI in the frame; depth helps automatic layout stacks.
@@ -635,6 +764,75 @@ public static partial class IPAMOverlay
             winSt2.onNormal.background = oldWinOnBg2;
             winSt2.normal.textColor = oldWinTxt2;
             winSt2.onNormal.textColor = oldWinOnTxt2;
+        }
+
+        if (LicenseManager.IsIPAMUnlocked && _ipamChildPrefixWizardOpen)
+        {
+            GUI.depth = 0;
+            var dimW = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, 0.5f);
+            if (Event.current.type == EventType.Repaint)
+            {
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _texModalDim, ScaleMode.StretchToFill);
+            }
+
+            GUI.color = dimW;
+            var winStW = GUI.skin.window;
+            var oldWBg = winStW.normal.background;
+            var oldWOnBg = winStW.onNormal.background;
+            var oldWTxt = winStW.normal.textColor;
+            var oldWOnTxt = winStW.onNormal.textColor;
+            winStW.normal.background = _texBackdrop;
+            winStW.onNormal.background = _texBackdrop;
+            winStW.normal.textColor = new Color32(248, 250, 252, 255);
+            winStW.onNormal.textColor = new Color32(248, 250, 252, 255);
+            _ipamChildPrefixWizardRect = GUI.Window(
+                9006,
+                _ipamChildPrefixWizardRect,
+                (GUI.WindowFunction)DrawIpamChildPrefixWizardWindow,
+                "Prefix");
+            winStW.normal.background = oldWBg;
+            winStW.onNormal.background = oldWOnBg;
+            winStW.normal.textColor = oldWTxt;
+            winStW.onNormal.textColor = oldWOnTxt;
+        }
+
+        var serverEditPopupDraw = ShouldDrawServerEditPopup();
+        if (serverEditPopupDraw)
+        {
+            GUI.depth = 0;
+            var dimCol3 = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, 0.5f);
+            if (Event.current.type == EventType.Repaint)
+            {
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _texModalDim, ScaleMode.StretchToFill);
+            }
+
+            GUI.color = dimCol3;
+            var winSt3 = GUI.skin.window;
+            var oldWinBg3 = winSt3.normal.background;
+            var oldWinOnBg3 = winSt3.onNormal.background;
+            var oldWinTxt3 = winSt3.normal.textColor;
+            var oldWinOnTxt3 = winSt3.onNormal.textColor;
+            winSt3.normal.background = _texBackdrop;
+            winSt3.onNormal.background = _texBackdrop;
+            winSt3.normal.textColor = new Color32(248, 250, 252, 255);
+            winSt3.onNormal.textColor = new Color32(248, 250, 252, 255);
+
+            if (serverEditPopupDraw)
+            {
+                ClampServerEditPopupRectIntoView();
+                _serverEditPopupRect = GUI.Window(
+                    9005,
+                    _serverEditPopupRect,
+                    (GUI.WindowFunction)DrawServerEditPopupWindow,
+                    "Edit object · Server");
+            }
+
+            winSt3.normal.background = oldWinBg3;
+            winSt3.onNormal.background = oldWinOnBg3;
+            winSt3.normal.textColor = oldWinTxt3;
+            winSt3.onNormal.textColor = oldWinOnTxt3;
         }
 
         GUI.backgroundColor = oldBg;

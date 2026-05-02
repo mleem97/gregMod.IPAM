@@ -45,6 +45,17 @@ public static partial class IPAMOverlay
         return rowYMax > _inventoryScrollRowRepaintCullMinY && rowYMin < _inventoryScrollRowRepaintCullMaxY;
     }
 
+    /// <summary>Selected rows always compute cell text so labels stay visible even when culling skips neighbors.</summary>
+    private static bool InventoryScrollRowWantsRepaintTextOrSelected(float rowYMin, float rowYMax, bool rowSelected)
+    {
+        if (rowSelected)
+        {
+            return true;
+        }
+
+        return InventoryScrollRowWantsRepaintText(rowYMin, rowYMax);
+    }
+
     private static void RebuildIpamEolSnapshot()
     {
         _eolDisplayByInstanceId.Clear();
@@ -627,7 +638,9 @@ public static partial class IPAMOverlay
 
                 break;
             case EventType.Repaint:
-                if (_inventoryScrollRowRepaintCullActive)
+                // Selected rows must always repaint — otherwise culling can skip the highlight/cells while
+                // strings were still computed (scroll slop / coordinate edge), matching "selected but invisible until mouse moves".
+                if (_inventoryScrollRowRepaintCullActive && !rowSelected)
                 {
                     if (rowRect.yMax <= _inventoryScrollRowRepaintCullMinY
                         || rowRect.yMin >= _inventoryScrollRowRepaintCullMaxY)
@@ -641,6 +654,11 @@ public static partial class IPAMOverlay
                     ? _texNavActive
                     : (hover || GUIUtility.hotControl == id ? _texRowHover : bgBase);
                 GUI.DrawTexture(rowRect, bg);
+                if (rowSelected)
+                {
+                    DrawTintedRect(new Rect(rowRect.x, rowRect.y, 4f, rowRect.height), new Color(0.35f, 1f, 0.92f, 1f));
+                }
+
                 var x0 = rowRect.x;
                 var ry = rowRect.y;
                 var rh = rowRect.height;

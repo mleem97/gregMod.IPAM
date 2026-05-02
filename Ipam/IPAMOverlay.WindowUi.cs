@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 
 namespace DHCPSwitches;
 
-// Main IPAM window: title/toolbar, navigation, scroll content, bottom detail panel, server/switch selection helpers.
+// Main IPAM window: title/toolbar, navigation, scroll content; switches keep a bottom strip; servers use popup 9005 only.
 
 public static partial class IPAMOverlay
 {
@@ -27,16 +27,7 @@ public static partial class IPAMOverlay
             return 138f;
         }
 
-        if (_selectedServerInstanceIds.Count > 1)
-        {
-            return _customerDropdownOpen ? 304f : 300f;
-        }
-
-        if (_selectedServer != null)
-        {
-            return _customerDropdownOpen ? 264f : 260f;
-        }
-
+        // Servers: no bottom chrome — editing is only in standalone window 9005.
         return 0f;
     }
 
@@ -185,6 +176,16 @@ public static partial class IPAMOverlay
         var perfW = Mathf.Max(TW(_stMutedBtn, "Perf: off"), TW(_stMutedBtn, "Perf: on"));
         var iopsCalcW = TW(_stMutedBtn, "IOPS calc");
         var tx = w - tr;
+        if ((dhcpUnlocked || ipamUnlocked) && _selectedServerInstanceIds.Count > 0)
+        {
+            var editSrvW = TW(_stPrimaryBtn, "Edit servers");
+            tx -= g + editSrvW;
+            if (ImguiButtonOnce(new Rect(tx, btnRowY + ty, editSrvW, btnH), "Edit servers", 8815, _stPrimaryBtn))
+            {
+                OpenServerEditPopupForSelection();
+            }
+        }
+
         tx -= g + fitColsW;
         if (ImguiButtonOnce(new Rect(tx, btnRowY + ty, fitColsW, btnH), "Fit columns", 16, _stMutedBtn))
         {
@@ -282,7 +283,8 @@ public static partial class IPAMOverlay
         var navStartY = navHeaderY + navHeaderH + Sp(6f);
         DrawNavEntry(new Rect(navX, navStartY + navRowH * 0, navW, navRowH), NavSection.Dashboard, "Dashboard");
         DrawNavEntry(new Rect(navX, navStartY + navRowH * 1, navW, navRowH), NavSection.Devices, "Devices");
-        var ipamToggleRect = new Rect(navX, navStartY + navRowH * 2, navW, navRowH);
+        DrawNavEntry(new Rect(navX, navStartY + navRowH * 2, navW, navRowH), NavSection.Racks, "Racks");
+        var ipamToggleRect = new Rect(navX, navStartY + navRowH * 3, navW, navRowH);
         var ipamChevron = _ipamSidebarExpanded ? "\u25BC" : "\u25B6";
         var ipamToggleLabel = $"IPAM  {ipamChevron}";
         var ipamNavActive = _navSection == NavSection.Ipam;
@@ -303,7 +305,7 @@ public static partial class IPAMOverlay
         {
             var ipamSubIndent = Sp(10f);
             var subNavW = navW - ipamSubIndent;
-            var ipamSubBaseY = navStartY + navRowH * 3;
+            var ipamSubBaseY = navStartY + navRowH * 4;
             DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 0, subNavW, navRowH), IpamSubSection.IpAddresses, "IP addresses", 9050);
             DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 1, subNavW, navRowH), IpamSubSection.Prefixes, "Prefixes", 9051);
             DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 2, subNavW, navRowH), IpamSubSection.Vlans, "VLANs", 9052);
@@ -311,7 +313,7 @@ public static partial class IPAMOverlay
         }
         else
         {
-            navAfterIpam = navStartY + navRowH * 3 + Sp(8f);
+            navAfterIpam = navStartY + navRowH * 4 + Sp(8f);
         }
         DrawNavEntry(new Rect(navX, navAfterIpam, navW, navRowH), NavSection.Customers, "Customers");
         DrawNavEntry(new Rect(navX, navAfterIpam + navRowH, navW, navRowH), NavSection.Settings, "Settings");
@@ -389,6 +391,9 @@ public static partial class IPAMOverlay
                 case NavSection.Devices:
                     DrawDeviceTables(innerW);
                     break;
+                case NavSection.Racks:
+                    DrawRacksView(innerW);
+                    break;
                 case NavSection.Ipam:
                     switch (_ipamSub)
                     {
@@ -419,24 +424,20 @@ public static partial class IPAMOverlay
 
         GUI.EndScrollView();
 
-        if (HasDetailSelection())
+        if (_selectedNetworkSwitchInstanceIds.Count > 0 && detailH > 0f)
         {
             var panelTop = h - detailH;
             GUI.DrawTexture(new Rect(0, panelTop, w, detailH), _texPageBg);
-            if (_selectedNetworkSwitchInstanceIds.Count > 0)
-            {
-                DrawSwitchDetail();
-            }
-            else
-            {
-                DrawServerDetail();
-            }
+            DrawSwitchDetail();
         }
 
         // BeginScrollView/EndScrollView can leave GUI.enabled false on Unity's internal stack.
         GUI.enabled = true;
 
-        if (!_iopsCalculatorOpen && !_customersTabAddServerWizardOpen)
+        if (!_iopsCalculatorOpen
+            && !_customersTabAddServerWizardOpen
+            && !_ipamChildPrefixWizardOpen
+            && !ShouldDrawServerEditPopup())
         {
             DrawWindowResizeHandle(w, h);
         }
@@ -842,6 +843,9 @@ public static partial class IPAMOverlay
             case NavSection.Settings:
                 _cachedContentHeight = 420f;
                 return;
+            case NavSection.Racks:
+                _cachedContentHeight = Mathf.Max(360f, ComputeRacksContentHeight());
+                return;
             case NavSection.Ipam:
                 switch (_ipamSub)
                 {
@@ -890,19 +894,25 @@ public static partial class IPAMOverlay
 
         EnsureSortedSwitches();
         EnsureSortedServers();
-        var swN = SortedSwitchesBuffer.Count;
+        PartitionSortedSwitchesForDeviceTab();
+        var switchOnlyN = DeviceTabSwitchesOnlyScratch.Count;
+        var routerN = DeviceTabRoutersOnlyScratch.Count;
         var svN = SortedServersBuffer.Count;
-        ClampInventoryPageIndex(ref _ipamDevicesSwitchPageIndex, swN);
+        ClampInventoryPageIndex(ref _ipamDevicesSwitchPageIndex, switchOnlyN);
+        ClampInventoryPageIndex(ref _ipamDevicesRouterPageIndex, routerN);
         ClampInventoryPageIndex(ref _ipamDevicesServerPageIndex, svN);
         var ps = _ipamIpAddressPageSize;
         var swStart = _ipamDevicesSwitchPageIndex * ps;
+        var rtStart = _ipamDevicesRouterPageIndex * ps;
         var svStart = _ipamDevicesServerPageIndex * ps;
-        var swBody = swN == 0 ? 1 : Mathf.Min(ps, swN - swStart);
+        var swBody = switchOnlyN == 0 ? 1 : Mathf.Min(ps, switchOnlyN - swStart);
+        var rtBody = routerN == 0 ? 1 : Mathf.Min(ps, routerN - rtStart);
         var svBody = svN == 0 ? 1 : Mathf.Min(ps, svN - svStart);
         const float devicesPaginationBarH = 28f;
         var yd = CardPad;
         yd += SectionTitleH + 2f + 7f;
         yd += SectionTitleH + 4f + TableHeaderH + swBody * TableRowH + devicesPaginationBarH;
+        yd += 18f + SectionTitleH + 4f + TableHeaderH + rtBody * TableRowH + devicesPaginationBarH;
         yd += 18f + SectionTitleH + 4f + TableHeaderH + svBody * TableRowH + devicesPaginationBarH;
         _cachedContentHeight = Mathf.Max(260f, yd + CardPad);
     }
@@ -984,6 +994,29 @@ public static partial class IPAMOverlay
         return list.ToArray();
     }
 
+    private static void PartitionSortedSwitchesForDeviceTab()
+    {
+        DeviceTabSwitchesOnlyScratch.Clear();
+        DeviceTabRoutersOnlyScratch.Clear();
+        EnsureSortedSwitches();
+        foreach (var sw in SortedSwitchesBuffer)
+        {
+            if (sw == null)
+            {
+                continue;
+            }
+
+            if (DeviceInventoryReflection.NetworkSwitchBehavesAsRouter(sw))
+            {
+                DeviceTabRoutersOnlyScratch.Add(sw);
+            }
+            else
+            {
+                DeviceTabSwitchesOnlyScratch.Add(sw);
+            }
+        }
+    }
+
     /// <summary>
     /// IMGUI assigns control IDs in call order. Always emit the same control sequence (full-width table rows).
     /// </summary>
@@ -1005,6 +1038,8 @@ public static partial class IPAMOverlay
 
         GUI.DrawTexture(new Rect(x0, y, cardW, 1f), _texTableHeader);
         y += 6f;
+
+        PartitionSortedSwitchesForDeviceTab();
 
         // --- Switches card ---
         GUI.Label(new Rect(x0, y, 200, SectionTitleH), "Network switches", _stSectionTitle);
@@ -1042,8 +1077,7 @@ public static partial class IPAMOverlay
 
         y += TableHeaderH;
 
-        EnsureSortedSwitches();
-        var totalSw = SortedSwitchesBuffer.Count;
+        var totalSw = DeviceTabSwitchesOnlyScratch.Count;
         ClampInventoryPageIndex(ref _ipamDevicesSwitchPageIndex, totalSw);
         var ps = _ipamIpAddressPageSize;
         var swPageStart = _ipamDevicesSwitchPageIndex * ps;
@@ -1051,14 +1085,15 @@ public static partial class IPAMOverlay
 
         for (var pi = swPageStart; pi < swPageEnd; pi++)
         {
-            var sw = SortedSwitchesBuffer[pi];
+            var sw = DeviceTabSwitchesOnlyScratch[pi];
             var r = new Rect(x0, y, tableW, TableRowH);
             var menuBlocksRowPointer = _ipamDevicesSwitchPageMenuOpen && menuDropRectSw.Overlaps(r);
             string name;
             string role;
             string eolCol;
             string statusCol;
-            if (ShouldComputeTruncatedInventoryCellText && InventoryScrollRowWantsRepaintText(r.yMin, r.yMax))
+            if (ShouldComputeTruncatedInventoryCellText
+                && InventoryScrollRowWantsRepaintTextOrSelected(r.yMin, r.yMax, IsSwitchRowSelected(sw)))
             {
                 var nameRaw = sw != null ? DeviceInventoryReflection.GetDisplayName(sw) : "(removed)";
                 name = CellTextForCol(0, string.IsNullOrEmpty(nameRaw) ? "—" : nameRaw, tableW);
@@ -1146,6 +1181,124 @@ public static partial class IPAMOverlay
 
         y += 18f;
 
+        // --- Routers card (L3; scene type may still be NetworkSwitch) ---
+        GUI.Label(new Rect(x0, y, 220, SectionTitleH), "Network routers", _stSectionTitle);
+        y += SectionTitleH + 4f;
+
+        var headerRowRt = y;
+        DrawSortableTableHeader(
+            new Rect(x0, headerRowRt, tableW, TableHeaderH),
+            ref _switchSortColumn,
+            ref _switchSortAscending,
+            "Name",
+            "Customer",
+            "Role",
+            "Mgmt IPv4",
+            "EOL",
+            "Status",
+            600,
+            false);
+        y += TableHeaderH;
+
+        var totalRt = DeviceTabRoutersOnlyScratch.Count;
+        ClampInventoryPageIndex(ref _ipamDevicesRouterPageIndex, totalRt);
+        var rtPageStart = _ipamDevicesRouterPageIndex * ps;
+        var rtPageEnd = totalRt == 0 ? 0 : Mathf.Min(totalRt, rtPageStart + ps);
+
+        for (var pi = rtPageStart; pi < rtPageEnd; pi++)
+        {
+            var sw = DeviceTabRoutersOnlyScratch[pi];
+            var r = new Rect(x0, y, tableW, TableRowH);
+            string name;
+            string role;
+            string eolCol;
+            string statusCol;
+            if (ShouldComputeTruncatedInventoryCellText
+                && InventoryScrollRowWantsRepaintTextOrSelected(r.yMin, r.yMax, IsSwitchRowSelected(sw)))
+            {
+                var nameRaw = sw != null ? DeviceInventoryReflection.GetDisplayName(sw) : "(removed)";
+                name = CellTextForCol(0, string.IsNullOrEmpty(nameRaw) ? "—" : nameRaw, tableW);
+                role = CellTextForCol(2, "Router", tableW);
+                eolCol = TableEolCellDisplay(sw, tableW);
+                statusCol = CellTextForCol(5, "Active", tableW);
+            }
+            else
+            {
+                name = "";
+                role = "";
+                eolCol = "";
+                statusCol = "";
+            }
+
+            if (TableDataRowClick(
+                    r,
+                    StableRowHint(8, sw, pi),
+                    pi % 2 == 1,
+                    IsSwitchRowSelected(sw),
+                    name,
+                    "—",
+                    role,
+                    "—",
+                    eolCol,
+                    statusCol,
+                    tableW,
+                    false))
+            {
+                HandleSwitchRowClick(sw, pi);
+            }
+
+            y += TableRowH;
+        }
+
+        if (totalRt == 0)
+        {
+            var stubRt = new Rect(x0, y, tableW, TableRowH);
+            TableDataRowClick(
+                stubRt,
+                StableRowHint(8, null, 0),
+                false,
+                false,
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                tableW,
+                false);
+            y += TableRowH;
+        }
+
+        var pageCountRt = totalRt == 0 ? 1 : (totalRt + ps - 1) / ps;
+        var rtDispStart = totalRt == 0 ? 0 : rtPageStart + 1;
+        var rtDispEnd = totalRt == 0 ? 0 : rtPageEnd;
+        var labelRt = totalRt == 0
+            ? "No network routers"
+            : $"Page {_ipamDevicesRouterPageIndex + 1} / {pageCountRt}   ·   {rtDispStart}-{rtDispEnd} of {totalRt}";
+        GUI.Label(new Rect(x0, y + 2f, tableW - 200f, 22f), labelRt, _stHint);
+        var navYRt = y + 1f;
+        if (ImguiButtonOnce(new Rect(x0 + tableW - 168f, navYRt, 72f, 22f), "Previous", 9270, _stMutedBtn))
+        {
+            if (_ipamDevicesRouterPageIndex > 0)
+            {
+                _ipamDevicesRouterPageIndex--;
+                RecomputeContentHeight();
+            }
+        }
+
+        if (ImguiButtonOnce(new Rect(x0 + tableW - 90f, navYRt, 82f, 22f), "Next", 9271, _stMutedBtn))
+        {
+            if (_ipamDevicesRouterPageIndex < pageCountRt - 1)
+            {
+                _ipamDevicesRouterPageIndex++;
+                RecomputeContentHeight();
+            }
+        }
+
+        y += 28f;
+        GUI.Label(new Rect(x0, y, tableW, 18f), "Page size matches Network switches (gear above).", _stMuted);
+        y += 22f;
+
         // --- Servers card ---
         GUI.Label(new Rect(x0, y, 200, SectionTitleH), "Servers", _stSectionTitle);
         y += SectionTitleH + 4f;
@@ -1220,7 +1373,8 @@ public static partial class IPAMOverlay
             string ipCol;
             string eolCol;
             string status;
-            if (ShouldComputeTruncatedInventoryCellText && InventoryScrollRowWantsRepaintText(r.yMin, r.yMax))
+            if (ShouldComputeTruncatedInventoryCellText
+                && InventoryScrollRowWantsRepaintTextOrSelected(r.yMin, r.yMax, IsServerRowSelected(server)))
             {
                 var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
                 var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
@@ -1645,6 +1799,7 @@ public static partial class IPAMOverlay
             _ipamIpAddressPageSize = 25;
             _ipamIpAddressPageIndex = 0;
             _ipamDevicesSwitchPageIndex = 0;
+            _ipamDevicesRouterPageIndex = 0;
             _ipamDevicesServerPageIndex = 0;
             menuOpen = false;
             RecomputeContentHeight();
@@ -1656,6 +1811,7 @@ public static partial class IPAMOverlay
             _ipamIpAddressPageSize = 50;
             _ipamIpAddressPageIndex = 0;
             _ipamDevicesSwitchPageIndex = 0;
+            _ipamDevicesRouterPageIndex = 0;
             _ipamDevicesServerPageIndex = 0;
             menuOpen = false;
             RecomputeContentHeight();
@@ -1667,6 +1823,7 @@ public static partial class IPAMOverlay
             _ipamIpAddressPageSize = 100;
             _ipamIpAddressPageIndex = 0;
             _ipamDevicesSwitchPageIndex = 0;
+            _ipamDevicesRouterPageIndex = 0;
             _ipamDevicesServerPageIndex = 0;
             menuOpen = false;
             RecomputeContentHeight();
@@ -1780,7 +1937,8 @@ public static partial class IPAMOverlay
             string ipCol;
             string eolCol;
             string status;
-            if (ShouldComputeTruncatedInventoryCellText && InventoryScrollRowWantsRepaintText(r.yMin, r.yMax))
+            if (ShouldComputeTruncatedInventoryCellText
+                && InventoryScrollRowWantsRepaintTextOrSelected(r.yMin, r.yMax, IsServerRowSelected(server)))
             {
                 var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
                 var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
@@ -2306,8 +2464,7 @@ public static partial class IPAMOverlay
             var line = $"#{cb.customerID}  {(string.IsNullOrWhiteSpace(nm) ? "—" : nm.Trim())}";
             if (GUI.Button(new Rect(4, i * 28f, fieldW - 28, 26), line, _stMutedBtn))
             {
-                ApplyCustomerAssignToSelection(cb);
-                _customerDropdownOpen = false;
+                StartInlineCustomerAssign(cb);
             }
         }
 
@@ -2315,29 +2472,189 @@ public static partial class IPAMOverlay
         py += listH + 4f;
     }
 
-    private static void DrawServerDetail()
+    private static void DrawInlineCustomerAssignSection(float px, ref float py, float iw)
     {
-        CollectSelectedServersIntoScratch();
-        if (SelectedServersScratch.Count == 0)
+        var cust = _inlineAssignCustomer;
+        if (cust == null)
         {
             return;
         }
 
-        var w = _windowRect.width;
-        var h = _windowRect.height;
-        var dph = GetDetailPanelHeight();
-        var panelY = h - dph;
-        GUI.DrawTexture(new Rect(0, panelY, w, 1f), _texTableHeader);
+        CollectSelectedServersIntoScratch();
+        var n = SelectedServersScratch.Count;
 
-        var px = 16f;
-        var py = panelY + 8f;
+        GUI.Label(new Rect(px, py, iw, 22f), "Assign + address", _stSectionTitle);
+        py += 26f;
+
+        var cn = GetCustomerName(cust);
+        GUI.Label(
+            new Rect(px, py, iw, 22f),
+            $"Customer   #{cust.customerID}  {Trunc(cn ?? "", 48)}",
+            _stMuted);
+        py += 24f;
+
+        GUI.Label(new Rect(px, py, iw, 20f), $"{n} server(s) selected.", _stMuted);
+        py += 24f;
+
+        GUI.Label(new Rect(px, py + 3, 52f, 22f), "Mode", _stFormLabel);
+        var mx = px + 56f;
+        if (LicenseManager.IsIPAMUnlocked)
+        {
+            var mw = (iw - 60f) * 0.5f - 4f;
+            var sel0 = _inlineAssignMode == 0;
+            if (ImguiButtonOnce(new Rect(mx, py, mw, 26f), "Contract+DHCP", 9055, sel0 ? _stPrimaryBtn : _stMutedBtn))
+            {
+                _inlineAssignMode = 0;
+            }
+
+            if (ImguiButtonOnce(
+                    new Rect(mx + mw + 8f, py, mw, 26f),
+                    "IPAM prefix",
+                    9056,
+                    _inlineAssignMode == 1 ? _stPrimaryBtn : _stMutedBtn))
+            {
+                _inlineAssignMode = 1;
+            }
+        }
+        else
+        {
+            _inlineAssignMode = 0;
+            GUI.Label(new Rect(mx, py, iw - 56f, 26f), "Contract+DHCP (IPAM prefix requires IPAM license)", _stHint);
+        }
+
+        py += 34f;
+
+        if (_inlineAssignMode == 0)
+        {
+            GUI.Label(
+                new Rect(px, py, iw, 48f),
+                "Sets customer on each selected server, then runs batch DHCP when DHCP is unlocked (same as legacy assign).",
+                _stHint);
+            py += 52f;
+        }
+        else if (LicenseManager.IsIPAMUnlocked)
+        {
+            GUI.Label(new Rect(px, py, 72f, 22f), "Search", _stFormLabel);
+            DrawIpamFormTextField(
+                new Rect(px + 76f, py, Mathf.Min(iw - 80f, 360f), 22f),
+                IpamFormFocusInlinePrefixSearch,
+                128,
+                IpamTextFieldKind.Name);
+            py += 28f;
+
+            var plist = GetFilteredIpamPrefixesForInlineSearch(_inlineIpamPrefixSearchBuf);
+            var listH = Mathf.Clamp(_serverEditPopupRect.height - py - 160f, 80f, 220f);
+            const float rowH = 26f;
+            var innerW = iw - 16f;
+            var inner = new Rect(0f, 0f, innerW, Mathf.Max(listH, plist.Count * rowH));
+            _inlineIpamPrefixListScroll = GUI.BeginScrollView(
+                new Rect(px, py, iw, listH),
+                _inlineIpamPrefixListScroll,
+                inner);
+            for (var i = 0; i < plist.Count; i++)
+            {
+                var p = plist[i];
+                if (p == null)
+                {
+                    continue;
+                }
+
+                var cc = (p.Cidr ?? "").Trim();
+                var marked = string.Equals(p.Id, _inlineIpamPrefixPickId, StringComparison.Ordinal);
+                var line = string.IsNullOrEmpty(p.Name) ? cc : $"{cc}  ({p.Name})";
+                if (ImguiButtonOnce(
+                        new Rect(0f, i * rowH, innerW, rowH - 2f),
+                        line,
+                        930000 + i,
+                        marked ? _stPrimaryBtn : _stMutedBtn))
+                {
+                    _inlineIpamPrefixPickId = p.Id ?? "";
+                }
+            }
+
+            GUI.EndScrollView();
+            py += listH + 8f;
+            GUI.Label(
+                new Rect(px, py, iw, 36f),
+                "First free usable IPv4 in the chosen prefix for each server.",
+                _stHint);
+            py += 40f;
+        }
+
+        if (!string.IsNullOrEmpty(_inlineAssignError))
+        {
+            GUI.Label(new Rect(px, py, iw, 44f), _inlineAssignError, _stError);
+            py += 48f;
+        }
+
+        var btnY = py;
+        if (ImguiButtonOnce(new Rect(px, btnY, 120f, 30f), "Apply", 9060, _stPrimaryBtn))
+        {
+            ApplyInlineCustomerAssign();
+        }
+
+        if (ImguiButtonOnce(new Rect(px + 130f, btnY, 120f, 30f), "Cancel", 9061, _stMutedBtn))
+        {
+            ClearInlineCustomerAssign();
+        }
+
+        py += 36f;
+    }
+
+    private static void DrawServerEditPopupWindow(int windowId)
+    {
+        _ = windowId;
+        // Leave the top-right clear so “Close” is not covered by the drag strip (DragWindow consumes mouse events).
+        var dragW = Mathf.Max(40f, _serverEditPopupRect.width - 100f);
+        GUI.DragWindow(new Rect(0f, 0f, dragW, 28f));
+
+        // Solid shell (same as IOPS modal) — GUI.Window skin can leave a light/semi-transparent client area.
+        if (Event.current.type == EventType.Repaint)
+        {
+            var fillW = _serverEditPopupRect.width;
+            var fillH = Mathf.Min(2000f, _serverEditPopupRect.height + 48f);
+            var oldGc = GUI.color;
+            GUI.color = Color.white;
+            GUI.DrawTexture(new Rect(0f, 0f, fillW, fillH), _texBackdrop, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
+            GUI.color = oldGc;
+        }
+
+        var w = _serverEditPopupRect.width;
+        var h = _serverEditPopupRect.height;
+        CollectSelectedServersIntoScratch();
+        if (SelectedServersScratch.Count == 0)
+        {
+            _serverEditPopupDismissed = true;
+            return;
+        }
+
+        var px = 12f;
+        var py = 28f;
+        DrawServerEditPopupBody(px, ref py, w - 24f);
+
+        var err = DHCPManager.LastSetIpError;
+        if (!string.IsNullOrEmpty(err))
+        {
+            GUI.Label(new Rect(px, h - 36f, w - 24f, 30f), err, _stError);
+        }
+
+        if (ImguiButtonOnce(new Rect(w - 84f, 6f, 72f, 22f), "Close", 9051, _stMutedBtn))
+        {
+            _serverEditPopupDismissed = true;
+            ClearInlineCustomerAssign();
+        }
+    }
+
+    private static void DrawServerEditPopupBody(float px, ref float py, float iw)
+    {
+        var popupFullW = _serverEditPopupRect.width;
         var n = SelectedServersScratch.Count;
 
         GUI.Label(
-            new Rect(px, py, w - 32, 20),
+            new Rect(px, py, iw, 22f),
             n == 1 ? "Edit object · Server" : $"Edit object · {n} servers",
             _stSectionTitle);
-        py += 22f;
+        py += 26f;
 
         if (n > 1)
         {
@@ -2357,8 +2674,8 @@ public static partial class IPAMOverlay
                 sb.Append(" …");
             }
 
-            GUI.Label(new Rect(px, py, w - 32, 34), $"Selected: {sb}", _stMuted);
-            py += 36f;
+            GUI.Label(new Rect(px, py, iw, 36f), $"Selected: {sb}", _stMuted);
+            py += 38f;
         }
         else
         {
@@ -2366,26 +2683,33 @@ public static partial class IPAMOverlay
             var currentIp = DHCPManager.GetServerIP(s0);
             var ipDisp = string.IsNullOrWhiteSpace(currentIp) || currentIp == "0.0.0.0" ? "—" : currentIp;
             GUI.Label(
-                new Rect(px, py, w - 32, 18),
+                new Rect(px, py, iw, 18f),
                 $"Name   {Trunc(DeviceInventoryReflection.GetDisplayName(s0), 56)}    │    IPv4   {ipDisp}",
                 _stMuted);
-            py += 18f;
+            py += 20f;
             var hasRealIp = !string.IsNullOrWhiteSpace(currentIp) && currentIp != "0.0.0.0";
             var cidStr = hasRealIp ? s0.GetCustomerID().ToString() : "—";
             GUI.Label(
-                new Rect(px, py, w - 32, 18),
+                new Rect(px, py, iw, 18f),
                 $"Game customerID   {cidStr}",
                 _stMuted);
-            py += 22f;
+            py += 24f;
         }
 
-        DrawCustomerDropdownAssign(px, ref py, w);
+        DrawCustomerDropdownAssign(px, ref py, popupFullW);
         py += 4f;
-        GUI.Label(
-            new Rect(px, py, w - px - 24, 16),
-            "Multi-select: choosing a customer assigns them and runs DHCP on empty addresses. Single server: use DHCP auto below.",
-            _stHint);
-        py += 20f;
+        if (_inlineAssignCustomer != null)
+        {
+            DrawInlineCustomerAssignSection(px, ref py, iw);
+        }
+        else
+        {
+            GUI.Label(
+                new Rect(px, py, iw, 44f),
+                "Choose a customer above to assign contract and addressing (Contract+DHCP or IPAM prefix). Nothing applies until you press Apply.",
+                _stHint);
+            py += 48f;
+        }
 
         if (n > 1)
         {
@@ -2422,76 +2746,21 @@ public static partial class IPAMOverlay
             py += 32f;
         }
 
-        if (n == 1)
+        if (n > 1)
         {
-            var s0 = SelectedServersScratch[0];
-            GUI.Label(new Rect(px, py + 2, 72, 22), "Address", _stFormLabel);
-            float ox = px + 78f;
-            var oy = py;
-            DrawOctetEditor(ref _oct0, ref ox, oy, 0);
-            GUI.Label(new Rect(ox, oy + 2, 10, 22), ".", _stOctetVal);
-            ox += 12f;
-            DrawOctetEditor(ref _oct1, ref ox, oy, 1);
-            GUI.Label(new Rect(ox, oy + 2, 10, 22), ".", _stOctetVal);
-            ox += 12f;
-            DrawOctetEditor(ref _oct2, ref ox, oy, 2);
-            GUI.Label(new Rect(ox, oy + 2, 10, 22), ".", _stOctetVal);
-            ox += 12f;
-            DrawOctetEditor(ref _oct3, ref ox, oy, 3);
-
-            py += 30f;
-            ox = px + 78f;
-            var btnY = py;
-            if (ImguiButtonOnce(new Rect(ox, btnY, 88, 26), "Apply", 32, _stPrimaryBtn))
-            {
-                DHCPManager.SetServerIP(s0, BuildIpFromOctets());
-            }
-
-            ox += 96f;
-            if (ImguiButtonOnce(new Rect(ox, btnY, 108, 26), "DHCP auto", 33, _stMutedBtn))
-            {
-                if (DHCPManager.AssignDhcpToSingleServer(s0))
-                {
-                    DHCPManager.ClearLastSetIpError();
-                    LoadOctetsFromIp(DHCPManager.GetServerIP(s0));
-                }
-            }
-
-            ox += 116f;
-            if (ImguiButtonOnce(new Rect(ox, btnY, 96, 26), "Clipboard", 34, _stMutedBtn))
-            {
-                LoadOctetsFromIp(GUIUtility.systemCopyBuffer?.Trim());
-            }
-
-            ox += 104f;
-            if (ImguiButtonOnce(new Rect(ox, btnY, 92, 26), "Clear", 35, _stMutedBtn))
-            {
-                if (DHCPManager.SetServerIP(s0, "0.0.0.0", suppressAutoAssignOnEmpty: true))
-                {
-                    LoadOctetsFromIp("0.0.0.0");
-                    DHCPManager.ClearLastSetIpError();
-                    InvalidateDeviceCache();
-                }
-            }
-
-            py += 32f;
             GUI.Label(
-                new Rect(px, py, w - px - 24, 28),
-                "Must match usable addresses for this contract (see rack keypad). Do not assign the gateway IP as the host.",
+                new Rect(px, py, iw, 36f),
+                "DHCP all / Clear all apply to every highlighted server. Ctrl toggles; Shift+click selects a range from the last plain click.",
                 _stHint);
+            py += 40f;
         }
         else
         {
             GUI.Label(
-                new Rect(px, py, w - px - 24, 22),
-                "DHCP all / Clear all apply to every highlighted server. Ctrl toggles; Shift+click selects a range from the last plain click.",
+                new Rect(px, py, iw, 44f),
+                "Pick a customer, then Apply with Contract+DHCP or IPAM prefix. The manual octet editor was removed; use toolbar “Edit servers” after selecting one or more rows.",
                 _stHint);
-        }
-
-        var err = DHCPManager.LastSetIpError;
-        if (!string.IsNullOrEmpty(err))
-        {
-            GUI.Label(new Rect(px, panelY + dph - 28, w - px - 24, 26), err, _stError);
+            py += 48f;
         }
     }
 

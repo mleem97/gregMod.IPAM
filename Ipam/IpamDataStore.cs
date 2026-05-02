@@ -101,7 +101,7 @@ internal static class IpamDataStore
         return EnsureLoaded().Vlans;
     }
 
-    internal static bool TryAddPrefix(string cidr, string name, IpamPrefixParentMode mode, Guid? explicitParentId, out string error)
+    internal static bool TryAddPrefix(string cidr, string name, string tenant, IpamPrefixParentMode mode, Guid? explicitParentId, out string error)
     {
         error = null;
         var trimmed = (cidr ?? "").Trim();
@@ -155,8 +155,98 @@ internal static class IpamDataStore
             ParentId = resolvedParent.HasValue ? resolvedParent.Value.ToString("D") : null,
             Cidr = trimmed,
             Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim(),
+            Tenant = string.IsNullOrWhiteSpace(tenant) ? null : tenant.Trim(),
         };
         root.Prefixes.Add(entry);
+        Save();
+        return true;
+    }
+
+    /// <summary>Updates CIDR (must remain valid vs parent/siblings/children), name, and tenant.</summary>
+    internal static bool TryUpdatePrefix(string id, string newCidr, string name, string tenant, out string error)
+    {
+        error = null;
+        if (string.IsNullOrEmpty(id))
+        {
+            error = "Invalid prefix.";
+            return false;
+        }
+
+        var trimmed = (newCidr ?? "").Trim();
+        if (!RouteMath.TryParseIpv4Cidr(trimmed, out _, out _))
+        {
+            error = "Invalid IPv4 CIDR.";
+            return false;
+        }
+
+        var root = EnsureLoaded();
+        var entry = root.Prefixes.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.Ordinal));
+        if (entry == null)
+        {
+            error = "Prefix not found.";
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(entry.ParentId))
+        {
+            var parent = root.Prefixes.FirstOrDefault(p => string.Equals(p.Id, entry.ParentId, StringComparison.Ordinal));
+            if (parent == null)
+            {
+                error = "Parent prefix missing.";
+                return false;
+            }
+
+            var pc = (parent.Cidr ?? "").Trim();
+            if (!RouteMath.IsStrictChildOf(trimmed, pc))
+            {
+                error = RouteMath.ExplainStrictChildFailure(trimmed, pc);
+                return false;
+            }
+        }
+
+        foreach (var ch in root.Prefixes)
+        {
+            if (ch == null || !string.Equals(ch.ParentId, entry.Id, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var cc = (ch.Cidr ?? "").Trim();
+            if (!RouteMath.TryParseIpv4Cidr(cc, out _, out _))
+            {
+                continue;
+            }
+
+            if (!RouteMath.IsStrictChildOf(cc, trimmed))
+            {
+                error = $"Child prefix {cc} would fall outside {trimmed}. Resize or remove children first.";
+                return false;
+            }
+        }
+
+        foreach (var sib in root.Prefixes)
+        {
+            if (sib == null || string.Equals(sib.Id, entry.Id, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (!string.Equals(sib.ParentId ?? "", entry.ParentId ?? "", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var sc = (sib.Cidr ?? "").Trim();
+            if (RouteMath.Ipv4CidrRangesOverlap(trimmed, sc))
+            {
+                error = $"Overlaps sibling prefix {sc}.";
+                return false;
+            }
+        }
+
+        entry.Cidr = trimmed;
+        entry.Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        entry.Tenant = string.IsNullOrWhiteSpace(tenant) ? null : tenant.Trim();
         Save();
         return true;
     }

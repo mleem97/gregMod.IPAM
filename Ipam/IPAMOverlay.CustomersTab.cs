@@ -805,6 +805,7 @@ public static partial class IPAMOverlay
                 _serverRangeAnchorInstanceId = sel.GetInstanceID();
                 UpdateAnchorServerForDetail();
                 LoadOctetsFromIp(DHCPManager.GetServerIP(sel));
+                OpenServerEditPopupForSelection();
                 if (LicenseManager.IsDHCPUnlocked)
                 {
                     ModDebugLog.Bootstrap();

@@ -297,13 +297,18 @@ public static partial class IPAMOverlay
 
     public static void TickOctetInputSystem()
     {
-        if (!IsVisible || _activeOctetSlot < 0)
+        if (!IsVisible)
         {
             return;
         }
 
         var kb = Keyboard.current;
         if (kb == null)
+        {
+            return;
+        }
+
+        if (_activeOctetSlot < 0)
         {
             return;
         }

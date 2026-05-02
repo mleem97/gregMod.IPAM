@@ -224,4 +224,100 @@ public static class RouteMath
 
         return "That combination is not allowed.";
     }
+
+    /// <summary>Canonical dotted-quad + prefix length for an IPv4 network (big-endian uint).</summary>
+    public static string FormatIpv4Cidr(uint networkBe, int prefixLen)
+    {
+        if (prefixLen < 0 || prefixLen > 32)
+        {
+            return "";
+        }
+
+        var masked = networkBe;
+        if (prefixLen < 32)
+        {
+            masked &= uint.MaxValue << (32 - prefixLen);
+        }
+
+        var a = (masked >> 24) & 0xff;
+        var b = (masked >> 16) & 0xff;
+        var c = (masked >> 8) & 0xff;
+        var d = masked & 0xff;
+        return string.Format(CultureInfo.InvariantCulture, "{0}.{1}.{2}.{3}/{4}", a, b, c, d, prefixLen);
+    }
+
+    /// <summary>
+    /// Network address for the <paramref name="slotIndex"/>th aligned block of length <paramref name="templateLen"/>
+    /// inside <paramref name="parentNetworkBe"/>/<paramref name="parentLen"/> (parent already masked).
+    /// </summary>
+    public static bool TryGetNetworkForTemplateSlot(
+        uint parentNetworkBe,
+        int parentLen,
+        ulong slotIndex,
+        int templateLen,
+        out uint networkBeOut)
+    {
+        networkBeOut = 0;
+        if (parentLen < 0 || parentLen > 32 || templateLen <= parentLen || templateLen > 32)
+        {
+            return false;
+        }
+
+        var blockSize = 1UL << (32 - templateLen);
+        if (blockSize == 0)
+        {
+            return false;
+        }
+
+        var span = 1UL << (32 - parentLen);
+        var maxSlots = span / blockSize;
+        if (slotIndex >= maxSlots)
+        {
+            return false;
+        }
+
+        ulong netUlong = parentNetworkBe + slotIndex * blockSize;
+        if (templateLen < 32)
+        {
+            netUlong &= uint.MaxValue << (32 - templateLen);
+        }
+
+        networkBeOut = (uint)netUlong;
+        return true;
+    }
+
+    /// <summary>First and last host-inclusive IPv4 as uint for a CIDR range.</summary>
+    public static bool TryGetIpv4CidrRangeBounds(string cidr, out uint firstBe, out uint lastBe)
+    {
+        firstBe = 0;
+        lastBe = 0;
+        if (!TryParseIpv4Cidr(cidr, out var net, out var len))
+        {
+            return false;
+        }
+
+        if (len >= 32)
+        {
+            firstBe = lastBe = net;
+            return true;
+        }
+
+        var hostBits = 32 - len;
+        var span = 1UL << hostBits;
+        firstBe = net;
+        lastBe = net + (uint)(span - 1UL);
+        return true;
+    }
+
+    /// <summary>True if the two CIDR ranges overlap (share any IPv4 address).</summary>
+    public static bool Ipv4CidrRangesOverlap(string cidrA, string cidrB)
+    {
+        if (!TryGetIpv4CidrRangeBounds(cidrA, out var a0, out var a1)
+            || !TryGetIpv4CidrRangeBounds(cidrB, out var b0, out var b1))
+        {
+            return false;
+        }
+
+        return a0 <= b1 && b0 <= a1;
+    }
 }

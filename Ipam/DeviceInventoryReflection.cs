@@ -134,9 +134,9 @@ internal static class DeviceInventoryReflection
     /// <summary>
     /// Game prefabs are named <c>Server.{Color}1</c> (3 U) vs <c>Server.{Color}2</c> (7 U). <see cref="Server.serverType"/> indexes that catalog.
     /// </summary>
-    private static bool TryGetServerFormFactorFromPrefabCatalog(Server server, out string label)
+    internal static bool TryGetServerCatalogPrefabAssetName(Server server, out string prefabName)
     {
-        label = null;
+        prefabName = null;
         if (server == null)
         {
             return false;
@@ -182,7 +182,6 @@ internal static class DeviceInventoryReflection
             return false;
         }
 
-        string prefabName;
         try
         {
             prefabName = prefab.name;
@@ -192,8 +191,113 @@ internal static class DeviceInventoryReflection
             return false;
         }
 
+        return !string.IsNullOrEmpty(prefabName);
+    }
+
+    private static bool TryGetServerFormFactorFromPrefabCatalog(Server server, out string label)
+    {
+        label = null;
+        if (!TryGetServerCatalogPrefabAssetName(server, out var prefabName))
+        {
+            return false;
+        }
+
         label = ClassifyServerPrefabAssetName(prefabName);
         return label != null;
+    }
+
+    private static readonly Regex ServerPrefabColorRx = new(
+        @"Server\.([A-Za-z]+)([12])(?:_|$|\(|[^\w])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Rack front-view fill tint from product line in the name (e.g. <c>Server.Blue2_-123</c>).
+    /// Uses the <b>scene instance</b> name first so each placed server keeps its color line; the catalog
+    /// prefab for a type index is often one shared asset (e.g. Yellow), which made every server look wrong.
+    /// </summary>
+    internal static Color GetServerRackDiagramBlockTint(Server server)
+    {
+        var fallback = new Color(0.74f, 0.76f, 0.80f, 0.92f);
+        if (server == null)
+        {
+            return fallback;
+        }
+
+        try
+        {
+            var sn = server.name ?? "";
+            var fromScene = ParseProductLineColorFromPrefabName(sn);
+            if (fromScene.a > 0.01f)
+            {
+                return fromScene;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        if (TryGetServerCatalogPrefabAssetName(server, out var pn) && !string.IsNullOrEmpty(pn))
+        {
+            var fromCatalog = ParseProductLineColorFromPrefabName(pn);
+            if (fromCatalog.a > 0.01f)
+            {
+                return fromCatalog;
+            }
+        }
+
+        return fallback;
+    }
+
+    internal static Color ContrastingRackDiagramTextColor(Color backgroundFill)
+    {
+        var lum = 0.299f * backgroundFill.r + 0.587f * backgroundFill.g + 0.114f * backgroundFill.b;
+        return lum > 0.52f ? new Color(0.06f, 0.07f, 0.09f, 1f) : new Color(0.96f, 0.97f, 0.99f, 1f);
+    }
+
+    private static Color ParseProductLineColorFromPrefabName(string assetName)
+    {
+        if (string.IsNullOrEmpty(assetName))
+        {
+            return new Color(0f, 0f, 0f, 0f);
+        }
+
+        var n = StripCloneSuffix(assetName.Trim());
+        var m = ServerPrefabColorRx.Match(n);
+        if (!m.Success)
+        {
+            return new Color(0f, 0f, 0f, 0f);
+        }
+
+        return MapProductLineColorToken(m.Groups[1].Value);
+    }
+
+    private static Color MapProductLineColorToken(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return new Color(0f, 0f, 0f, 0f);
+        }
+
+        switch (token.Trim().ToLowerInvariant())
+        {
+            case "yellow": return new Color(0.93f, 0.82f, 0.22f, 0.96f);
+            case "orange": return new Color(0.95f, 0.58f, 0.22f, 0.96f);
+            case "red": return new Color(0.90f, 0.35f, 0.32f, 0.96f);
+            case "pink": return new Color(0.92f, 0.55f, 0.72f, 0.96f);
+            case "purple": return new Color(0.62f, 0.42f, 0.88f, 0.96f);
+            case "blue": return new Color(0.32f, 0.55f, 0.92f, 0.96f);
+            case "cyan": return new Color(0.28f, 0.78f, 0.88f, 0.96f);
+            case "teal": return new Color(0.22f, 0.62f, 0.58f, 0.96f);
+            case "green": return new Color(0.35f, 0.78f, 0.42f, 0.96f);
+            case "lime": return new Color(0.65f, 0.88f, 0.32f, 0.96f);
+            case "brown": return new Color(0.62f, 0.48f, 0.36f, 0.96f);
+            case "white": return new Color(0.88f, 0.89f, 0.91f, 0.96f);
+            case "gray":
+            case "grey": return new Color(0.62f, 0.64f, 0.68f, 0.96f);
+            case "black": return new Color(0.28f, 0.29f, 0.31f, 0.96f);
+            default: return new Color(0f, 0f, 0f, 0f);
+        }
     }
 
     /// <summary>Parses stable prefab / scene object names like <c>Server.Yellow1</c> or <c>Server.Purple2_-123</c>.</summary>
@@ -358,6 +462,199 @@ internal static class DeviceInventoryReflection
             default:
                 return int.TryParse(v.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out i);
         }
+    }
+
+    private static bool TryConvertToBool(object v, out bool value)
+    {
+        value = false;
+        if (v == null)
+        {
+            return false;
+        }
+
+        switch (v)
+        {
+            case bool b:
+                value = b;
+                return true;
+            case int i:
+                value = i != 0;
+                return true;
+            default:
+                var s = v.ToString()?.Trim();
+                if (string.IsNullOrEmpty(s))
+                {
+                    return false;
+                }
+
+                if (bool.TryParse(s, out value))
+                {
+                    return true;
+                }
+
+                if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
+                {
+                    value = n != 0;
+                    return true;
+                }
+
+                return false;
+        }
+    }
+
+    private static bool TryReadBoolMember(object o, string[] names, out bool value)
+    {
+        value = false;
+        if (o == null)
+        {
+            return false;
+        }
+
+        for (var bt = o.GetType(); bt != null && bt != typeof(object); bt = bt.BaseType)
+        {
+            foreach (var name in names)
+            {
+                try
+                {
+                    var p = bt.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (p != null && p.CanRead && TryConvertToBool(p.GetValue(o), out value))
+                    {
+                        return true;
+                    }
+
+                    var f = bt.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (f != null && TryConvertToBool(f.GetValue(o), out value))
+                    {
+                        return true;
+                    }
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static readonly string[] NetworkSwitchRouterBoolHints =
+    {
+        "isRouter", "IsRouter", "asRouter", "AsRouter", "isLayer3", "IsLayer3", "layer3", "Layer3",
+    };
+
+    private static readonly string[] NetworkSwitchRouterStringHints =
+    {
+        "deviceRole", "DeviceRole", "networkRole", "NetworkRole", "switchRole", "SwitchRole",
+        "deviceKind", "DeviceKind", "switchKind", "SwitchKind", "role", "Role",
+    };
+
+    /// <summary>
+    /// Newer game builds expose L3 routers as <see cref="NetworkSwitch"/> (or subclasses). Used by Devices + rack pickers.
+    /// </summary>
+    internal static bool NetworkSwitchBehavesAsRouter(NetworkSwitch sw)
+    {
+        if (sw == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var typeName = sw.GetType().Name ?? "";
+            if (typeName.IndexOf("Router", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        // Prefab / UI names like "Router4xQSXP16xSFP 1_-270828" (still NetworkSwitch in scene).
+        try
+        {
+            var disp = GetDisplayName(sw);
+            if (!string.IsNullOrWhiteSpace(disp)
+                && disp.IndexOf("Router", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        try
+        {
+            var nm = sw.name ?? "";
+            if (nm.IndexOf("Router", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        if (TryReadBoolMember(sw, NetworkSwitchRouterBoolHints, out var b) && b)
+        {
+            return true;
+        }
+
+        if (TryReadStringMember(sw, NetworkSwitchRouterStringHints, out var role) && !string.IsNullOrEmpty(role))
+        {
+            if (role.IndexOf("router", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            if (role.IndexOf("l3", StringComparison.OrdinalIgnoreCase) >= 0
+                || role.IndexOf("layer3", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+
+        for (var bt = sw.GetType(); bt != null && bt != typeof(object); bt = bt.BaseType)
+        {
+            foreach (var name in NetworkSwitchRouterStringHints)
+            {
+                try
+                {
+                    var p = bt.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var pv = p?.GetValue(sw);
+                    if (pv != null)
+                    {
+                        var es = pv.ToString() ?? "";
+                        if (es.IndexOf("router", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            return true;
+                        }
+                    }
+
+                    var f = bt.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var fv = f?.GetValue(sw);
+                    if (fv != null)
+                    {
+                        var es = fv.ToString() ?? "";
+                        if (es.IndexOf("router", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
+            }
+        }
+
+        return false;
     }
 
     internal static string GetDisplayName(UnityEngine.Object o)

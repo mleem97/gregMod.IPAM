@@ -27,14 +27,20 @@ public static partial class IPAMOverlay
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
             _ipamFormBackspaceHeldSince = -1f;
+            _ipamFormRackMountStartUSelectAll = false;
             return;
         }
 
         var kb = Keyboard.current;
-        if (kb != null && !string.IsNullOrEmpty(_ipamPrefixEditId) && IpamEscapePressedThisFrame)
+        if (kb != null && _ipamChildPrefixWizardOpen && IpamEscapePressedThisFrame)
         {
-            IpamClosePrefixEditPanel();
+            CloseIpamChildPrefixWizard();
             return;
+        }
+
+        if (_ipamFormFieldFocus != IpamFormFocusRackMountStartU)
+        {
+            _ipamFormRackMountStartUSelectAll = false;
         }
 
         if (_ipamFormFieldFocus == IpamFormFocusNone)
@@ -42,15 +48,43 @@ public static partial class IPAMOverlay
             return;
         }
 
-        if (_navSection != NavSection.Ipam || (_ipamSub != IpamSubSection.Prefixes && _ipamSub != IpamSubSection.Vlans))
+        var wizardChildPrefixFocus =
+            _ipamChildPrefixWizardOpen
+            && _navSection == NavSection.Ipam
+            && _ipamSub == IpamSubSection.Prefixes
+            && (_ipamFormFieldFocus == IpamFormFocusWizardChildCidr
+                || _ipamFormFieldFocus == IpamFormFocusWizardChildName
+                || _ipamFormFieldFocus == IpamFormFocusWizardChildTenant);
+
+        var inlinePrefixSearchFocus =
+            ShouldDrawServerEditPopup()
+            && !_serverEditPopupDismissed
+            && _inlineAssignCustomer != null
+            && _ipamFormFieldFocus == IpamFormFocusInlinePrefixSearch;
+        var racksTextFocus =
+            _navSection == NavSection.Racks
+            && _ipamFormFieldFocus >= IpamFormFocusRackNewName
+            && _ipamFormFieldFocus <= IpamFormFocusRackMountSwitchSearch;
+        if (!wizardChildPrefixFocus
+            && !inlinePrefixSearchFocus
+            && !racksTextFocus
+            && (_navSection != NavSection.Ipam || (_ipamSub != IpamSubSection.Prefixes && _ipamSub != IpamSubSection.Vlans)))
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
             _ipamFormBackspaceHeldSince = -1f;
             return;
         }
 
-        if (_ipamFormFieldFocus is IpamFormFocusEditPrefixName or IpamFormFocusEditPrefixTenant
-            && (_ipamSub != IpamSubSection.Prefixes || string.IsNullOrEmpty(_ipamPrefixEditId)))
+        if (_ipamFormFieldFocus == IpamFormFocusInlinePrefixSearch
+            && (!ShouldDrawServerEditPopup() || _serverEditPopupDismissed || _inlineAssignCustomer == null))
+        {
+            _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamFormBackspaceHeldSince = -1f;
+            return;
+        }
+
+        if (_ipamFormFieldFocus is IpamFormFocusWizardChildCidr or IpamFormFocusWizardChildName or IpamFormFocusWizardChildTenant
+            && (!_ipamChildPrefixWizardOpen || _navSection != NavSection.Ipam || _ipamSub != IpamSubSection.Prefixes))
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
             _ipamFormBackspaceHeldSince = -1f;
@@ -66,6 +100,7 @@ public static partial class IPAMOverlay
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
             _ipamFormBackspaceHeldSince = -1f;
+            _ipamFormRackMountStartUSelectAll = false;
             return;
         }
 
@@ -73,6 +108,7 @@ public static partial class IPAMOverlay
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
             _ipamFormBackspaceHeldSince = -1f;
+            _ipamFormRackMountStartUSelectAll = false;
             return;
         }
 
@@ -217,8 +253,13 @@ public static partial class IPAMOverlay
             IpamFormFocusPrefixName => IpamTextFieldKind.Name,
             IpamFormFocusVlanId => IpamTextFieldKind.VlanIdDigits,
             IpamFormFocusVlanName => IpamTextFieldKind.Name,
-            IpamFormFocusEditPrefixName => IpamTextFieldKind.Name,
-            IpamFormFocusEditPrefixTenant => IpamTextFieldKind.Name,
+            IpamFormFocusInlinePrefixSearch => IpamTextFieldKind.Name,
+            IpamFormFocusWizardChildCidr => IpamTextFieldKind.Cidr,
+            IpamFormFocusWizardChildName => IpamTextFieldKind.Name,
+            IpamFormFocusWizardChildTenant => IpamTextFieldKind.Name,
+            IpamFormFocusRackMountStartU => IpamTextFieldKind.VlanIdDigits,
+            IpamFormFocusRackMountServerSearch => IpamTextFieldKind.Name,
+            IpamFormFocusRackMountSwitchSearch => IpamTextFieldKind.Name,
             _ => IpamTextFieldKind.Name,
         };
     }
@@ -231,8 +272,16 @@ public static partial class IPAMOverlay
             IpamFormFocusPrefixName => 128,
             IpamFormFocusVlanId => 4,
             IpamFormFocusVlanName => 128,
-            IpamFormFocusEditPrefixName => 128,
-            IpamFormFocusEditPrefixTenant => 128,
+            IpamFormFocusInlinePrefixSearch => 128,
+            IpamFormFocusWizardChildCidr => 64,
+            IpamFormFocusWizardChildName => 128,
+            IpamFormFocusWizardChildTenant => 128,
+            IpamFormFocusRackNewName => 96,
+            IpamFormFocusRackRename => 96,
+            IpamFormFocusRackMountStartU => 2,
+            IpamFormFocusRackPatchLabel => 96,
+            IpamFormFocusRackMountServerSearch => 96,
+            IpamFormFocusRackMountSwitchSearch => 96,
             _ => 0,
         };
     }
@@ -245,8 +294,16 @@ public static partial class IPAMOverlay
             IpamFormFocusPrefixName => _ipamPrefixFormName ?? "",
             IpamFormFocusVlanId => _ipamVlanFormId ?? "",
             IpamFormFocusVlanName => _ipamVlanFormName ?? "",
-            IpamFormFocusEditPrefixName => _ipamPrefixEditNameBuf ?? "",
-            IpamFormFocusEditPrefixTenant => _ipamPrefixEditTenantBuf ?? "",
+            IpamFormFocusInlinePrefixSearch => _inlineIpamPrefixSearchBuf ?? "",
+            IpamFormFocusWizardChildCidr => _ipamChildPrefixWizardCidrBuf ?? "",
+            IpamFormFocusWizardChildName => _ipamChildPrefixWizardNameBuf ?? "",
+            IpamFormFocusWizardChildTenant => _ipamChildPrefixWizardTenantBuf ?? "",
+            IpamFormFocusRackNewName => _rackFormNewName ?? "",
+            IpamFormFocusRackRename => _rackRenameDraft ?? "",
+            IpamFormFocusRackMountStartU => _rackMountStartU ?? "",
+            IpamFormFocusRackPatchLabel => _rackPatchLabelDraft ?? "",
+            IpamFormFocusRackMountServerSearch => _rackMountServerSearchBuf ?? "",
+            IpamFormFocusRackMountSwitchSearch => _rackMountSwitchSearchBuf ?? "",
             _ => "",
         };
     }
@@ -267,17 +324,48 @@ public static partial class IPAMOverlay
             case IpamFormFocusVlanName:
                 _ipamVlanFormName = s;
                 break;
-            case IpamFormFocusEditPrefixName:
-                _ipamPrefixEditNameBuf = s;
+            case IpamFormFocusInlinePrefixSearch:
+                _inlineIpamPrefixSearchBuf = s;
                 break;
-            case IpamFormFocusEditPrefixTenant:
-                _ipamPrefixEditTenantBuf = s;
+            case IpamFormFocusWizardChildCidr:
+                _ipamChildPrefixWizardCidrBuf = s;
+                break;
+            case IpamFormFocusWizardChildName:
+                _ipamChildPrefixWizardNameBuf = s;
+                break;
+            case IpamFormFocusWizardChildTenant:
+                _ipamChildPrefixWizardTenantBuf = s;
+                break;
+            case IpamFormFocusRackNewName:
+                _rackFormNewName = s;
+                break;
+            case IpamFormFocusRackRename:
+                _rackRenameDraft = s;
+                break;
+            case IpamFormFocusRackMountStartU:
+                _rackMountStartU = s;
+                break;
+            case IpamFormFocusRackPatchLabel:
+                _rackPatchLabelDraft = s;
+                break;
+            case IpamFormFocusRackMountServerSearch:
+                _rackMountServerSearchBuf = s;
+                break;
+            case IpamFormFocusRackMountSwitchSearch:
+                _rackMountSwitchSearchBuf = s;
                 break;
         }
     }
 
     private static void IpamFormBackspaceFocused()
     {
+        if (_ipamFormFieldFocus == IpamFormFocusRackMountStartU && _ipamFormRackMountStartUSelectAll)
+        {
+            _ipamFormRackMountStartUSelectAll = false;
+            SetIpamFormFocusBuffer("");
+            return;
+        }
+
         var v = GetIpamFormFocusBuffer();
         if (v.Length > 0)
         {
@@ -289,6 +377,13 @@ public static partial class IPAMOverlay
     {
         if (!IpamFormCharAllowed(c, kind))
         {
+            return;
+        }
+
+        if (_ipamFormFieldFocus == IpamFormFocusRackMountStartU && _ipamFormRackMountStartUSelectAll)
+        {
+            _ipamFormRackMountStartUSelectAll = false;
+            SetIpamFormFocusBuffer(char.ToString(c));
             return;
         }
 
@@ -321,6 +416,7 @@ public static partial class IPAMOverlay
             _ipamFormFieldFocus = focusSlot;
             _activeOctetSlot = -1;
             GUIUtility.keyboardControl = id;
+            _ipamFormRackMountStartUSelectAll = focusSlot == IpamFormFocusRackMountStartU;
             e.Use();
         }
 
@@ -343,7 +439,25 @@ public static partial class IPAMOverlay
         DrawTintedRect(r, bg);
         var pad = 4f;
         var disp = v ?? "";
-        if (focused && (Mathf.FloorToInt(Time.realtimeSinceStartup * 2f) % 2 == 0))
+        var selectAll =
+            focused
+            && focusSlot == IpamFormFocusRackMountStartU
+            && _ipamFormRackMountStartUSelectAll
+            && disp.Length > 0
+            && _stTableCell != null;
+        if (selectAll)
+        {
+            var tw = Mathf.Min(_stTableCell.CalcSize(new GUIContent(disp)).x + 3f, r.width - pad * 2f);
+            DrawTintedRect(
+                new Rect(r.x + pad, r.y + 3f, Mathf.Max(tw, 10f), r.height - 6f),
+                new Color(0.26f, 0.44f, 0.72f, 0.42f));
+        }
+
+        var showCaret =
+            focused
+            && !selectAll
+            && (Mathf.FloorToInt(Time.realtimeSinceStartup * 2f) % 2 == 0);
+        if (showCaret)
         {
             disp += "|";
         }
@@ -359,8 +473,16 @@ public static partial class IPAMOverlay
             IpamFormFocusPrefixName => _ipamPrefixFormName ?? "",
             IpamFormFocusVlanId => _ipamVlanFormId ?? "",
             IpamFormFocusVlanName => _ipamVlanFormName ?? "",
-            IpamFormFocusEditPrefixName => _ipamPrefixEditNameBuf ?? "",
-            IpamFormFocusEditPrefixTenant => _ipamPrefixEditTenantBuf ?? "",
+            IpamFormFocusInlinePrefixSearch => _inlineIpamPrefixSearchBuf ?? "",
+            IpamFormFocusWizardChildCidr => _ipamChildPrefixWizardCidrBuf ?? "",
+            IpamFormFocusWizardChildName => _ipamChildPrefixWizardNameBuf ?? "",
+            IpamFormFocusWizardChildTenant => _ipamChildPrefixWizardTenantBuf ?? "",
+            IpamFormFocusRackNewName => _rackFormNewName ?? "",
+            IpamFormFocusRackRename => _rackRenameDraft ?? "",
+            IpamFormFocusRackMountStartU => _rackMountStartU ?? "",
+            IpamFormFocusRackPatchLabel => _rackPatchLabelDraft ?? "",
+            IpamFormFocusRackMountServerSearch => _rackMountServerSearchBuf ?? "",
+            IpamFormFocusRackMountSwitchSearch => _rackMountSwitchSearchBuf ?? "",
             _ => "",
         };
     }
@@ -374,16 +496,8 @@ public static partial class IPAMOverlay
 
         if (e.keyCode == KeyCode.Escape || e.keyCode == KeyCode.Tab)
         {
-            if (!string.IsNullOrEmpty(_ipamPrefixEditId)
-                && (_ipamFormFieldFocus == IpamFormFocusEditPrefixName || _ipamFormFieldFocus == IpamFormFocusEditPrefixTenant))
-            {
-                IpamClosePrefixEditPanel();
-            }
-            else
-            {
-                _ipamFormFieldFocus = IpamFormFocusNone;
-            }
-
+            _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamFormRackMountStartUSelectAll = false;
             return true;
         }
 
@@ -396,6 +510,7 @@ public static partial class IPAMOverlay
         if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamFormRackMountStartUSelectAll = false;
             return true;
         }
 
@@ -408,6 +523,13 @@ public static partial class IPAMOverlay
         if (!IpamFormCharAllowed(c, kind))
         {
             return false;
+        }
+
+        if (_ipamFormFieldFocus == IpamFormFocusRackMountStartU && _ipamFormRackMountStartUSelectAll)
+        {
+            _ipamFormRackMountStartUSelectAll = false;
+            SetIpamFormFocusBuffer(char.ToString(c));
+            return true;
         }
 
         var v = GetIpamFormFocusBuffer();

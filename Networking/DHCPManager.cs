@@ -576,6 +576,31 @@ public static class DHCPManager
         return null;
     }
 
+    /// <summary>
+    /// Picks the first usable IPv4 in <paramref name="cidr"/> that passes the same DHCP UI rules as batch assign
+    /// (assigned pool, other servers, typical .1 gateway skip).
+    /// </summary>
+    public static bool TryPickUnusedIpFromSubnet(string cidr, Server server, out string ip)
+    {
+        ip = null;
+        if (string.IsNullOrWhiteSpace(cidr) || server == null)
+        {
+            return false;
+        }
+
+        var trimmed = cidr.Trim();
+        var allServers = UnityEngine.Object.FindObjectsOfType<Server>();
+        var usable = GameSubnetHelper.GetUsableIpsForSubnet(trimmed, logDetail: false);
+        var picked = PickFromUsableArray(usable, server, allServers, trimmed, logStep: false, logEachReject: false);
+        if (string.IsNullOrEmpty(picked))
+        {
+            return false;
+        }
+
+        ip = picked;
+        return true;
+    }
+
     private static string PickFromPrivateLan(string privateCidr, Server server, Server[] allServers)
     {
         foreach (var candidate in CustomerPrivateSubnetRegistry.EnumerateDhcpCandidates(privateCidr))

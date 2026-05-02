@@ -10,36 +10,11 @@ namespace DHCPSwitches;
 
 public static partial class IPAMOverlay
 {
-    private static void IpamClosePrefixEditPanel()
-    {
-        _ipamPrefixEditId = null;
-        _ipamPrefixEditNameBuf = "";
-        _ipamPrefixEditTenantBuf = "";
-        _ipamPrefixEditSaveError = null;
-        _ipamFormBackspaceHeldSince = -1f;
-        if (_ipamFormFieldFocus == IpamFormFocusEditPrefixName || _ipamFormFieldFocus == IpamFormFocusEditPrefixTenant)
-        {
-            _ipamFormFieldFocus = IpamFormFocusNone;
-        }
-    }
+    /// <summary>Max lines drawn in the drilled-folder “IPv4 in this prefix” block (scroll the window for the rest).</summary>
+    private const int IpamDrilledIpListDisplayMax = 400;
 
-    private static void IpamNavigateToPrefixIps(IpamPrefixEntry p)
-    {
-        if (p == null)
-        {
-            return;
-        }
-
-        IpamClosePrefixEditPanel();
-        _ipamIpAddressFilterCidr = (p.Cidr ?? "").Trim();
-        _ipamIpAddressPageIndex = 0;
-        _ipamFormFieldFocus = IpamFormFocusNone;
-        _navSection = NavSection.Ipam;
-        _ipamSub = IpamSubSection.IpAddresses;
-        _scroll = Vector2.zero;
-        _customersTabAddServerWizardOpen = false;
-        RecomputeContentHeight();
-    }
+    /// <summary>Hide the per-host IPv4 table for aggregate prefixes (/16 and shorter); show only the prefix tree.</summary>
+    private const int IpamDrilledIpv4HideWhenPrefixLenAtOrBelow = 16;
 
     private static string _ipamPrefixFormCidr = "";
     private static string _ipamPrefixFormName = "";
@@ -64,6 +39,7 @@ public static partial class IPAMOverlay
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
             _ipamIpAddrPageMenuOpen = false;
+            _ipamPrefixPageMenuOpen = false;
             _ipamDevicesSwitchPageMenuOpen = false;
             _ipamDevicesServerPageMenuOpen = false;
             _customersTabAddServerWizardOpen = false;
@@ -71,7 +47,7 @@ public static partial class IPAMOverlay
             {
                 _ipamPrefixesDrillParentId = null;
                 _ipamPrefixAddAsRoot = false;
-                IpamClosePrefixEditPanel();
+                CloseIpamChildPrefixWizard();
             }
 
             if (sub == IpamSubSection.Prefixes)
@@ -97,32 +73,149 @@ public static partial class IPAMOverlay
         if (string.IsNullOrEmpty(_ipamPrefixesDrillParentId))
         {
             var n = 0;
-            Walk(prefixes, null, ref n);
+            WalkVisibleMerged(prefixes, null, ref n);
             return n;
         }
 
         if (prefixes.All(p => p.Id != _ipamPrefixesDrillParentId))
         {
             var n2 = 0;
-            Walk(prefixes, null, ref n2);
+            WalkVisibleMerged(prefixes, null, ref n2);
             return n2;
         }
 
-        var sub = 0;
-        Walk(prefixes, _ipamPrefixesDrillParentId, ref sub);
-        return Mathf.Max(1, sub);
+        var merged = BuildMergedFolderRows(prefixes, _ipamPrefixesDrillParentId);
+        NormalizeIpamPrefixPageSize();
+        ClampIpamPrefixPageIndex(merged.Count);
+        var start = _ipamPrefixPageIndex * _ipamPrefixPageSize;
+        var visible = Mathf.Min(_ipamPrefixPageSize, Mathf.Max(0, merged.Count - start));
+        return Mathf.Max(1, visible);
     }
 
-    private static void Walk(IReadOnlyList<IpamPrefixEntry> all, string parentId, ref int n)
+    /// <summary>Height of the drilled-folder prefix pagination bar (matches IP address table).</summary>
+    private const float IpamPrefixPaginationBarH = 28f;
+
+    private static void NormalizeIpamPrefixPageSize()
     {
-        IEnumerable<IpamPrefixEntry> q = all.Where(p =>
-            string.IsNullOrEmpty(parentId)
-                ? string.IsNullOrEmpty(p.ParentId)
-                : string.Equals(p.ParentId, parentId, StringComparison.Ordinal));
-        foreach (var p in q.OrderBy(static p => NetworkSortKey(p)))
+        if (_ipamPrefixPageSize != 25 && _ipamPrefixPageSize != 50 && _ipamPrefixPageSize != 100)
         {
-            n++;
-            Walk(all, p.Id, ref n);
+            _ipamPrefixPageSize = 50;
+        }
+    }
+
+    private static void ClampIpamPrefixPageIndex(int totalCount)
+    {
+        NormalizeIpamPrefixPageSize();
+        var ps = _ipamPrefixPageSize;
+        if (totalCount <= 0)
+        {
+            _ipamPrefixPageIndex = 0;
+            return;
+        }
+
+        var maxPage = (totalCount - 1) / ps;
+        if (_ipamPrefixPageIndex > maxPage)
+        {
+            _ipamPrefixPageIndex = maxPage;
+        }
+
+        if (_ipamPrefixPageIndex < 0)
+        {
+            _ipamPrefixPageIndex = 0;
+        }
+    }
+
+    private static void DrawIpamPrefixFolderPagination(float x0, ref float y, float cardW, int totalRows)
+    {
+        var tableW = cardW - IpamIpAddressGearColW;
+        NormalizeIpamPrefixPageSize();
+        ClampIpamPrefixPageIndex(totalRows);
+        var ps = _ipamPrefixPageSize;
+        var pageCount = totalRows == 0 ? 1 : (totalRows + ps - 1) / ps;
+        var pageStart = _ipamPrefixPageIndex * ps;
+        var pageEnd = totalRows == 0 ? 0 : Mathf.Min(totalRows, pageStart + ps);
+
+        var navY = y + 1f;
+        var gearRect = new Rect(x0 + tableW, y, IpamIpAddressGearColW, 22f);
+        var menuDropRect = new Rect(x0 + cardW - 132f, y + 22f, 128f, 68f);
+        var eClose = Event.current;
+        if (eClose != null && eClose.type == EventType.MouseDown && eClose.button == 0 && _ipamPrefixPageMenuOpen)
+        {
+            if (!menuDropRect.Contains(eClose.mousePosition) && !gearRect.Contains(eClose.mousePosition))
+            {
+                _ipamPrefixPageMenuOpen = false;
+            }
+        }
+
+        var label = totalRows == 0
+            ? "No rows"
+            : $"Page {_ipamPrefixPageIndex + 1} / {pageCount}   ·   {pageStart + 1}-{pageEnd} of {totalRows}";
+        GUI.Label(new Rect(x0, y + 2f, tableW - 200f, 22f), label, _stHint);
+        if (ImguiButtonOnce(new Rect(x0 + tableW - 168f, navY, 72f, 22f), "Previous", 9132, _stMutedBtn))
+        {
+            if (_ipamPrefixPageIndex > 0)
+            {
+                _ipamPrefixPageIndex--;
+                RecomputeContentHeight();
+            }
+        }
+
+        if (ImguiButtonOnce(new Rect(x0 + tableW - 90f, navY, 82f, 22f), "Next", 9133, _stMutedBtn))
+        {
+            if (_ipamPrefixPageIndex < pageCount - 1)
+            {
+                _ipamPrefixPageIndex++;
+                RecomputeContentHeight();
+            }
+        }
+
+        if (ImguiButtonOnce(gearRect, "\u2699", 9134, _stMutedBtn))
+        {
+            _ipamPrefixPageMenuOpen = !_ipamPrefixPageMenuOpen;
+            _ipamIpAddrPageMenuOpen = false;
+        }
+
+        DrawIpamPrefixPageSizePopup(menuDropRect);
+        y += IpamPrefixPaginationBarH;
+    }
+
+    private static void DrawIpamPrefixPageSizePopup(Rect menuDropRect)
+    {
+        if (!_ipamPrefixPageMenuOpen)
+        {
+            return;
+        }
+
+        if (Event.current.type == EventType.Repaint)
+        {
+            DrawTintedRect(menuDropRect, new Color(0.08f, 0.1f, 0.12f, 0.96f));
+        }
+
+        var optY = menuDropRect.y + 4f;
+        if (ImguiButtonOnce(new Rect(menuDropRect.x + 4f, optY, menuDropRect.width - 8f, 20f), "25 per page", 9135, _stMutedBtn))
+        {
+            _ipamPrefixPageSize = 25;
+            _ipamPrefixPageIndex = 0;
+            _ipamPrefixPageMenuOpen = false;
+            RecomputeContentHeight();
+        }
+
+        optY += 22f;
+        if (ImguiButtonOnce(new Rect(menuDropRect.x + 4f, optY, menuDropRect.width - 8f, 20f), "50 per page", 9136, _stMutedBtn))
+        {
+            _ipamPrefixPageSize = 50;
+            _ipamPrefixPageIndex = 0;
+            _ipamPrefixPageMenuOpen = false;
+            RecomputeContentHeight();
+        }
+
+        optY += 22f;
+        if (ImguiButtonOnce(new Rect(menuDropRect.x + 4f, optY, menuDropRect.width - 8f, 20f), "100 per page", 9137, _stMutedBtn))
+        {
+            _ipamPrefixPageSize = 100;
+            _ipamPrefixPageIndex = 0;
+            _ipamPrefixPageMenuOpen = false;
+            RecomputeContentHeight();
         }
     }
 
@@ -149,6 +242,13 @@ public static partial class IPAMOverlay
         y += 8f;
 
         var prefixes = IpamDataStore.GetPrefixes();
+        var drillPagingSig = _ipamPrefixesDrillParentId ?? "";
+        if (!string.Equals(_ipamPrefixPagingDrillSig, drillPagingSig, StringComparison.Ordinal))
+        {
+            _ipamPrefixPagingDrillSig = drillPagingSig;
+            _ipamPrefixPageIndex = 0;
+        }
+
         if (!string.IsNullOrEmpty(_ipamPrefixesDrillParentId) && prefixes.All(p => p.Id != _ipamPrefixesDrillParentId))
         {
             _ipamPrefixesDrillParentId = null;
@@ -216,7 +316,7 @@ public static partial class IPAMOverlay
         if (ImguiButtonOnce(addRect, "Add prefix", 9101, _stPrimaryBtn))
         {
             _ipamPrefixFormError = "";
-            if (!IpamDataStore.TryAddPrefix(_ipamPrefixFormCidr, _ipamPrefixFormName, addMode, explicitParentId, out var err))
+            if (!IpamDataStore.TryAddPrefix(_ipamPrefixFormCidr, _ipamPrefixFormName, null, addMode, explicitParentId, out var err))
             {
                 _ipamPrefixFormError = err ?? "Could not add prefix.";
             }
@@ -256,14 +356,21 @@ public static partial class IPAMOverlay
         }
 
         y += 6f;
+        IpamPrefixEntry ipamDrilledScope = null;
         if (!string.IsNullOrEmpty(_ipamPrefixesDrillParentId))
         {
-            var scope = prefixes.FirstOrDefault(p => string.Equals(p.Id, _ipamPrefixesDrillParentId, StringComparison.Ordinal));
-            var scopeLabel = scope == null
+            ipamDrilledScope = prefixes.FirstOrDefault(p => string.Equals(p.Id, _ipamPrefixesDrillParentId, StringComparison.Ordinal));
+            var scopeLabel = ipamDrilledScope == null
                 ? "prefix"
-                : $"{(scope.Cidr ?? "").Trim()}{(string.IsNullOrEmpty(scope.Name) ? "" : $"  ({scope.Name})")}";
-            GUI.Label(new Rect(x0, y, cardW - 136f, SectionTitleH), $"Inside: {scopeLabel}", _stSectionTitle);
-            var backRect = new Rect(x0 + cardW - 128f, y, 120f, SectionTitleH);
+                : $"{(ipamDrilledScope.Cidr ?? "").Trim()}{(string.IsNullOrEmpty(ipamDrilledScope.Name) ? "" : $"  ({ipamDrilledScope.Name})")}";
+            GUI.Label(new Rect(x0, y, cardW - 268f, SectionTitleH), $"Inside: {scopeLabel}", _stSectionTitle);
+            var editFolderRect = new Rect(x0 + cardW - 260f, y, 128f, SectionTitleH);
+            var backRect = new Rect(x0 + cardW - 126f, y, 118f, SectionTitleH);
+            if (ImguiButtonOnce(editFolderRect, "Edit this prefix", 9107, _stMutedBtn))
+            {
+                OpenIpamChildPrefixWizardEdit(_ipamPrefixesDrillParentId);
+            }
+
             if (ImguiButtonOnce(backRect, "↑ All prefixes", 9105, _stMutedBtn))
             {
                 _ipamPrefixesDrillParentId = null;
@@ -280,7 +387,10 @@ public static partial class IPAMOverlay
         y += SectionTitleH + 2f;
         if (prefixes.Count > 0)
         {
-            GUI.Label(new Rect(x0, y, cardW - 100f, 20f), "Tip: double-click a row to open it and list only its children.", _stHint);
+            GUI.Label(
+                new Rect(x0, y, cardW - 100f, 20f),
+                "Tip: double-click any column on a row (except Actions) to open that prefix and list only its children.",
+                _stHint);
             if (ImguiButtonOnce(new Rect(x0 + cardW - 96f, y, 92f, 20f), "Deselect row", 9106, _stMutedBtn))
             {
                 _ipamSelectedPrefixId = null;
@@ -296,14 +406,20 @@ public static partial class IPAMOverlay
 
         y += 4f;
 
-        GetIpamPrefixColumnWidths(cardW, out var colPrefix, out var colStatus, out var colChild, out var colUtil, out var colTenant, out var colActions);
+        GetIpamPrefixColumnWidths(cardW, out var colPrefix, out var colStatus, out var colChild, out var colFree, out var colUtil, out var colTenant, out var colActions);
 
         GUI.Label(new Rect(x0, y, colPrefix, TableHeaderH), "Prefix", _stTableHeaderText);
         GUI.Label(new Rect(x0 + colPrefix, y, colStatus, TableHeaderH), "Role", _stTableHeaderText);
         GUI.Label(new Rect(x0 + colPrefix + colStatus, y, colChild, TableHeaderH), "Children", _stTableHeaderText);
-        GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild, y, colUtil, TableHeaderH), "Utilization", _stTableHeaderText);
-        GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colUtil, y, colTenant, TableHeaderH), "Tenant", _stTableHeaderText);
-        GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colUtil + colTenant, y, colActions, TableHeaderH), "Actions", _stTableHeaderText);
+        GUI.Label(
+            new Rect(x0 + colPrefix + colStatus + colChild, y, colFree, TableHeaderH),
+            new GUIContent(
+                "Free /N",
+                "Non-overlapping CIDR-aligned subnets of the template size (/N) that still fit under this prefix after direct child prefixes. ~ indicates overlapping children."),
+            _stTableHeaderText);
+        GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colFree, y, colUtil, TableHeaderH), "Utilization", _stTableHeaderText);
+        GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colFree + colUtil, y, colTenant, TableHeaderH), "Tenant", _stTableHeaderText);
+        GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colFree + colUtil + colTenant, y, colActions, TableHeaderH), "Actions", _stTableHeaderText);
         y += TableHeaderH;
 
         if (prefixes.Count == 0)
@@ -313,83 +429,80 @@ public static partial class IPAMOverlay
         }
 
         var treeParentId = string.IsNullOrEmpty(_ipamPrefixesDrillParentId) ? null : _ipamPrefixesDrillParentId;
+        var skipPrefixTreeBody = false;
         if (treeParentId != null)
         {
-            var subCount = 0;
-            Walk(prefixes, treeParentId, ref subCount);
-            if (subCount == 0)
+            var mergedTop = BuildMergedFolderRows(prefixes, treeParentId);
+            if (mergedTop.Count == 0)
             {
                 GUI.Label(
                     new Rect(x0, y, cardW, 44f),
-                    "No child prefixes under this folder yet. Add one above — the parent is this folder unless you pick another row or use “Add as root”.",
+                    "No child prefixes or visible free splits in this folder yet. Use Add prefix above, or open the parent prefix to create from Available rows.",
                     _stMuted);
-                return;
+                y += 48f;
+                skipPrefixTreeBody = true;
             }
         }
 
-        DrawPrefixTreeRows(prefixes, treeParentId, 0, x0, ref y, cardW, colPrefix, colStatus, colChild, colUtil, colTenant, colActions);
-
-        DrawIpamPrefixEditPanel(innerW, ref y);
-    }
-
-    private static void DrawIpamPrefixEditPanel(float innerW, ref float y)
-    {
-        if (string.IsNullOrEmpty(_ipamPrefixEditId))
+        if (!skipPrefixTreeBody)
         {
-            return;
-        }
-
-        var prefixes = IpamDataStore.GetPrefixes();
-        var entry = prefixes.FirstOrDefault(p => string.Equals(p.Id, _ipamPrefixEditId, StringComparison.Ordinal));
-        if (entry == null)
-        {
-            IpamClosePrefixEditPanel();
-            return;
-        }
-
-        var x0 = CardPad;
-        var cardW = innerW - CardPad * 2f;
-        y += 14f;
-        GUI.DrawTexture(new Rect(x0, y, cardW, 1f), _texTableHeader);
-        y += 10f;
-        GUI.Label(new Rect(x0, y, cardW, SectionTitleH), "Edit prefix", _stSectionTitle);
-        y += SectionTitleH + 4f;
-        var cidrDisp = (entry.Cidr ?? "").Trim();
-        GUI.Label(new Rect(x0, y, cardW, 22f), $"CIDR: {cidrDisp}", _stMuted);
-        y += 26f;
-        GUI.Label(new Rect(x0, y, 48f, 22f), "Name", _stFormLabel);
-        DrawIpamFormTextField(new Rect(x0 + 52f, y, Mathf.Min(320f, cardW - 60f), 22f), IpamFormFocusEditPrefixName, 128, IpamTextFieldKind.Name);
-        y += 28f;
-        GUI.Label(new Rect(x0, y, 52f, 22f), "Tenant", _stFormLabel);
-        DrawIpamFormTextField(new Rect(x0 + 56f, y, Mathf.Min(360f, cardW - 64f), 22f), IpamFormFocusEditPrefixTenant, 128, IpamTextFieldKind.Name);
-        y += 30f;
-        if (!string.IsNullOrEmpty(_ipamPrefixEditSaveError))
-        {
-            GUI.Label(new Rect(x0, y, cardW, 22f), _ipamPrefixEditSaveError, _stError);
-            y += 24f;
-        }
-
-        var saveR = new Rect(x0, y, 88f, 26f);
-        if (ImguiButtonOnce(saveR, "Save", 9110, _stPrimaryBtn))
-        {
-            _ipamPrefixEditSaveError = null;
-            if (IpamDataStore.TryUpdatePrefixMetadata(_ipamPrefixEditId, _ipamPrefixEditNameBuf, _ipamPrefixEditTenantBuf, out var err))
+            if (treeParentId != null)
             {
-                IpamClosePrefixEditPanel();
-                RecomputeContentHeight();
+                var mergedAll = BuildMergedFolderRows(prefixes, treeParentId);
+                NormalizeIpamPrefixPageSize();
+                ClampIpamPrefixPageIndex(mergedAll.Count);
+                var ps = _ipamPrefixPageSize;
+                var start = _ipamPrefixPageIndex * ps;
+                var nPage = Mathf.Min(ps, Mathf.Max(0, mergedAll.Count - start));
+                for (var i = 0; i < nPage; i++)
+                {
+                    DrawMergedFolderRow(
+                        mergedAll[start + i],
+                        prefixes,
+                        0,
+                        x0,
+                        ref y,
+                        cardW,
+                        colPrefix,
+                        colStatus,
+                        colChild,
+                        colFree,
+                        colUtil,
+                        colTenant,
+                        colActions,
+                        true);
+                }
+
+                if (mergedAll.Count > 0)
+                {
+                    DrawIpamPrefixFolderPagination(x0, ref y, cardW, mergedAll.Count);
+                }
             }
             else
             {
-                _ipamPrefixEditSaveError = err ?? "Save failed.";
+                DrawPrefixTreeRows(
+                    prefixes,
+                    treeParentId,
+                    0,
+                    x0,
+                    ref y,
+                    cardW,
+                    colPrefix,
+                    colStatus,
+                    colChild,
+                    colFree,
+                    colUtil,
+                    colTenant,
+                    colActions,
+                    false);
             }
         }
 
-        if (ImguiButtonOnce(new Rect(saveR.xMax + 10f, y, 88f, 26f), "Cancel", 9111, _stMutedBtn))
+        if (ipamDrilledScope != null && ShouldShowDrilledPrefixIpv4Section(ipamDrilledScope))
         {
-            IpamClosePrefixEditPanel();
+            y += 10f;
+            DrawDrilledPrefixIpAssignmentsBlock(x0, ref y, cardW, ipamDrilledScope, prefixes);
         }
-
-        y += 32f;
     }
 
     private static void IpamPruneDrillAfterPrefixMutation()
@@ -403,144 +516,6 @@ public static partial class IPAMOverlay
         if (all.All(p => p.Id != _ipamPrefixesDrillParentId))
         {
             _ipamPrefixesDrillParentId = null;
-        }
-    }
-
-    private static void DrawPrefixTreeRows(
-        IReadOnlyList<IpamPrefixEntry> all,
-        string parentId,
-        int depth,
-        float x0,
-        ref float y,
-        float cardW,
-        float colPrefix,
-        float colStatus,
-        float colChild,
-        float colUtil,
-        float colTenant,
-        float colActions)
-    {
-        var q = all.Where(p =>
-                string.IsNullOrEmpty(parentId)
-                    ? string.IsNullOrEmpty(p.ParentId)
-                    : string.Equals(p.ParentId, parentId, StringComparison.Ordinal))
-            .OrderBy(static p => NetworkSortKey(p))
-            .ToList();
-
-        foreach (var p in q)
-        {
-            var r = new Rect(x0, y, cardW, TableRowH);
-            var rowSelectRect = new Rect(x0, y, Mathf.Max(40f, cardW - colActions - 4f), TableRowH);
-            var e = Event.current;
-            if (e.type == EventType.MouseDown && e.button == 0 && rowSelectRect.Contains(e.mousePosition))
-            {
-                _ipamSelectedPrefixId = p.Id;
-                var t = Time.realtimeSinceStartup;
-                if (string.Equals(_ipamPrefixLastClickedRowId, p.Id, StringComparison.Ordinal) && t - _ipamPrefixLastClickTime < 0.4f)
-                {
-                    _ipamPrefixesDrillParentId = p.Id;
-                    _ipamPrefixLastClickedRowId = null;
-                    _ipamPrefixLastClickTime = -1f;
-                    _scroll = Vector2.zero;
-                    RecomputeContentHeight();
-                }
-                else
-                {
-                    _ipamPrefixLastClickedRowId = p.Id;
-                    _ipamPrefixLastClickTime = t;
-                }
-
-                e.Use();
-            }
-
-            var alt = (Mathf.FloorToInt(y / TableRowH) % 2) == 1;
-            var sel = string.Equals(_ipamSelectedPrefixId, p.Id, StringComparison.Ordinal);
-            if (e.type == EventType.Repaint)
-            {
-                var tint = sel ? new Color(0.12f, 0.28f, 0.38f, 0.85f) : (alt ? new Color(0.06f, 0.08f, 0.1f, 0.5f) : new Color(0.04f, 0.05f, 0.06f, 0.35f));
-                DrawTintedRect(r, tint);
-            }
-
-            var indent = 14f * depth;
-            var cidr = (p.Cidr ?? "").Trim();
-            var name = string.IsNullOrEmpty(p.Name) ? "" : $"  ({p.Name})";
-            var directChildren = all.Count(c => string.Equals(c.ParentId, p.Id, StringComparison.Ordinal));
-            var hasParent = !string.IsNullOrEmpty(p.ParentId);
-            string roleLabel;
-            if (directChildren > 0)
-            {
-                roleLabel = "Parent";
-            }
-            else if (hasParent)
-            {
-                roleLabel = "Child";
-            }
-            else
-            {
-                roleLabel = "Root";
-            }
-
-            var cap = Mathf.Max(1, RouteMath.CountDhcpUsableHosts(cidr));
-            // Rows with child prefixes: aggregate all servers in this CIDR (includes space delegated to children).
-            // Leaf rows: exclusive count (tightest matching prefix only).
-            var used = directChildren > 0
-                ? CountAssignedServersWithIpInCidr(cidr)
-                : CountAssignedServersExclusiveToPrefix(p, all);
-            var util = Mathf.Clamp01(used / (float)cap);
-
-            GUI.Label(new Rect(x0 + 6f + indent, y, colPrefix - 6f - indent, TableRowH), cidr + name, _stTableCell);
-            GUI.Label(new Rect(x0 + colPrefix, y, colStatus, TableRowH), roleLabel, _stTableCell);
-            GUI.Label(
-                new Rect(x0 + colPrefix + colStatus, y, colChild, TableRowH),
-                directChildren.ToString(CultureInfo.InvariantCulture),
-                _stTableCell);
-
-            var utilColLeft = x0 + colPrefix + colStatus + colChild;
-            const float utilPctReserve = 76f;
-            var barX = utilColLeft + 4f;
-            var barW = Mathf.Max(28f, colUtil - utilPctReserve - 10f);
-            var barH = TableRowH - 10f;
-            var barY = y + 5f;
-            if (e.type == EventType.Repaint)
-            {
-                DrawTintedRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.22f, 0.25f, 1f));
-                DrawTintedRect(new Rect(barX, barY, barW * util, barH), new Color(0.2f, 0.75f, 0.45f, 1f));
-            }
-
-            var pct = Mathf.RoundToInt(util * 100f);
-            var pctLeft = barX + barW + 6f;
-            var utilBandRight = utilColLeft + colUtil - 6f;
-            var pctW = Mathf.Max(36f, utilBandRight - pctLeft);
-            GUI.Label(
-                new Rect(pctLeft, y, pctW, TableRowH),
-                $"{pct}% ({used}/{cap})",
-                _stMuted);
-
-            var tenantDisp = string.IsNullOrEmpty(p.Tenant) ? "—" : p.Tenant;
-            GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colUtil, y, colTenant, TableRowH), tenantDisp, _stTableCell);
-
-            var actX = x0 + colPrefix + colStatus + colChild + colUtil + colTenant;
-            var btnW = (colActions - 10f) * 0.5f;
-            var btnH = TableRowH - 6f;
-            var btnY = y + 3f;
-            var hid = Math.Abs((p.Id ?? "").GetHashCode());
-            var ipsKey = 913000 + (hid & 0x3fff);
-            if (ImguiButtonOnce(new Rect(actX + 2f, btnY, btnW, btnH), "IPs", ipsKey, _stMutedBtn))
-            {
-                IpamNavigateToPrefixIps(p);
-            }
-
-            if (ImguiButtonOnce(new Rect(actX + 6f + btnW, btnY, btnW, btnH), "Edit", ipsKey + 20000, _stMutedBtn))
-            {
-                _ipamPrefixEditId = p.Id;
-                _ipamPrefixEditNameBuf = p.Name ?? "";
-                _ipamPrefixEditTenantBuf = p.Tenant ?? "";
-                _ipamPrefixEditSaveError = null;
-                _ipamFormFieldFocus = IpamFormFocusNone;
-            }
-
-            y += TableRowH;
-            DrawPrefixTreeRows(all, p.Id, depth + 1, x0, ref y, cardW, colPrefix, colStatus, colChild, colUtil, colTenant, colActions);
         }
     }
 
@@ -673,24 +648,151 @@ public static partial class IPAMOverlay
             formBlock += 62f;
         }
 
-        var rows = Mathf.Max(1, CountPrefixTreeRowsForHeight());
+        var drilledIpBlockH = 0f;
         if (!string.IsNullOrEmpty(_ipamPrefixesDrillParentId))
         {
-            var prefixes = IpamDataStore.GetPrefixes();
-            var sc = 0;
-            Walk(prefixes, _ipamPrefixesDrillParentId, ref sc);
-            if (sc == 0)
+            var all = IpamDataStore.GetPrefixes();
+            var ds = all.FirstOrDefault(p => string.Equals(p.Id, _ipamPrefixesDrillParentId, StringComparison.Ordinal));
+            if (ds != null && ShouldShowDrilledPrefixIpv4Section(ds))
             {
-                formBlock += 28f;
+                var list = CollectServersExclusiveToPrefixForDrilledPanel(ds, all);
+                var show = Mathf.Min(list.Count, IpamDrilledIpListDisplayMax);
+                drilledIpBlockH = SectionTitleH + 2f + 46f;
+                if (list.Count == 0)
+                {
+                    drilledIpBlockH += 44f;
+                }
+                else
+                {
+                    drilledIpBlockH += TableHeaderH + show * TableRowH;
+                    if (list.Count > IpamDrilledIpListDisplayMax)
+                    {
+                        drilledIpBlockH += 26f;
+                    }
+                }
+
+                drilledIpBlockH += 10f;
+                drilledIpBlockH += 4f;
             }
         }
 
-        if (!string.IsNullOrEmpty(_ipamPrefixEditId))
+        var prefixPagingBar = 0f;
+        if (!string.IsNullOrEmpty(_ipamPrefixesDrillParentId))
         {
-            formBlock += 156f;
+            var allP = IpamDataStore.GetPrefixes();
+            var drillId = _ipamPrefixesDrillParentId;
+            if (allP.Any(p => string.Equals(p.Id, drillId, StringComparison.Ordinal)))
+            {
+                if (BuildMergedFolderRows(allP, drillId).Count > 0)
+                {
+                    prefixPagingBar = IpamPrefixPaginationBarH;
+                }
+            }
         }
 
-        return CardPad * 2f + SectionTitleH + 10f + formBlock + SectionTitleH + 4f + TableHeaderH + rows * TableRowH + 28f;
+        var rows = Mathf.Max(1, CountPrefixTreeRowsForHeight());
+        return CardPad * 2f + SectionTitleH + 10f + formBlock + SectionTitleH + 4f + TableHeaderH + rows * TableRowH + drilledIpBlockH + prefixPagingBar + 28f;
+    }
+
+    private static bool ShouldShowDrilledPrefixIpv4Section(IpamPrefixEntry scope)
+    {
+        if (scope == null)
+        {
+            return false;
+        }
+
+        var c = (scope.Cidr ?? "").Trim();
+        return RouteMath.TryParseIpv4Cidr(c, out _, out var pl)
+               && pl > IpamDrilledIpv4HideWhenPrefixLenAtOrBelow;
+    }
+
+    private static void DrawDrilledPrefixIpAssignmentsBlock(
+        float x0,
+        ref float y,
+        float cardW,
+        IpamPrefixEntry scope,
+        IReadOnlyList<IpamPrefixEntry> allPrefixes)
+    {
+        if (!ShouldShowDrilledPrefixIpv4Section(scope))
+        {
+            return;
+        }
+
+        var titleBtnW = Mathf.Min(132f, cardW * 0.28f);
+        GUI.Label(new Rect(x0, y, Mathf.Max(120f, cardW - titleBtnW - 8f), SectionTitleH), "IPv4 in this prefix", _stSectionTitle);
+        if (ImguiButtonOnce(new Rect(x0 + cardW - titleBtnW, y + 1f, titleBtnW, Mathf.Max(22f, SectionTitleH - 2f)), "View in IP list", 9124, _stMutedBtn))
+        {
+            NavigateIpAddressesToCidrFilter((scope.Cidr ?? "").Trim());
+        }
+
+        y += SectionTitleH + 2f;
+        GUI.Label(
+            new Rect(x0, y, cardW, 44f),
+            "Only addresses whose narrowest IPAM prefix is this folder (IPs delegated to a child prefix are listed under that child). Open jumps to IP addresses filtered to that host.",
+            _stHint);
+        y += 46f;
+
+        var list = CollectServersExclusiveToPrefixForDrilledPanel(scope, allPrefixes);
+
+        if (list.Count == 0)
+        {
+            GUI.Label(
+                new Rect(x0, y, cardW, 40f),
+                "No server IPv4 attributed directly to this prefix (IPs mapped to a child prefix appear under that child).",
+                _stMuted);
+            y += 44f;
+            return;
+        }
+
+        var colIp = Mathf.Clamp(cardW * 0.26f, 120f, 200f);
+        var colBtn = Mathf.Clamp(cardW * 0.14f, 72f, 108f);
+        var colDev = Mathf.Max(100f, cardW - colIp - colBtn - 12f);
+
+        GUI.Label(new Rect(x0, y, colIp, TableHeaderH), "IPv4 address", _stTableHeaderText);
+        GUI.Label(new Rect(x0 + colIp, y, colDev, TableHeaderH), "Device", _stTableHeaderText);
+        GUI.Label(new Rect(x0 + colIp + colDev, y, colBtn, TableHeaderH), "IP list", _stTableHeaderText);
+        y += TableHeaderH;
+
+        var show = Mathf.Min(list.Count, IpamDrilledIpListDisplayMax);
+        for (var i = 0; i < show; i++)
+        {
+            var (srv, ip) = list[i];
+            var r = new Rect(x0, y, cardW, TableRowH);
+            var ev = Event.current;
+            if (ev.type == EventType.Repaint)
+            {
+                var alt = i % 2 == 1;
+                DrawTintedRect(
+                    r,
+                    alt ? new Color(0.06f, 0.08f, 0.1f, 0.5f) : new Color(0.04f, 0.05f, 0.06f, 0.35f));
+            }
+
+            var dn = Trunc(DeviceInventoryReflection.GetDisplayName(srv), 46);
+            GUI.Label(new Rect(x0 + 4f, y, colIp - 6f, TableRowH), ip, _stTableCell);
+            GUI.Label(new Rect(x0 + colIp, y, colDev - 4f, TableRowH), string.IsNullOrEmpty(dn) ? "—" : dn, _stTableCell);
+            var openKey = 912500 + Mathf.Abs(HashCode.Combine(ip, srv != null ? srv.GetInstanceID() : i)) % 78000;
+            if (ImguiButtonOnce(
+                    new Rect(x0 + colIp + colDev + 2f, y + 3f, colBtn - 4f, TableRowH - 6f),
+                    "Open",
+                    openKey,
+                    _stMutedBtn))
+            {
+                NavigateIpAddressesToCidrFilter($"{ip.Trim()}/32");
+            }
+
+            y += TableRowH;
+        }
+
+        if (list.Count > IpamDrilledIpListDisplayMax)
+        {
+            GUI.Label(
+                new Rect(x0, y, cardW, 22f),
+                $"… and {list.Count - IpamDrilledIpListDisplayMax} more in this CIDR. Use View in IP list for the full table.",
+                _stHint);
+            y += 26f;
+        }
+
+        y += 4f;
     }
 
     private static void DrawIpamVlansView(float innerW)
@@ -800,7 +902,7 @@ public static partial class IPAMOverlay
     private static void NormalizeIpamPrefixTableColWeights()
     {
         var s = 0f;
-        for (var i = 0; i < 6; i++)
+        for (var i = 0; i < 7; i++)
         {
             s += IpamPrefixTableColWeight[i];
         }
@@ -810,7 +912,7 @@ public static partial class IPAMOverlay
             return;
         }
 
-        for (var i = 0; i < 6; i++)
+        for (var i = 0; i < 7; i++)
         {
             IpamPrefixTableColWeight[i] /= s;
         }
@@ -821,6 +923,7 @@ public static partial class IPAMOverlay
         out float colPrefix,
         out float colStatus,
         out float colChild,
+        out float colFree,
         out float colUtil,
         out float colTenant,
         out float colActions)
@@ -829,9 +932,10 @@ public static partial class IPAMOverlay
         colPrefix = cardW * IpamPrefixTableColWeight[0];
         colStatus = cardW * IpamPrefixTableColWeight[1];
         colChild = cardW * IpamPrefixTableColWeight[2];
-        colUtil = cardW * IpamPrefixTableColWeight[3];
-        colTenant = cardW * IpamPrefixTableColWeight[4];
-        colActions = cardW * IpamPrefixTableColWeight[5];
+        colFree = cardW * IpamPrefixTableColWeight[3];
+        colUtil = cardW * IpamPrefixTableColWeight[4];
+        colTenant = cardW * IpamPrefixTableColWeight[5];
+        colActions = cardW * IpamPrefixTableColWeight[6];
     }
 
     private static void AutoFitIpamPrefixTableColumns(float cardWidth)
@@ -842,7 +946,7 @@ public static partial class IPAMOverlay
         }
 
         var all = IpamDataStore.GetPrefixes();
-        var minPx = new float[6];
+        var minPx = new float[7];
         void BumpHeader(int col, string label)
         {
             var w = _stTableHeaderText.CalcSize(new GUIContent(label)).x + 14f;
@@ -855,9 +959,10 @@ public static partial class IPAMOverlay
         BumpHeader(0, "Prefix");
         BumpHeader(1, "Role");
         BumpHeader(2, "Children");
-        BumpHeader(3, "Utilization");
-        BumpHeader(4, "Tenant");
-        BumpHeader(5, "Actions");
+        BumpHeader(3, "Free /N");
+        BumpHeader(4, "Utilization");
+        BumpHeader(5, "Tenant");
+        BumpHeader(6, "Actions");
 
         void BumpCell(int col, string text)
         {
@@ -904,47 +1009,57 @@ public static partial class IPAMOverlay
             BumpCell(1, role);
             BumpCell(2, directChildren.ToString(CultureInfo.InvariantCulture));
 
+            var kids = all.Where(c => c != null && string.Equals(c.ParentId, p.Id, StringComparison.Ordinal)).ToList();
+            if (IpamPrefixAvailability.TryComputeFreeSplitSlots(cidr, kids, out var tpl, out _, out var fr, out var ov))
+            {
+                BumpMuted(3, ov ? $"~{fr}" : fr.ToString(CultureInfo.InvariantCulture));
+            }
+            else
+            {
+                BumpCell(3, "—");
+            }
+
             var cap = Mathf.Max(1, RouteMath.CountDhcpUsableHosts(cidr));
             var used = directChildren > 0
                 ? CountAssignedServersWithIpInCidr(cidr)
                 : CountAssignedServersExclusiveToPrefix(p, all);
             var util = Mathf.Clamp01(used / (float)cap);
             var pct = Mathf.RoundToInt(util * 100f);
-            BumpMuted(3, $"{pct}% ({used}/{cap})");
+            BumpMuted(4, $"{pct}% ({used}/{cap})");
 
             var tenant = string.IsNullOrEmpty(p.Tenant) ? "—" : p.Tenant;
-            BumpCell(4, tenant);
+            BumpCell(5, tenant);
         }
 
-        BumpCell(5, "IPs");
-        BumpCell(5, "Edit");
+        BumpCell(6, "IPs");
+        BumpCell(6, "Edit");
 
-        minPx[3] = Mathf.Max(minPx[3], 120f);
+        minPx[4] = Mathf.Max(minPx[4], 120f);
 
-        for (var i = 0; i < 6; i++)
+        for (var i = 0; i < 7; i++)
         {
             minPx[i] = Mathf.Clamp(minPx[i], 52f, cardWidth * 0.42f);
         }
 
-        var sum = minPx[0] + minPx[1] + minPx[2] + minPx[3] + minPx[4] + minPx[5];
+        var sum = minPx[0] + minPx[1] + minPx[2] + minPx[3] + minPx[4] + minPx[5] + minPx[6];
         if (sum < cardWidth)
         {
             var slack = cardWidth - sum;
-            minPx[0] += slack * 0.30f;
-            minPx[3] += slack * 0.20f;
-            minPx[4] += slack * 0.35f;
-            minPx[5] += slack * 0.15f;
+            minPx[0] += slack * 0.28f;
+            minPx[4] += slack * 0.18f;
+            minPx[5] += slack * 0.32f;
+            minPx[6] += slack * 0.12f;
         }
         else
         {
             var scale = cardWidth / sum;
-            for (var i = 0; i < 6; i++)
+            for (var i = 0; i < 7; i++)
             {
                 minPx[i] *= scale;
             }
         }
 
-        for (var i = 0; i < 6; i++)
+        for (var i = 0; i < 7; i++)
         {
             IpamPrefixTableColWeight[i] = minPx[i] / cardWidth;
         }
