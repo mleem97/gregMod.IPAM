@@ -66,6 +66,13 @@ public static partial class IPAMOverlay
                 _ipamNextPlayerInputRescanTime = Time.unscaledTime + 2.5f;
                 IpamMenuOcclusion.BumpScanPriority();
                 ResetIpamEscapeKeyboardLatchForOverlayOpen();
+                if (!IpamUiAssetsAreHealthy())
+                {
+                    ResetUiResourcesForSessionChange();
+                }
+
+                _scroll = Vector2.zero;
+                RecomputeContentHeight();
             }
 
             if (!value)
@@ -94,6 +101,7 @@ public static partial class IPAMOverlay
                 _ipamChildPrefixWizardOpen = false;
                 _ipamChildPrefixWizardError = "";
                 _ipamChildPrefixWizardEditEntryId = null;
+                CloseIpamPrefixDeleteConfirm();
                 IpamIpAddressViewBuffer.Clear();
                 BeginImGuiInputRecoveryBurst();
                 UiRaycastBlocker.SetBlocking(false);
@@ -208,6 +216,8 @@ public static partial class IPAMOverlay
 
     private static bool _ipamHadDetailSelectionLastFrame;
     private static Vector2 _scroll = Vector2.zero;
+    /// <summary>0 = 3 U server tier, 1 = 7 U server tier.</summary>
+    private static int _iopsCalcServerTier;
     internal static Server _selectedServer;
     /// <summary>First selected switch in current sort order (detail panel / CLI); mirrors the switch instance-id set.</summary>
     private static NetworkSwitch _selectedNetworkSwitch;
@@ -335,7 +345,7 @@ public static partial class IPAMOverlay
     private static CustomerBase _inlineAssignCustomer;
     /// <summary>0 = Contract+DHCP batch; 1 = pick IPAM prefix and allocate first free IP.</summary>
     private static int _inlineAssignMode;
-    private static string _inlineIpamPrefixPickId = "";
+    private static string _inlineIpamPrefixPickKey = "";
     private static string _inlineIpamPrefixSearchBuf = "";
     private static Vector2 _inlineIpamPrefixListScroll;
     private static string _inlineAssignError = "";
@@ -373,6 +383,10 @@ public static partial class IPAMOverlay
     /// <summary>Reserved width on the right of table headers for the page-size (gear) control.</summary>
     private const float IpamIpAddressGearColW = 28f;
 
+    /// <summary>Inventory tables reserve a gear column on the right; column weights apply to this width.</summary>
+    private static float InventoryTableContentWidth(float cardWidth) =>
+        Mathf.Max(80f, cardWidth - IpamIpAddressGearColW);
+
     internal static readonly List<Server> IpamIpAddressViewBuffer = new();
 
     /// <summary>Prefixes table: column weight sum = 1 (Prefix, Role, Children, Free/N, Utilization, Tenant, Actions).</summary>
@@ -389,6 +403,12 @@ public static partial class IPAMOverlay
     private static string _ipamChildPrefixWizardNameBuf = "";
     private static string _ipamChildPrefixWizardTenantBuf = "";
     private static string _ipamChildPrefixWizardError = "";
+
+    private static bool _ipamPrefixDeleteConfirmOpen;
+    private static Rect _ipamPrefixDeleteConfirmRect = new(140f, 120f, 520f, 280f);
+    private static string _ipamPrefixDeleteConfirmId;
+    private static string _ipamPrefixDeleteConfirmHeadline = "";
+    private static readonly List<string> _ipamPrefixDeleteConfirmChildLabels = new();
 
     /// <summary>Prefixes tab: show only subtree under this prefix id (double-click row). Null = full tree.</summary>
     private static string _ipamPrefixesDrillParentId;
@@ -457,11 +477,13 @@ public static partial class IPAMOverlay
     private const float TitleBarHBase = 54f;
     private const float SidebarWBase = 208f;
 
-    private static readonly float[] TableColWeight = { 0.2f, 0.17f, 0.08f, 0.17f, 0.14f, 0.24f };
+    private static readonly float[] TableColWeight = { 0.22f, 0.16f, 0.08f, 0.22f, 0.12f, 0.20f };
+    private const float ColumnGripHalfWidth = 5f;
     private static float _columnGripMouseStartX;
     private static float[] _columnGripWeightsStart;
     private static bool _tableColumnsAutoFitPending = true;
     private static float _lastInventoryCardWidth;
+    private static float _lastInventoryTableWidth;
     private const float MinColWeight = 0.045f;
     private const float MaxColWeight = 0.52f;
     private const float TableRowHBase = 30f;
@@ -500,8 +522,10 @@ public static partial class IPAMOverlay
     /// <summary>Separate top-level IMGUI window for IOPS math (not nested inside IPAM — avoids clipping/depth issues).</summary>
     private static Rect _iopsStandaloneWindowRect = new(200f, 120f, 460f, 280f);
 
-    private const int IopsPer2UServer = 5000;
-    private const int IopsPer4UServer = 12000;
+    private const int IopsPer3UServer = 5000;
+    private const int IopsPer7UServer = 12000;
+    private const int RackUnits3U = 3;
+    private const int RackUnits7U = 7;
 
     /// <summary>
     /// Unity's <see cref="Key"/> values are not contiguous — do not use <c>(Key)((int)Key.Digit0 + d)</c>
@@ -564,7 +588,7 @@ public static partial class IPAMOverlay
     private static GUIStyle _stMutedBtn;
     /// <summary>Result line — same face as <see cref="_stTableCell"/> (IPAM body text).</summary>
     private static GUIStyle _stIopsResult;
-    /// <summary>Larger type for IOPS calculator 4 U / 2 U server counts.</summary>
+    /// <summary>Larger type for IOPS calculator 7 U / 3 U server counts.</summary>
     private static GUIStyle _stIopsResultCounts;
     /// <summary>Large metric on the IPAM dashboard hero cards.</summary>
     private static GUIStyle _stDashboardHeroValue;
@@ -795,6 +819,37 @@ public static partial class IPAMOverlay
             winStW.onNormal.background = oldWOnBg;
             winStW.normal.textColor = oldWTxt;
             winStW.onNormal.textColor = oldWOnTxt;
+        }
+
+        if (LicenseManager.IsIPAMUnlocked && _ipamPrefixDeleteConfirmOpen)
+        {
+            GUI.depth = 0;
+            var dimDel = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, 0.5f);
+            if (Event.current.type == EventType.Repaint)
+            {
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _texModalDim, ScaleMode.StretchToFill);
+            }
+
+            GUI.color = dimDel;
+            var winStDel = GUI.skin.window;
+            var oldDelBg = winStDel.normal.background;
+            var oldDelOnBg = winStDel.onNormal.background;
+            var oldDelTxt = winStDel.normal.textColor;
+            var oldDelOnTxt = winStDel.onNormal.textColor;
+            winStDel.normal.background = _texBackdrop;
+            winStDel.onNormal.background = _texBackdrop;
+            winStDel.normal.textColor = new Color32(248, 250, 252, 255);
+            winStDel.onNormal.textColor = new Color32(248, 250, 252, 255);
+            _ipamPrefixDeleteConfirmRect = GUI.Window(
+                9007,
+                _ipamPrefixDeleteConfirmRect,
+                (GUI.WindowFunction)DrawIpamPrefixDeleteConfirmWindow,
+                "Confirm delete");
+            winStDel.normal.background = oldDelBg;
+            winStDel.onNormal.background = oldDelOnBg;
+            winStDel.normal.textColor = oldDelTxt;
+            winStDel.onNormal.textColor = oldDelOnTxt;
         }
 
         var serverEditPopupDraw = ShouldDrawServerEditPopup();

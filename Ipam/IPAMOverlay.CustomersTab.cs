@@ -481,7 +481,8 @@ public static partial class IPAMOverlay
         GUI.Label(new Rect(hx + 6f, y, cw4 - 12f, TableHeaderH), "Mainframe VLAN", _stTableCell);
         hx += cw4;
         GUI.Label(new Rect(hx + 6f, y, cw5 - 12f, TableHeaderH), "GPU VLAN", _stTableCell);
-        ProcessTableColumnGrips(hdrR, cardW, 92450);
+        ProcessTableColumnGripsInteraction(hdrR, cardW, 92450);
+        DrawTableColumnGripGuides(hdrR, cardW, 92450);
         y += TableHeaderH;
         var bodyTopY = y;
 
@@ -585,7 +586,7 @@ public static partial class IPAMOverlay
             "IPv4 address",
             "EOL",
             "Status",
-            610,
+            644,
             true);
         y += TableHeaderH;
 
@@ -672,6 +673,7 @@ public static partial class IPAMOverlay
         var y = CardPad;
         var cardW = innerW - CardPad * 2f;
         _lastInventoryCardWidth = cardW;
+        _lastInventoryTableWidth = cardW;
         if (_tableColumnsAutoFitPending && cardW > 80f)
         {
             if (_customersTabScreen == CustomersTabScreen.CustomerList)
@@ -754,7 +756,7 @@ public static partial class IPAMOverlay
             var listRect = new Rect(x, y, innerW, listH);
             var rowH = TableRowH;
             var contentH = CustomersTabAddServerCandidateBuffer.Count * rowH + 8f;
-            _customersTabAddServerWizardScroll = GUI.BeginScrollView(
+            _customersTabAddServerWizardScroll = SafeBeginScrollView(
                 listRect,
                 _customersTabAddServerWizardScroll,
                 new Rect(0f, 0f, innerW - 20f, contentH));
@@ -780,7 +782,7 @@ public static partial class IPAMOverlay
                 }
             }
 
-            GUI.EndScrollView();
+            SafeEndScrollView();
             y += listH + 10f;
         }
 

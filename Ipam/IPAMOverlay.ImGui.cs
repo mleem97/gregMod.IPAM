@@ -19,13 +19,19 @@ public static partial class IPAMOverlay
     }
 
     /// <summary>
-    /// <see cref="GUI.Window"/> may run the window function several times per mouse release (layout/repaint).
-    /// <see cref="GUI.Button"/> can then return true multiple times in one frame — dedupe per control key (see hub fields <c>_imguiButtonDedupe*</c>).
+    /// <see cref="GUI.Window"/> on IL2CPP (post–game update) often paints hover on <see cref="GUI.Button"/> but never
+    /// fires clicks. Use explicit MouseDown/MouseUp via <see cref="GUIUtility.GetControlID"/> (same as
+    /// <see cref="OctetStepButton"/> / <see cref="IopsCalcToolbarButton"/>). Dedupe still prevents double-fire on
+    /// duplicate layout/repaint passes in the same frame.
     /// </summary>
     private static bool ImguiButtonOnce(Rect r, string text, int dedupeKey, GUIStyle style = null)
     {
-        var pressed = style != null ? GUI.Button(r, text, style) : GUI.Button(r, text);
-        if (!pressed)
+        return ImguiButtonOnce(r, new GUIContent(text), dedupeKey, style);
+    }
+
+    private static bool ImguiButtonOnce(Rect r, GUIContent content, int dedupeKey, GUIStyle style = null)
+    {
+        if (!ImguiControlMouseUp(r, dedupeKey, style ?? GUI.skin.button, content, out var clicked))
         {
             return false;
         }
@@ -41,23 +47,200 @@ public static partial class IPAMOverlay
         return true;
     }
 
-    private static bool ImguiButtonOnce(Rect r, GUIContent content, int dedupeKey, GUIStyle style = null)
+    /// <summary>Draws a button-like control; returns true once on MouseUp inside <paramref name="r"/>.</summary>
+    private static bool ImguiControlMouseUp(Rect r, int controlHint, GUIStyle style, GUIContent content, out bool clicked)
     {
-        var pressed = style != null ? GUI.Button(r, content, style) : GUI.Button(r, content);
-        if (!pressed)
+        clicked = false;
+        if (style == null)
         {
-            return false;
+            style = GUI.skin.button;
         }
 
-        var f = Time.frameCount;
-        if (f == _imguiButtonDedupeFrame && dedupeKey == _imguiButtonDedupeKey)
+        var id = GUIUtility.GetControlID(controlHint, FocusType.Passive, r);
+        var e = Event.current;
+
+        switch (e.GetTypeForControl(id))
         {
-            return false;
+            case EventType.MouseDown:
+                if (GUI.enabled && e.button == 0 && r.Contains(e.mousePosition))
+                {
+                    GUIUtility.hotControl = id;
+                    e.Use();
+                }
+
+                break;
+            case EventType.MouseUp:
+                if (GUIUtility.hotControl != id)
+                {
+                    break;
+                }
+
+                GUIUtility.hotControl = 0;
+                e.Use();
+                if (GUI.enabled && r.Contains(e.mousePosition))
+                {
+                    clicked = true;
+                }
+
+                break;
+            case EventType.Repaint:
+                style.Draw(r, content, id);
+                break;
         }
 
-        _imguiButtonDedupeFrame = f;
-        _imguiButtonDedupeKey = dedupeKey;
-        return true;
+        return clicked;
+    }
+
+    /// <summary>Manual horizontal slider — <see cref="GUI.HorizontalSlider"/> fails unstripping on current IL2CPP builds.</summary>
+    private static float ImguiHorizontalSlider(Rect r, float value, float min, float max, int controlHint)
+    {
+        var id = GUIUtility.GetControlID(controlHint, FocusType.Passive, r);
+        var e = Event.current;
+
+        switch (e.GetTypeForControl(id))
+        {
+            case EventType.MouseDown:
+                if (GUI.enabled && e.button == 0 && r.Contains(e.mousePosition))
+                {
+                    GUIUtility.hotControl = id;
+                    value = SliderValueFromMouse(r, e.mousePosition.x, min, max);
+                    e.Use();
+                }
+
+                break;
+            case EventType.MouseDrag:
+                if (GUIUtility.hotControl == id)
+                {
+                    value = SliderValueFromMouse(r, e.mousePosition.x, min, max);
+                    e.Use();
+                }
+
+                break;
+            case EventType.MouseUp:
+                if (GUIUtility.hotControl == id)
+                {
+                    GUIUtility.hotControl = 0;
+                    e.Use();
+                }
+
+                break;
+            case EventType.Repaint:
+                DrawHorizontalSliderTrack(r, value, min, max, id);
+                break;
+        }
+
+        return Mathf.Clamp(value, min, max);
+    }
+
+    private static float SliderValueFromMouse(Rect r, float mouseX, float min, float max)
+    {
+        if (r.width <= 0.001f)
+        {
+            return min;
+        }
+
+        var t = Mathf.Clamp01((mouseX - r.x) / r.width);
+        return min + t * (max - min);
+    }
+
+    private static void DrawHorizontalSliderTrack(Rect r, float value, float min, float max, int controlId)
+    {
+        var track = new Rect(r.x, r.y + r.height * 0.5f - 2f, r.width, 4f);
+        GUI.DrawTexture(track, _texMutedBtn ?? _texRowA);
+        var span = max - min;
+        var t = span <= 0.0001f ? 0f : (value - min) / span;
+        var thumbW = 12f;
+        var thumbX = track.x + t * Mathf.Max(0f, track.width - thumbW);
+        var thumb = new Rect(thumbX, r.y + 1f, thumbW, r.height - 2f);
+        var thumbTex = GUIUtility.hotControl == controlId ? _texPrimaryBtnHover : _texPrimaryBtn;
+        if (thumbTex != null)
+        {
+            GUI.DrawTexture(thumb, thumbTex);
+        }
+    }
+
+    /// <summary>Checkbox toggle — <see cref="GUI.Toggle"/> fails unstripping on current IL2CPP builds.</summary>
+    private static bool ImguiToggleOnce(Rect r, bool value, int controlHint, GUIContent label)
+    {
+        var id = GUIUtility.GetControlID(controlHint, FocusType.Passive, r);
+        var e = Event.current;
+
+        switch (e.GetTypeForControl(id))
+        {
+            case EventType.MouseDown:
+                if (GUI.enabled && e.button == 0 && r.Contains(e.mousePosition))
+                {
+                    GUIUtility.hotControl = id;
+                    e.Use();
+                }
+
+                break;
+            case EventType.MouseUp:
+                if (GUIUtility.hotControl != id)
+                {
+                    break;
+                }
+
+                GUIUtility.hotControl = 0;
+                e.Use();
+                if (GUI.enabled && r.Contains(e.mousePosition))
+                {
+                    value = !value;
+                }
+
+                break;
+            case EventType.Repaint:
+                var box = new Rect(r.x, r.y + 3f, 16f, 16f);
+                GUI.DrawTexture(box, value ? _texPrimaryBtn : _texMutedBtn);
+                var labelRect = new Rect(box.xMax + 6f, r.y, r.width - box.width - 6f, r.height);
+                if (_stMuted != null)
+                {
+                    _stMuted.Draw(labelRect, label, false, false, false, false);
+                }
+                else
+                {
+                    GUI.Label(labelRect, label);
+                }
+
+                break;
+        }
+
+        return value;
+    }
+
+    /// <summary>Returns true once on MouseUp inside a list/table row (works inside manual scroll groups).</summary>
+    private static bool ImguiListRowClick(Rect rowRect, int controlHint)
+    {
+        var id = GUIUtility.GetControlID(controlHint, FocusType.Passive, rowRect);
+        var e = Event.current;
+
+        switch (e.GetTypeForControl(id))
+        {
+            case EventType.MouseDown:
+                if (GUI.enabled && e.button == 0 && rowRect.Contains(e.mousePosition))
+                {
+                    GUIUtility.hotControl = id;
+                    e.Use();
+                }
+
+                break;
+            case EventType.MouseUp:
+                if (GUIUtility.hotControl != id)
+                {
+                    break;
+                }
+
+                GUIUtility.hotControl = 0;
+                e.Use();
+                if (GUI.enabled && rowRect.Contains(e.mousePosition))
+                {
+                    return true;
+                }
+
+                break;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -160,10 +343,13 @@ public static partial class IPAMOverlay
     }
     private static void EnsureTextures()
     {
-        if (_texturesReady)
+        if (_texturesReady && IpamUiAssetsAreHealthy())
         {
             return;
         }
+
+        _texturesReady = false;
+        _stylesReady = false;
 
         _texBackdrop = MakeTexture(10, 12, 16, 255);
         _texSidebar = MakeTexture(24, 30, 40, 255);
@@ -187,10 +373,13 @@ public static partial class IPAMOverlay
 
     private static void EnsureStyles()
     {
-        if (_stylesReady)
+        EnsureTextures();
+        if (_stylesReady && IpamUiAssetsAreHealthy())
         {
             return;
         }
+
+        _stylesReady = false;
 
         _stModalBlocker = new GUIStyle();
         _stModalBlocker.normal.background = _texModalDim;
@@ -419,15 +608,28 @@ public static partial class IPAMOverlay
         _stylesReady = true;
     }
 
+    private static bool IpamUiAssetsAreHealthy()
+    {
+        return _texBackdrop != null
+               && _texCard != null
+               && _texTableHeader != null
+               && _texModalDim != null
+               && _texWhite != null
+               && _stMutedBtn != null
+               && _stTableCell != null;
+    }
+
     private static Texture2D MakeTexture(byte r, byte g, byte b, byte a)
     {
         var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false)
         {
             wrapMode = TextureWrapMode.Clamp,
             filterMode = FilterMode.Point,
+            hideFlags = HideFlags.HideAndDontSave,
         };
         tex.SetPixel(0, 0, new Color32(r, g, b, a));
         tex.Apply();
+        UnityEngine.Object.DontDestroyOnLoad(tex);
         return tex;
     }
 

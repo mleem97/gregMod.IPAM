@@ -87,6 +87,32 @@ public static partial class IPAMOverlay
         }
     }
 
+    /// <summary>
+    /// After a scene/save load, Unity may destroy IMGUI textures and leave scroll groups unbalanced.
+    /// Rebuild assets and reset scroll/layout state so the overlay does not render transparent or misaligned.
+    /// </summary>
+    internal static void ResetUiResourcesForSessionChange()
+    {
+        SafeScrollForceReset();
+        _texturesReady = false;
+        _stylesReady = false;
+        _scroll = Vector2.zero;
+        _rackMountDragActive = false;
+        _rackMountDragHoverStartU = -1;
+        _rackMountDragLabel = "";
+        _inventoryScrollRowRepaintCullActive = false;
+        _iopsCalculatorOpen = false;
+        _customersTabAddServerWizardOpen = false;
+        _serverEditPopupDismissed = true;
+        _customerDropdownOpen = false;
+        _ipamDevicesSwitchPageMenuOpen = false;
+        _ipamDevicesServerPageMenuOpen = false;
+        CloseIpamPrefixDeleteConfirm();
+        InvalidateDeviceCache();
+        RecomputeContentHeight();
+        BeginImGuiInputRecoveryBurst();
+    }
+
     public static void TickDeviceListCache()
     {
         if (!IsVisible)

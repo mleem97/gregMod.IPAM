@@ -304,7 +304,11 @@ public static partial class IPAMOverlay
         y += 38f;
 
         var addRootWas = _ipamPrefixAddAsRoot;
-        _ipamPrefixAddAsRoot = GUI.Toggle(new Rect(x0, y, Mathf.Min(360f, cardW - 8f), 22f), _ipamPrefixAddAsRoot, "Add as root prefix (sibling / new top-level)");
+        _ipamPrefixAddAsRoot = ImguiToggleOnce(
+            new Rect(x0, y, Mathf.Min(360f, cardW - 8f), 22f),
+            _ipamPrefixAddAsRoot,
+            9108,
+            new GUIContent("Add as root prefix (sibling / new top-level)"));
         if (_ipamPrefixAddAsRoot && !addRootWas)
         {
             _ipamSelectedPrefixId = null;
@@ -331,21 +335,7 @@ public static partial class IPAMOverlay
         var delRect = new Rect(addRect.xMax + 10f, y, 140f, 26f);
         if (ImguiButtonOnce(delRect, "Delete selected", 9102, _stMutedBtn))
         {
-            _ipamPrefixFormError = "";
-            if (string.IsNullOrEmpty(_ipamSelectedPrefixId) || !Guid.TryParse(_ipamSelectedPrefixId, out var delId))
-            {
-                _ipamPrefixFormError = "Select a prefix to delete (subtree is removed).";
-            }
-            else if (!IpamDataStore.TryDeletePrefix(delId, out var err))
-            {
-                _ipamPrefixFormError = err ?? "Delete failed.";
-            }
-            else
-            {
-                _ipamSelectedPrefixId = null;
-                IpamPruneDrillAfterPrefixMutation();
-                RecomputeContentHeight();
-            }
+            RequestIpamPrefixDelete(_ipamSelectedPrefixId);
         }
 
         y += 34f;

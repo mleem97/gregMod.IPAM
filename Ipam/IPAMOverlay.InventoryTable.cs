@@ -270,22 +270,37 @@ public static partial class IPAMOverlay
         c5 = cardWidth * TableColWeight[5];
     }
 
-    private static void ProcessTableColumnGrips(Rect headerRect, float cardWidth, int gripHintBase)
+    private static void ProcessTableColumnGripsInteraction(Rect headerRect, float cardWidth, int gripHintBase)
     {
         var e = Event.current;
+        if (e == null)
+        {
+            return;
+        }
+
+        var et = e.type;
+        if (et != EventType.MouseDown && et != EventType.MouseDrag && et != EventType.MouseUp)
+        {
+            return;
+        }
+
         GetTableColumnWidths(cardWidth, out var w0, out var w1, out var w2, out var w3, out var w4, out var w5);
         var ws = new[] { w0, w1, w2, w3, w4, w5 };
         var x = headerRect.x;
         for (var boundary = 0; boundary < 5; boundary++)
         {
             x += ws[boundary];
-            var grip = new Rect(x - 3f, headerRect.y, 6f, headerRect.height);
+            var grip = new Rect(
+                x - ColumnGripHalfWidth,
+                headerRect.y,
+                ColumnGripHalfWidth * 2f,
+                headerRect.height);
             var id = GUIUtility.GetControlID(gripHintBase + boundary, FocusType.Passive, grip);
 
             switch (e.GetTypeForControl(id))
             {
                 case EventType.MouseDown:
-                    if (e.button == 0 && grip.Contains(e.mousePosition))
+                    if (GUI.enabled && e.button == 0 && grip.Contains(e.mousePosition))
                     {
                         GUIUtility.hotControl = id;
                         _columnGripMouseStartX = e.mousePosition.x;
@@ -330,26 +345,45 @@ public static partial class IPAMOverlay
                     }
 
                     break;
-                case EventType.Repaint:
-                {
-                    var lineH = Mathf.Max(1f, headerRect.height);
-                    var lineY = headerRect.y;
-                    var xMid = x - 1f;
-                    var oc = GUI.color;
-                    GUI.color = new Color(0f, 0.78f, 0.66f, 1f);
-                    GUI.DrawTexture(new Rect(xMid, lineY, 2f, lineH), Texture2D.whiteTexture, ScaleMode.StretchToFill);
-                    var hover = grip.Contains(e.mousePosition) || GUIUtility.hotControl == id;
-                    if (hover)
-                    {
-                        GUI.color = new Color(0.4f, 1f, 0.92f, 1f);
-                        GUI.DrawTexture(new Rect(xMid - 1f, lineY, 4f, lineH), Texture2D.whiteTexture, ScaleMode.StretchToFill);
-                    }
-
-                    GUI.color = oc;
-                    break;
-                }
             }
         }
+    }
+
+    private static void DrawTableColumnGripGuides(Rect headerRect, float cardWidth, int gripHintBase)
+    {
+        if (Event.current == null || Event.current.type != EventType.Repaint || cardWidth < 120f)
+        {
+            return;
+        }
+
+        GetTableColumnWidths(cardWidth, out var w0, out var w1, out var w2, out var w3, out var w4, out var w5);
+        var ws = new[] { w0, w1, w2, w3, w4, w5 };
+        var x = headerRect.x;
+        var lineH = Mathf.Max(1f, headerRect.height);
+        var lineY = headerRect.y;
+        var oc = GUI.color;
+        var mouse = Event.current.mousePosition;
+        for (var boundary = 0; boundary < 5; boundary++)
+        {
+            x += ws[boundary];
+            var grip = new Rect(
+                x - ColumnGripHalfWidth,
+                headerRect.y,
+                ColumnGripHalfWidth * 2f,
+                headerRect.height);
+            var id = GUIUtility.GetControlID(gripHintBase + boundary, FocusType.Passive, grip);
+            var xMid = x - 1f;
+            var hover = grip.Contains(mouse) || GUIUtility.hotControl == id;
+            GUI.color = hover
+                ? new Color(0.4f, 1f, 0.92f, 1f)
+                : new Color(0f, 0.78f, 0.66f, 1f);
+            GUI.DrawTexture(
+                new Rect(xMid - (hover ? 1f : 0f), lineY, hover ? 4f : 2f, lineH),
+                Texture2D.whiteTexture,
+                ScaleMode.StretchToFill);
+        }
+
+        GUI.color = oc;
     }
 
     /// <summary>Customers tab (customer list): fit the shared six weights to these headers and row text — not inventory columns.</summary>
@@ -412,35 +446,10 @@ public static partial class IPAMOverlay
             minPx[i] = Mathf.Clamp(minPx[i], 56f, cardWidth * 0.40f);
         }
 
-        var sum = minPx[0] + minPx[1] + minPx[2] + minPx[3] + minPx[4] + minPx[5];
-        if (sum < cardWidth)
-        {
-            var slack = cardWidth - sum;
-            minPx[0] += slack * 0.30f;
-            minPx[1] += slack * 0.08f;
-            minPx[2] += slack * 0.12f;
-            minPx[3] += slack * 0.12f;
-            minPx[4] += slack * 0.20f;
-            minPx[5] += slack * 0.18f;
-        }
-        else
-        {
-            var scale = cardWidth / sum;
-            for (var i = 0; i < 6; i++)
-            {
-                minPx[i] *= scale;
-            }
-        }
-
-        for (var i = 0; i < 6; i++)
-        {
-            TableColWeight[i] = minPx[i] / cardWidth;
-        }
-
-        NormalizeTableColWeights();
+        ApplyAutoFitColumnWidths(minPx, cardWidth);
     }
 
-    /// <summary>Solid vertical guides through data rows (header already has guides from <see cref="ProcessTableColumnGrips"/>).</summary>
+    /// <summary>Solid vertical guides through data rows (header already has guides from <see cref="DrawTableColumnGripGuides"/>).</summary>
     private static void DrawCustomersTableColumnBodyGuides(float x0, float yTop, float yBottom, float cardWidth)
     {
         if (Event.current.type != EventType.Repaint || yBottom <= yTop + 0.5f || cardWidth < 120f)
@@ -464,9 +473,9 @@ public static partial class IPAMOverlay
         GUI.color = oc;
     }
 
-    private static void AutoFitInventoryTableColumns(float cardWidth)
+    private static void AutoFitInventoryTableColumns(float tableWidth)
     {
-        if (!_stylesReady || cardWidth < 200f || _stTableCell == null || _stHeaderSortBtn == null)
+        if (!_stylesReady || tableWidth < 200f || _stTableCell == null || _stHeaderSortBtn == null)
         {
             return;
         }
@@ -476,13 +485,14 @@ public static partial class IPAMOverlay
         var minPx = new float[6];
         void BumpHeader(int col, string label)
         {
-            var w = _stHeaderSortBtn.CalcSize(new GUIContent(label)).x + 14f;
+            var w = _stHeaderSortBtn.CalcSize(new GUIContent(label)).x + 18f;
             if (w > minPx[col])
             {
                 minPx[col] = w;
             }
         }
 
+        BumpHeader(0, "Device");
         BumpHeader(0, "Name");
         BumpHeader(1, "Customer");
         BumpHeader(2, "Role");
@@ -499,12 +509,14 @@ public static partial class IPAMOverlay
                 return;
             }
 
-            var w = _stTableCell.CalcSize(new GUIContent(text)).x + 10f;
+            var w = _stTableCell.CalcSize(new GUIContent(text)).x + 12f;
             if (w > minPx[col])
             {
                 minPx[col] = w;
             }
         }
+
+        BumpCell(3, "255.255.255.255  (255.255.255.0/24)");
 
         foreach (var sw in SortedSwitchesBuffer)
         {
@@ -515,6 +527,7 @@ public static partial class IPAMOverlay
 
             BumpCell(0, DeviceInventoryReflection.GetDisplayName(sw));
             BumpCell(2, "Switch");
+            BumpCell(2, "Router");
             if (TryGetIpamEolString(sw, out var eolSw))
             {
                 BumpCell(4, eolSw);
@@ -534,7 +547,7 @@ public static partial class IPAMOverlay
             BumpCell(1, GetCustomerDisplayName(server));
             BumpCell(2, DeviceInventoryReflection.GetServerFormFactorLabel(server));
             var ip = DHCPManager.GetServerIP(server);
-            BumpCell(3, string.IsNullOrWhiteSpace(ip) ? "—" : ip);
+            BumpCell(3, FormatServerIpWithContainingPrefix(ip));
             if (TryGetIpamEolString(server, out var eolS))
             {
                 BumpCell(4, eolS);
@@ -546,20 +559,31 @@ public static partial class IPAMOverlay
 
         for (var i = 0; i < 6; i++)
         {
-            minPx[i] = Mathf.Clamp(minPx[i], 52f, cardWidth * 0.48f);
+            minPx[i] = Mathf.Clamp(minPx[i], 52f, tableWidth * 0.45f);
         }
 
+        ApplyAutoFitColumnWidths(minPx, tableWidth);
+    }
+
+    private static void ApplyAutoFitColumnWidths(float[] minPx, float tableWidth)
+    {
         var sum = minPx[0] + minPx[1] + minPx[2] + minPx[3] + minPx[4] + minPx[5];
-        if (sum < cardWidth)
+        if (sum < 0.001f)
         {
-            var slack = cardWidth - sum;
-            minPx[0] += slack * 0.45f;
-            minPx[1] += slack * 0.3f;
-            minPx[5] += slack * 0.25f;
+            return;
+        }
+
+        if (sum < tableWidth)
+        {
+            var slack = tableWidth - sum;
+            for (var i = 0; i < 6; i++)
+            {
+                minPx[i] += slack * (minPx[i] / sum);
+            }
         }
         else
         {
-            var scale = cardWidth / sum;
+            var scale = tableWidth / sum;
             for (var i = 0; i < 6; i++)
             {
                 minPx[i] *= scale;
@@ -568,7 +592,7 @@ public static partial class IPAMOverlay
 
         for (var i = 0; i < 6; i++)
         {
-            TableColWeight[i] = minPx[i] / cardWidth;
+            TableColWeight[i] = minPx[i] / tableWidth;
         }
 
         NormalizeTableColWeights();
@@ -870,6 +894,8 @@ public static partial class IPAMOverlay
     {
         GUI.DrawTexture(r, _texTableHeader);
         GetTableColumnWidths(r.width, out var c0, out var c1, out var c2, out var c3, out var c4, out var c5);
+        var gripHintBase = dedupeBase + 80;
+        ProcessTableColumnGripsInteraction(r, r.width, gripHintBase);
         var x = r.x;
         var labels = new[] { h0, h1, h2, h3, h4, h5 };
         var widths = new[] { c0, c1, c2, c3, c4, c5 };
@@ -881,7 +907,9 @@ public static partial class IPAMOverlay
                 lab += sortAscending ? " ▲" : " ▼";
             }
 
-            var cell = new Rect(x, r.y, widths[i], r.height);
+            var leftPad = i > 0 ? ColumnGripHalfWidth : 0f;
+            var rightPad = i < 5 ? ColumnGripHalfWidth : 0f;
+            var cell = new Rect(x + leftPad, r.y, widths[i] - leftPad - rightPad, r.height);
             if (ImguiButtonOnce(cell, lab, dedupeBase + i, _stHeaderSortBtn))
             {
                 if (sortColumn == i)
@@ -908,6 +936,6 @@ public static partial class IPAMOverlay
             x += widths[i];
         }
 
-        ProcessTableColumnGrips(r, r.width, dedupeBase + 80);
+        DrawTableColumnGripGuides(r, r.width, gripHintBase);
     }
 }

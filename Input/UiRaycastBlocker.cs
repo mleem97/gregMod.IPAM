@@ -5,8 +5,9 @@ using UnityEngine.UI;
 namespace DHCPSwitches;
 
 /// <summary>
-/// Full-screen transparent overlay canvas so EventSystem raycasts hit this layer first while IPAM is open,
-/// instead of passing through to the game's menus. IMGUI still receives the same mouse in <see cref="IPAMOverlay.Draw"/>.
+/// Optional full-screen canvas kept at max sort order while IPAM is open. The plate does not raycast (post–game-update
+/// builds stole IMGUI clicks when <see cref="Image.raycastTarget"/> was true). IMGUI blocking uses the modal
+/// <c>GUI.Box</c> in <see cref="IPAMOverlay.Draw"/>.
 /// </summary>
 internal static class UiRaycastBlocker
 {
@@ -134,7 +135,8 @@ internal static class UiRaycastBlocker
         var image = plate.AddComponent<Image>();
         // Fully transparent meshes are occasionally skipped by the UI batcher; tiny alpha keeps raycasts reliable.
         image.color = new Color(0f, 0f, 0f, 0.004f);
-        image.raycastTarget = true;
+        // IMGUI receives pointer events directly; a full-screen uGUI raycast plate can steal clicks on new builds.
+        image.raycastTarget = false;
 
         _root.SetActive(false);
     }

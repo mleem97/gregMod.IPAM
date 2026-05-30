@@ -6,6 +6,7 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
+using UnityEngine.SceneManagement;
 
 namespace DHCPSwitches;
 
@@ -138,6 +139,8 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
     {
     }
 
+    private int _modSaveScopeSceneHandle = -1;
+
     private void Awake()
     {
         Instance = this;
@@ -155,6 +158,14 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
 
     private void Update()
     {
+        var scene = SceneManager.GetActiveScene();
+        if (scene.handle != _modSaveScopeSceneHandle)
+        {
+            _modSaveScopeSceneHandle = scene.handle;
+            ModSaveScope.NotifySceneLoaded();
+        }
+
+        ModSaveScope.TickCapture();
         UiRaycastBlocker.SetBlocking(IPAMOverlay.IsVisible);
 
         if (IPAMOverlay.IsVisible)

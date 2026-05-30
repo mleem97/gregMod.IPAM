@@ -32,6 +32,17 @@ internal static class IpamDataStore
 
     private static IpamPersistedRoot _root;
     private static bool _loaded;
+    private static IpamPersistedRoot _deferEmptyRoot;
+
+    private static IpamPersistedRoot NewEmptyRoot()
+    {
+        return new IpamPersistedRoot
+        {
+            Version = FileVersion,
+            Prefixes = new List<IpamPrefixEntry>(),
+            Vlans = new List<IpamVlanEntry>(),
+        };
+    }
 
     private static string GetPath()
     {
@@ -63,17 +74,25 @@ internal static class IpamDataStore
             return _root;
         }
 
+        if (!ModSaveScope.EnsureBindingChecked(out _))
+        {
+            _deferEmptyRoot ??= NewEmptyRoot();
+            return _deferEmptyRoot;
+        }
+
         _loaded = true;
-        _root = new IpamPersistedRoot { Version = FileVersion, Prefixes = new List<IpamPrefixEntry>(), Vlans = new List<IpamVlanEntry>() };
-        var path = GetPath();
-        if (!File.Exists(path))
+        _root = NewEmptyRoot();
+        _deferEmptyRoot = null;
+
+        var loadPath = GetPath();
+        if (!File.Exists(loadPath))
         {
             return _root;
         }
 
         try
         {
-            var json = File.ReadAllText(path);
+            var json = File.ReadAllText(loadPath);
             var file = JsonSerializer.Deserialize<IpamPersistedRoot>(json, JsonOptions);
             if (file != null)
             {
@@ -85,10 +104,17 @@ internal static class IpamDataStore
         }
         catch (Exception ex)
         {
-            ModLogging.Warning($"IPAM data load failed ({path}): {ex.Message}");
+            ModLogging.Warning($"IPAM data load failed ({loadPath}): {ex.Message}");
         }
 
         return _root;
+    }
+
+    internal static void ResetForNewSaveSession()
+    {
+        _loaded = false;
+        _root = null;
+        _deferEmptyRoot = null;
     }
 
     internal static IReadOnlyList<IpamPrefixEntry> GetPrefixes()
@@ -322,6 +348,42 @@ internal static class IpamDataStore
         CollectSubtreeIds(root, idStr, toRemove);
         root.Prefixes.RemoveAll(p => toRemove.Contains(p.Id));
         Save();
+        return true;
+    }
+
+    internal static bool TryDescribePrefixSubtree(
+        string idStr,
+        out IpamPrefixEntry entry,
+        out int totalCount,
+        out List<IpamPrefixEntry> descendants)
+    {
+        entry = null;
+        totalCount = 0;
+        descendants = new List<IpamPrefixEntry>();
+        if (string.IsNullOrEmpty(idStr))
+        {
+            return false;
+        }
+
+        var root = EnsureLoaded();
+        entry = root.Prefixes.FirstOrDefault(p => string.Equals(p.Id, idStr, StringComparison.Ordinal));
+        if (entry == null)
+        {
+            return false;
+        }
+
+        var acc = new HashSet<string>(StringComparer.Ordinal);
+        CollectSubtreeIds(root, idStr, acc);
+        totalCount = acc.Count;
+        foreach (var p in root.Prefixes)
+        {
+            if (p != null && acc.Contains(p.Id) && !string.Equals(p.Id, idStr, StringComparison.Ordinal))
+            {
+                descendants.Add(p);
+            }
+        }
+
+        descendants.Sort((a, b) => string.CompareOrdinal((a.Cidr ?? "").Trim(), (b.Cidr ?? "").Trim()));
         return true;
     }
 

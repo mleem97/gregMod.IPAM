@@ -564,7 +564,10 @@ public static partial class IPAMOverlay
         var labelLeft = chevronLeft + (showExpandChevron ? chevronW + 2f : 0f);
         var prefixLabelRect = new Rect(labelLeft, y, Mathf.Max(20f, colPrefix - (labelLeft - x0) - 6f), TableRowH);
 
-        if (showExpandChevron && e.type == EventType.MouseDown && e.button == 0 && chevronRect.Contains(e.mousePosition))
+        var rowHint = unchecked(0x4950_1000 + (p.Id?.GetHashCode() ?? 0));
+        var chevronHint = rowHint ^ 1;
+
+        if (showExpandChevron && ImguiListRowClick(chevronRect, chevronHint))
         {
             if (_ipamPrefixCollapsedIds.Contains(p.Id))
             {
@@ -576,9 +579,8 @@ public static partial class IPAMOverlay
             }
 
             RecomputeContentHeight();
-            e.Use();
         }
-        else if (e.type == EventType.MouseDown && e.button == 0 && rowBodyRect.Contains(e.mousePosition))
+        else if (ImguiListRowClick(rowBodyRect, rowHint))
         {
             _ipamSelectedPrefixId = p.Id;
             var t = Time.realtimeSinceStartup;
@@ -595,8 +597,6 @@ public static partial class IPAMOverlay
                 _ipamPrefixLastClickedRowId = p.Id;
                 _ipamPrefixLastClickTime = t;
             }
-
-            e.Use();
         }
 
         var alt = (Mathf.FloorToInt(y / TableRowH) % 2) == 1;

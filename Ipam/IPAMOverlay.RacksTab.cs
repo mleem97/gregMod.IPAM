@@ -13,6 +13,26 @@ public static partial class IPAMOverlay
     /// <summary>Front-view diagram height in px — fixed so it does not stretch with the IPAM window.</summary>
     private const float RackDiagramFixedHeight = 560f;
 
+    private const int RackFloorRowCount = 16;
+    private const int RackFloorColCount = 32;
+    /// <summary>Group sizes reading right → left (column 1 starts on the right).</summary>
+    private static readonly int[] RackFloorGroupsFromRight = { 5, 5, 4, 5, 4, 5, 4 };
+    /// <summary>Same groups laid out left → right on screen (mirrored).</summary>
+    private static readonly int[] RackFloorGroupsOnScreen = { 4, 5, 4, 5, 4, 5, 5 };
+    private static readonly int[] RackFloorScreenColumnOrder = BuildRackFloorScreenColumnOrder();
+    private const float RackFloorGroupAisleW = 8f;
+    private const float RackFloorRowAisleH = 10f;
+    private const float RackFloorAxisLabelW = 24f;
+    private const float RackFloorAxisLabelH = 18f;
+    private static readonly Color RackFloorCellEmpty = new(0.44f, 0.46f, 0.49f, 0.90f);
+    private static readonly Color RackFloorCellOccupied = new(0.22f, 0.62f, 0.34f, 0.92f);
+    private static readonly Color RackMountDragPreview = new(0.28f, 0.88f, 0.52f, 0.62f);
+    private static readonly Color RackMountDragGhost = new(0.22f, 0.78f, 0.48f, 0.92f);
+    private static readonly Color RackPatchDragRowFill = new(0.16f, 0.38f, 0.46f, 0.96f);
+    private static readonly Color RackPatchDragRowBorder = new(0.35f, 0.82f, 0.78f, 0.95f);
+
+    private static GUIStyle _rackGridLabelStyle;
+    private static GUIStyle _rackGridAxisLabelStyle;
     private static string _racksTabSelectedUnifiedId = "";
     private static string _racksTabDrilledUnifiedId = "";
     private static string _racksLastUnifiedId = "";
@@ -43,6 +63,15 @@ public static partial class IPAMOverlay
     private static GUIStyle _rackDiagramUnitLabelStyle;
     /// <summary>0 server, 1 switch, 2 router, 3 patch panel.</summary>
     private static int _rackAddMountCategory;
+    private static bool _rackMountDragActive;
+    private static int _rackMountDragHeightU = 1;
+    private static int _rackMountDragHoverStartU = -1;
+    private static Rect _rackMountDropBodyLast;
+    private static string _rackMountDropRackId = "";
+    private static int _rackMountDropRackTotalU = 47;
+    private static string _rackMountDragLabel = "";
+    private static Vector2 _rackMountDragStartPos;
+    private const int RackMountDragControlBase = unchecked((int)0x524D_0000);
 
     private static readonly Color RackDiagramSwitchFill = new(0.93f, 0.93f, 0.94f, 0.96f);
     private static readonly Color RackDiagramRouterFill = new(0.55f, 0.56f, 0.58f, 0.96f);
@@ -128,6 +157,662 @@ public static partial class IPAMOverlay
         }
 
         return list;
+    }
+
+    private static string FormatRackGridLabel(int rowIndex, int column)
+    {
+        return ((char)('A' + rowIndex)).ToString(CultureInfo.InvariantCulture)
+               + column.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static UnifiedRackEntry FindUnifiedAtGrid(int rowIndex, int column, IReadOnlyList<UnifiedRackEntry> unified)
+    {
+        if (unified == null || rowIndex < 0 || rowIndex >= RackFloorRowCount || column < 1 || column > RackFloorColCount)
+        {
+            return null;
+        }
+
+        var rowLetter = ((char)('A' + rowIndex)).ToString();
+        var label = FormatRackGridLabel(rowIndex, column);
+        foreach (var u in unified)
+        {
+            if (u?.Persisted != null)
+            {
+                if (u.Persisted.GridColumn == column
+                    && string.Equals(u.Persisted.GridRow, rowLetter, StringComparison.OrdinalIgnoreCase))
+                {
+                    return u;
+                }
+
+                if (string.Equals((u.Persisted.DisplayName ?? "").Trim(), label, StringComparison.OrdinalIgnoreCase))
+                {
+                    return u;
+                }
+            }
+
+            if (u?.SceneCopy != null
+                && string.Equals((u.SceneCopy.DisplayName ?? "").Trim(), label, StringComparison.OrdinalIgnoreCase))
+            {
+                return u;
+            }
+        }
+
+        return null;
+    }
+
+    private static int[] BuildRackFloorScreenColumnOrder()
+    {
+        var order = new int[RackFloorColCount];
+        var visualIdx = RackFloorColCount - 1;
+        var logicalCol = 1;
+        foreach (var gsize in RackFloorGroupsFromRight)
+        {
+            for (var i = 0; i < gsize; i++)
+            {
+                order[visualIdx--] = logicalCol++;
+            }
+        }
+
+        return order;
+    }
+
+    private static void ComputeRackFloorGridMetrics(
+        float availableW,
+        out float cellSize,
+        out float gridW,
+        out float gridH,
+        out float totalW,
+        out float totalH)
+    {
+        var aisleTotal = (RackFloorGroupsOnScreen.Length - 1) * RackFloorGroupAisleW;
+        var usableW = Mathf.Max(120f, availableW - RackFloorAxisLabelW * 2f);
+        cellSize = Mathf.Max(12f, (usableW - aisleTotal) / RackFloorColCount);
+        gridW = RackFloorColCount * cellSize + aisleTotal;
+        gridH = RackFloorRowCount * cellSize + (RackFloorRowCount - 1) * RackFloorRowAisleH;
+        totalW = gridW + RackFloorAxisLabelW * 2f;
+        totalH = gridH + RackFloorAxisLabelH * 2f;
+    }
+
+    private static float RackFloorVisualIndexToX(float gridX0, int visualIndex, float cellSize)
+    {
+        var x = gridX0;
+        var vi = 0;
+        foreach (var gsize in RackFloorGroupsOnScreen)
+        {
+            for (var i = 0; i < gsize; i++)
+            {
+                if (vi == visualIndex)
+                {
+                    return x;
+                }
+
+                x += cellSize;
+                vi++;
+            }
+
+            if (vi < RackFloorColCount)
+            {
+                x += RackFloorGroupAisleW;
+            }
+        }
+
+        return x;
+    }
+
+    private static float RackFloorRowToY(float gridY0, int rowIndex, float cellSize)
+    {
+        return gridY0 + rowIndex * (cellSize + RackFloorRowAisleH);
+    }
+
+    private static GUIStyle GetRackGridAxisLabelStyle(float cellSize)
+    {
+        if (_rackGridAxisLabelStyle == null && _stMutedCenter != null)
+        {
+            var s = new GUIStyle();
+            s.font = _stMutedCenter.font;
+            s.fontSize = _stMutedCenter.fontSize;
+            s.fontStyle = FontStyle.Bold;
+            s.normal.textColor = new Color32(176, 186, 200, 255);
+            s.alignment = TextAnchor.MiddleCenter;
+            s.clipping = TextClipping.Clip;
+            s.wordWrap = false;
+            _rackGridAxisLabelStyle = s;
+        }
+
+        if (_rackGridAxisLabelStyle != null)
+        {
+            _rackGridAxisLabelStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(Mathf.Min(cellSize, RackFloorAxisLabelH) * 0.42f), 8, 11);
+        }
+
+        return _rackGridAxisLabelStyle ?? _stMutedCenter;
+    }
+
+    private static GUIStyle GetRackGridLabelStyle(float cellSize)
+    {
+        if (_rackGridLabelStyle == null && _stMutedCenter != null)
+        {
+            var s = new GUIStyle();
+            s.font = _stMutedCenter.font;
+            s.fontSize = _stMutedCenter.fontSize;
+            s.fontStyle = _stMutedCenter.fontStyle;
+            s.normal.textColor = new Color32(248, 244, 236, 255);
+            s.alignment = TextAnchor.MiddleCenter;
+            s.clipping = TextClipping.Clip;
+            s.wordWrap = false;
+            _rackGridLabelStyle = s;
+        }
+
+        if (_rackGridLabelStyle != null)
+        {
+            _rackGridLabelStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(cellSize * 0.38f), 7, 12);
+        }
+
+        return _rackGridLabelStyle ?? _stMutedCenter;
+    }
+
+    private static void DrawRackFloorGrid(
+        float x0,
+        ref float y,
+        float availableW,
+        IReadOnlyList<UnifiedRackEntry> unified,
+        bool allowOpenOnClick)
+    {
+        ComputeRackFloorGridMetrics(availableW, out var cellSize, out var gridW, out var gridH, out var totalW, out var totalH);
+        GUI.Label(new Rect(x0, y, totalW, SectionTitleH), "Datacenter floor (A–P × 1–32)", _stSectionTitle);
+        y += SectionTitleH + 4f;
+        GUI.Label(
+            new Rect(x0, y, totalW, 36f),
+            "Column 1 is on the right. Rack groups (right → left): 5 · 5 · 4 · 5 · 4 · 5 · 4 with aisles between. Click a slot to open.",
+            _stHint);
+        y += 38f;
+
+        var outerRect = new Rect(x0, y, totalW, totalH);
+        var gridX0 = RackFloorAxisLabelW;
+        var gridY0 = RackFloorAxisLabelH;
+        var labelSt = GetRackGridLabelStyle(cellSize);
+        var axisSt = GetRackGridAxisLabelStyle(cellSize);
+
+        GUI.BeginGroup(outerRect);
+
+        if (Event.current.type == EventType.Repaint)
+        {
+            for (var visualIndex = 0; visualIndex < RackFloorColCount; visualIndex++)
+            {
+                var col = RackFloorScreenColumnOrder[visualIndex];
+                var cx = RackFloorVisualIndexToX(gridX0, visualIndex, cellSize);
+                var topRect = new Rect(cx, 0f, cellSize, RackFloorAxisLabelH - 2f);
+                var bottomRect = new Rect(cx, gridY0 + gridH + 2f, cellSize, RackFloorAxisLabelH - 2f);
+                DrawAxisLabel(topRect, col.ToString(CultureInfo.InvariantCulture), axisSt);
+                DrawAxisLabel(bottomRect, col.ToString(CultureInfo.InvariantCulture), axisSt);
+            }
+        }
+
+        for (var row = 0; row < RackFloorRowCount; row++)
+        {
+            var rowLetter = ((char)('A' + row)).ToString(CultureInfo.InvariantCulture);
+            var cy = RackFloorRowToY(gridY0, row, cellSize);
+            var leftAxisRect = new Rect(0f, cy, RackFloorAxisLabelW - 2f, cellSize);
+            var rightAxisRect = new Rect(gridX0 + gridW + 2f, cy, RackFloorAxisLabelW - 2f, cellSize);
+
+            if (Event.current.type == EventType.Repaint)
+            {
+                DrawAxisLabel(leftAxisRect, rowLetter, axisSt);
+                DrawAxisLabel(rightAxisRect, rowLetter, axisSt);
+            }
+
+            for (var visualIndex = 0; visualIndex < RackFloorColCount; visualIndex++)
+            {
+                var col = RackFloorScreenColumnOrder[visualIndex];
+                var cx = RackFloorVisualIndexToX(gridX0, visualIndex, cellSize);
+                var cellRect = new Rect(cx, cy, cellSize, cellSize);
+                var entry = FindUnifiedAtGrid(row, col, unified);
+                var selected = entry != null
+                               && string.Equals(entry.UnifiedId, _racksTabSelectedUnifiedId, StringComparison.Ordinal);
+                var drilled = entry != null
+                              && string.Equals(entry.UnifiedId, _racksTabDrilledUnifiedId, StringComparison.Ordinal);
+                var hasMounts = entry != null
+                                && ((entry.Persisted?.Mounts?.Count ?? 0) > 0
+                                    || (entry.SceneCopy?.Devices?.Count ?? 0) > 0);
+
+                var controlHint = unchecked(0x5241_0000 + row * RackFloorColCount + visualIndex);
+                if (allowOpenOnClick && ImguiListRowClick(cellRect, controlHint))
+                {
+                    if (entry != null)
+                    {
+                        _racksTabSelectedUnifiedId = entry.UnifiedId;
+                        _racksTabDrilledUnifiedId = entry.UnifiedId;
+                    }
+                    else if (RackDataStore.TryEnsureRackAtGrid(row, col, out var newId, out var errOpen))
+                    {
+                        _racksTabSelectedUnifiedId = "p:" + newId;
+                        _racksTabDrilledUnifiedId = "p:" + newId;
+                    }
+                    else if (!string.IsNullOrEmpty(errOpen))
+                    {
+                        ShowIpamToast(errOpen);
+                    }
+
+                    RecomputeContentHeight();
+                }
+
+                if (Event.current.type != EventType.Repaint)
+                {
+                    continue;
+                }
+
+                var occupied = entry != null && hasMounts;
+                var fill = occupied ? RackFloorCellOccupied : RackFloorCellEmpty;
+
+                DrawTintedRect(cellRect, fill);
+                if (selected || drilled)
+                {
+                    DrawTintedRect(cellRect, new Color(0.12f, 0.28f, 0.38f, drilled ? 0.55f : 0.35f));
+                }
+
+                GUI.DrawTexture(new Rect(cellRect.x, cellRect.y, cellRect.width, 1f), _texTableHeader);
+                GUI.DrawTexture(new Rect(cellRect.x, cellRect.yMax - 1f, cellRect.width, 1f), _texTableHeader);
+                GUI.DrawTexture(new Rect(cellRect.x, cellRect.y, 1f, cellRect.height), _texTableHeader);
+                GUI.DrawTexture(new Rect(cellRect.xMax - 1f, cellRect.y, 1f, cellRect.height), _texTableHeader);
+
+                var slotLabel = FormatRackGridLabel(row, col);
+                if (labelSt != null)
+                {
+                    labelSt.Draw(cellRect, new GUIContent(slotLabel), false, false, false, false);
+                }
+            }
+        }
+
+        GUI.EndGroup();
+
+        y += totalH + 8f;
+    }
+
+    private static void DrawAxisLabel(Rect r, string text, GUIStyle st)
+    {
+        if (st != null)
+        {
+            st.Draw(r, new GUIContent(text), false, false, false, false);
+        }
+        else
+        {
+            GUI.Label(r, text, _stMutedCenter);
+        }
+    }
+
+    private static bool CanStartRackMountDrag()
+    {
+        switch (_rackAddMountCategory)
+        {
+            case 0:
+                EnsureSortedServers();
+                return _rackMountPickIdx >= 0
+                       && _rackMountPickIdx < SortedServersBuffer.Count
+                       && SortedServersBuffer[_rackMountPickIdx] != null;
+            case 1:
+            case 2:
+                EnsureSortedSwitches();
+                return _rackMountSwitchPickIdx >= 0
+                       && _rackMountSwitchPickIdx < SortedSwitchesBuffer.Count
+                       && SortedSwitchesBuffer[_rackMountSwitchPickIdx] != null;
+            case 3:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static int GetPendingMountHeightU()
+    {
+        switch (_rackAddMountCategory)
+        {
+            case 0:
+                EnsureSortedServers();
+                if (_rackMountPickIdx >= 0
+                    && _rackMountPickIdx < SortedServersBuffer.Count
+                    && SortedServersBuffer[_rackMountPickIdx] != null)
+                {
+                    return RackLayoutHelper.InferServerRackHeightU(SortedServersBuffer[_rackMountPickIdx]);
+                }
+
+                return 3;
+            case 1:
+            case 2:
+                return 1;
+            case 3:
+                return 2;
+            default:
+                return 1;
+        }
+    }
+
+    private static string GetPendingMountPreviewLabel()
+    {
+        switch (_rackAddMountCategory)
+        {
+            case 0:
+                EnsureSortedServers();
+                if (_rackMountPickIdx >= 0
+                    && _rackMountPickIdx < SortedServersBuffer.Count
+                    && SortedServersBuffer[_rackMountPickIdx] != null)
+                {
+                    return DeviceInventoryReflection.GetDisplayName(SortedServersBuffer[_rackMountPickIdx]);
+                }
+
+                return "Server";
+            case 1:
+            case 2:
+                EnsureSortedSwitches();
+                if (_rackMountSwitchPickIdx >= 0
+                    && _rackMountSwitchPickIdx < SortedSwitchesBuffer.Count
+                    && SortedSwitchesBuffer[_rackMountSwitchPickIdx] != null)
+                {
+                    return DeviceInventoryReflection.GetDisplayName(SortedSwitchesBuffer[_rackMountSwitchPickIdx]);
+                }
+
+                return _rackAddMountCategory == 2 ? "Router" : "Switch";
+            case 3:
+                return string.IsNullOrWhiteSpace(_rackPatchLabelDraft) ? "Patch panel" : _rackPatchLabelDraft.Trim();
+            default:
+                return "Device";
+        }
+    }
+
+    private static int RackDiagramMouseToStartU(Rect rackBody, int totalU, int heightU, float mouseY)
+    {
+        var tu = Mathf.Max(1, totalU);
+        var h = Mathf.Max(1, heightU);
+        var cell = rackBody.height / tu;
+        if (cell <= 0.001f)
+        {
+            return 1;
+        }
+
+        var uFloat = (rackBody.yMax - mouseY) / cell;
+        var startU = Mathf.FloorToInt(uFloat) + 1;
+        return Mathf.Clamp(startU, 1, Mathf.Max(1, tu - h + 1));
+    }
+
+    private static void UpdateRackMountDragHover(int rackTotalU)
+    {
+        var mouse = Event.current.mousePosition;
+        if (_rackMountDropBodyLast.width <= 0f || !_rackMountDropBodyLast.Contains(mouse))
+        {
+            _rackMountDragHoverStartU = -1;
+            return;
+        }
+
+        _rackMountDragHoverStartU = RackDiagramMouseToStartU(
+            _rackMountDropBodyLast,
+            rackTotalU,
+            _rackMountDragHeightU,
+            mouse.y);
+        _rackMountStartU = _rackMountDragHoverStartU.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static bool TryAddPendingMountToRack(string rackId, int startU, out string error)
+    {
+        error = null;
+        if (string.IsNullOrEmpty(rackId))
+        {
+            error = "Rack not found.";
+            return false;
+        }
+
+        switch (_rackAddMountCategory)
+        {
+            case 0:
+                EnsureSortedServers();
+                var filtSrv = BuildFilteredServerIndices(_rackMountServerSearchBuf ?? "");
+                if (SortedServersBuffer.Count <= 0)
+                {
+                    error = "No servers in scene.";
+                    return false;
+                }
+
+                if (!filtSrv.Contains(_rackMountPickIdx) || SortedServersBuffer[_rackMountPickIdx] == null)
+                {
+                    error = "Select a server from the filtered list.";
+                    return false;
+                }
+
+                var srv = SortedServersBuffer[_rackMountPickIdx];
+                int srvIid;
+                try
+                {
+                    srvIid = srv.GetInstanceID();
+                }
+                catch
+                {
+                    srvIid = 0;
+                }
+
+                var hu = RackLayoutHelper.InferServerRackHeightU(srv);
+                return RackDataStore.TryAddRackMount(rackId, RackDeviceTypes.Server, srvIid, null, startU, hu, out error);
+            case 1:
+            case 2:
+                EnsureSortedSwitches();
+                var filtSw = BuildFilteredNetworkSwitchIndices(_rackMountSwitchSearchBuf ?? "", _rackAddMountCategory == 2);
+                if (SortedSwitchesBuffer.Count <= 0)
+                {
+                    error = "No switches/routers in scene.";
+                    return false;
+                }
+
+                if (!filtSw.Contains(_rackMountSwitchPickIdx) || SortedSwitchesBuffer[_rackMountSwitchPickIdx] == null)
+                {
+                    error = "Select a device from the filtered list.";
+                    return false;
+                }
+
+                var sw = SortedSwitchesBuffer[_rackMountSwitchPickIdx];
+                int swIid;
+                try
+                {
+                    swIid = sw.GetInstanceID();
+                }
+                catch
+                {
+                    swIid = 0;
+                }
+
+                var dtype = _rackAddMountCategory == 2 ? RackDeviceTypes.Router : RackDeviceTypes.Switch;
+                return RackDataStore.TryAddRackMount(rackId, dtype, swIid, null, startU, 1, out error);
+            case 3:
+                return RackDataStore.TryAddRackMount(
+                    rackId,
+                    RackDeviceTypes.PatchPanel,
+                    0,
+                    _rackPatchLabelDraft,
+                    startU,
+                    2,
+                    out error);
+            default:
+                error = "Unknown device type.";
+                return false;
+        }
+    }
+
+    private static void TryFinishRackMountDrag(string rackId)
+    {
+        string errDrop = null;
+        var mouse = Event.current.mousePosition;
+        if (_rackMountDragActive
+            && _rackMountDropBodyLast.width > 0f
+            && _rackMountDropBodyLast.Contains(mouse))
+        {
+            UpdateRackMountDragHover(_rackMountDropRackTotalU);
+            if (_rackMountDragHoverStartU > 0)
+            {
+                if (TryAddPendingMountToRack(rackId, _rackMountDragHoverStartU, out errDrop))
+                {
+                    ShowIpamToast("Device added.");
+                    RecomputeContentHeight();
+                }
+                else if (!string.IsNullOrEmpty(errDrop))
+                {
+                    ShowIpamToast(errDrop);
+                }
+                else
+                {
+                    ShowIpamToast("Could not add device to rack.");
+                }
+            }
+        }
+
+        _rackMountDragActive = false;
+        _rackMountDragHoverStartU = -1;
+        _rackMountDragLabel = "";
+    }
+
+    private static void RackMountPickRowSelect(Rect row, Action onSelect)
+    {
+        var e = Event.current;
+        if (e.type != EventType.MouseDown || e.button != 0 || !row.Contains(e.mousePosition))
+        {
+            return;
+        }
+
+        onSelect?.Invoke();
+        e.Use();
+    }
+
+    private static void RackMountPickRowDrag(
+        Rect row,
+        int controlHint,
+        string rackId,
+        int rackTotalU,
+        string label,
+        int heightU,
+        Action onSelect)
+    {
+        var id = GUIUtility.GetControlID(controlHint, FocusType.Passive, row);
+        var e = Event.current;
+        switch (e.GetTypeForControl(id))
+        {
+            case EventType.MouseDown:
+                if (GUI.enabled && e.button == 0 && row.Contains(e.mousePosition))
+                {
+                    GUIUtility.hotControl = id;
+                    _rackMountDragActive = false;
+                    _rackMountDragStartPos = e.mousePosition;
+                    _rackMountDragLabel = label ?? "";
+                    _rackMountDragHeightU = Mathf.Max(1, heightU);
+                    onSelect?.Invoke();
+                    e.Use();
+                }
+
+                break;
+            case EventType.MouseDrag:
+                if (GUIUtility.hotControl != id)
+                {
+                    break;
+                }
+
+                if ((e.mousePosition - _rackMountDragStartPos).sqrMagnitude > 36f)
+                {
+                    _rackMountDragActive = true;
+                }
+
+                if (_rackMountDragActive)
+                {
+                    UpdateRackMountDragHover(rackTotalU);
+                }
+
+                e.Use();
+                break;
+            case EventType.MouseUp:
+                if (GUIUtility.hotControl != id)
+                {
+                    break;
+                }
+
+                GUIUtility.hotControl = 0;
+                TryFinishRackMountDrag(rackId);
+                e.Use();
+                break;
+        }
+    }
+
+    private static void DrawRackMountDragGhost()
+    {
+        if (!_rackMountDragActive || Event.current.type != EventType.Repaint)
+        {
+            return;
+        }
+
+        var ghostW = 220f;
+        var mp = Event.current.mousePosition;
+        var ghost = new Rect(mp.x - ghostW * 0.5f, mp.y - 14f, ghostW, 28f);
+        DrawTintedRect(ghost, RackMountDragGhost);
+        var oldCc = GUI.contentColor;
+        GUI.contentColor = Color.white;
+        GUI.Label(ghost, _rackMountDragLabel, _stTableCell);
+        GUI.contentColor = oldCc;
+    }
+
+    private static void DrawRackFrontDiagramDropTarget(Rect rackBody, string rackId, int rackTotalU)
+    {
+        if (!_rackMountDragActive)
+        {
+            return;
+        }
+
+        var id = GUIUtility.GetControlID(RackMountDragControlBase + 100, FocusType.Passive, rackBody);
+        var e = Event.current;
+        switch (e.GetTypeForControl(id))
+        {
+            case EventType.MouseDrag:
+                UpdateRackMountDragHover(rackTotalU);
+                e.Use();
+                break;
+            case EventType.MouseUp:
+                if (e.button == 0)
+                {
+                    TryFinishRackMountDrag(rackId);
+                    e.Use();
+                }
+
+                break;
+        }
+    }
+
+    private static void DrawRackMountDragRow(Rect r, string rackId, int rackTotalU)
+    {
+        var label = GetPendingMountPreviewLabel();
+        var heightU = GetPendingMountHeightU();
+        if (Event.current.type == EventType.Repaint)
+        {
+            DrawTintedRect(r, RackPatchDragRowFill);
+            GUI.DrawTexture(new Rect(r.x, r.y, r.width, 2f), _texTableHeader, ScaleMode.StretchToFill, false, 0f, RackPatchDragRowBorder, 0f, 0f);
+            GUI.DrawTexture(new Rect(r.x, r.yMax - 2f, r.width, 2f), _texTableHeader, ScaleMode.StretchToFill, false, 0f, RackPatchDragRowBorder, 0f, 0f);
+            GUI.DrawTexture(new Rect(r.x, r.y, 2f, r.height), _texTableHeader, ScaleMode.StretchToFill, false, 0f, RackPatchDragRowBorder, 0f, 0f);
+            GUI.DrawTexture(new Rect(r.xMax - 2f, r.y, 2f, r.height), _texTableHeader, ScaleMode.StretchToFill, false, 0f, RackPatchDragRowBorder, 0f, 0f);
+        }
+
+        var oldCc = GUI.contentColor;
+        GUI.contentColor = new Color(0.94f, 0.98f, 1f, 1f);
+        GUI.Label(new Rect(r.x + 8f, r.y, r.width - 16f, r.height), $"{label}  ·  drag into front view →", _stTableCell);
+        GUI.contentColor = oldCc;
+        RackMountPickRowDrag(r, RackMountDragControlBase + 99, rackId, rackTotalU, label, heightU, null);
+    }
+
+    private static void DrawRackMountDropPreview(Rect rackBody, int totalU, int heightU, int startU)
+    {
+        if (!_rackMountDragActive || startU <= 0 || Event.current.type != EventType.Repaint)
+        {
+            return;
+        }
+
+        var tu = Mathf.Max(1, totalU);
+        var h = Mathf.Max(1, heightU);
+        var cell = rackBody.height / tu;
+        var yTop = rackBody.yMax - (startU + h - 1) * cell;
+        var preview = new Rect(rackBody.x + 3f, yTop, rackBody.width - 6f, h * cell - 1f);
+        DrawTintedRect(preview, RackMountDragPreview);
+        var oldCc = GUI.contentColor;
+        GUI.contentColor = Color.white;
+        GUI.Label(preview, $"U{startU}", _stTableCell);
+        GUI.contentColor = oldCc;
     }
 
     private static string ResolveMountDisplayName(RackMountRecord m)
@@ -344,81 +1029,6 @@ public static partial class IPAMOverlay
     /// Rows use tinted rects + labels only (no GUI.Button), so the selection highlight stays visible.
     /// Scrollbar strip is excluded from hit-testing.
     /// </summary>
-    private static void HandleRackMountServerListMouse(Rect viewportOuter, float innerW, List<int> filtered)
-    {
-        var e = Event.current;
-        if (e.type != EventType.MouseDown || e.button != 0)
-        {
-            return;
-        }
-
-        var mp = e.mousePosition;
-        if (!viewportOuter.Contains(mp))
-        {
-            return;
-        }
-
-        var mx = mp.x - viewportOuter.xMin;
-        if (mx < 0f || mx > innerW)
-        {
-            return;
-        }
-
-        var myFromTop = mp.y - viewportOuter.yMin + _rackMountServerListScroll.y;
-        var innerH = filtered.Count * TableRowH;
-        if (myFromTop < 0f || myFromTop >= innerH)
-        {
-            _rackMountPickIdx = -1;
-            e.Use();
-            return;
-        }
-
-        var ri = Mathf.FloorToInt(myFromTop / TableRowH);
-        if (ri >= 0 && ri < filtered.Count)
-        {
-            _rackMountPickIdx = filtered[ri];
-            e.Use();
-        }
-    }
-
-    private static void HandleRackMountSwitchListMouse(Rect viewportOuter, float innerW, List<int> filtered)
-    {
-        var e = Event.current;
-        if (e.type != EventType.MouseDown || e.button != 0)
-        {
-            return;
-        }
-
-        var mp = e.mousePosition;
-        if (!viewportOuter.Contains(mp))
-        {
-            return;
-        }
-
-        var mx = mp.x - viewportOuter.xMin;
-        if (mx < 0f || mx > innerW)
-        {
-            return;
-        }
-
-        var myFromTop = mp.y - viewportOuter.yMin + _rackMountSwitchListScroll.y;
-        var innerH = filtered.Count * TableRowH;
-        if (myFromTop < 0f || myFromTop >= innerH)
-        {
-            _rackMountSwitchPickIdx = -1;
-            e.Use();
-            return;
-        }
-
-        var ri = Mathf.FloorToInt(myFromTop / TableRowH);
-        if (ri >= 0 && ri < filtered.Count)
-        {
-            _rackMountSwitchPickIdx = filtered[ri];
-            e.Use();
-        }
-    }
-
-    /// <summary>Clears pick when the user clicks outside the list (search, tabs, diagram, etc.).</summary>
     private static void TryDeselectRackPickIfClickedOutsideViewport(Rect viewportLast, ref int pickIdx)
     {
         var e = Event.current;
@@ -427,7 +1037,14 @@ public static partial class IPAMOverlay
             return;
         }
 
-        if (viewportLast.width > 0.5f && viewportLast.height > 0.5f && viewportLast.Contains(e.mousePosition))
+        // Pick-row drag sets hotControl on the same MouseDown — do not clear selection before drop.
+        if (GUIUtility.hotControl != 0)
+        {
+            return;
+        }
+
+        var contentMouse = e.mousePosition;
+        if (viewportLast.width > 0.5f && viewportLast.height > 0.5f && viewportLast.Contains(contentMouse))
         {
             return;
         }
@@ -435,7 +1052,7 @@ public static partial class IPAMOverlay
         pickIdx = -1;
     }
 
-    private static void DrawRackServerPickScroll(Rect outer, List<int> filtered)
+    private static void DrawRackServerPickScroll(Rect outer, List<int> filtered, string rackId, int rackTotalU)
     {
         var innerH = filtered.Count * TableRowH;
         var viewH = Mathf.Min(160f, Mathf.Max(TableRowH + 4f, innerH));
@@ -443,44 +1060,50 @@ public static partial class IPAMOverlay
         var innerRect = new Rect(0f, 0f, innerW, Mathf.Max(innerH, viewH));
         var scrollRect = new Rect(outer.x, outer.y, outer.width, viewH);
         _rackMountServerPickViewportLast = scrollRect;
-        _rackMountServerListScroll = GUI.BeginScrollView(scrollRect, _rackMountServerListScroll, innerRect);
-        var rowStyle = RackPickRowLabelStyle();
-        var y = 0f;
-        for (var i = 0; i < filtered.Count; i++)
+        _rackMountServerListScroll = SafeBeginScrollView(scrollRect, _rackMountServerListScroll, innerRect);
+        try
         {
-            var idx = filtered[i];
-            var srv = SortedServersBuffer[idx];
-            var label = srv != null ? DeviceInventoryReflection.GetDisplayName(srv) : "—";
-            if (label.Length > 72)
+            var rowStyle = RackPickRowLabelStyle();
+            var y = 0f;
+            for (var i = 0; i < filtered.Count; i++)
             {
-                label = label.Substring(0, 71) + "\u2026";
-            }
+                var idx = filtered[i];
+                var srv = SortedServersBuffer[idx];
+                var label = srv != null ? DeviceInventoryReflection.GetDisplayName(srv) : "—";
+                if (label.Length > 72)
+                {
+                    label = label.Substring(0, 71) + "\u2026";
+                }
 
-            var row = new Rect(0f, y, innerW, TableRowH);
-            var sel = idx == _rackMountPickIdx;
-            if (Event.current.type == EventType.Repaint)
-            {
-                var bg = sel ? RackPickRowSelected : (i % 2 == 0 ? RackPickRowBg : RackPickRowBgAlt);
-                DrawTintedRect(row, bg);
-            }
+                var row = new Rect(0f, y, innerW, TableRowH);
+                var sel = idx == _rackMountPickIdx;
+                if (Event.current.type == EventType.Repaint)
+                {
+                    var bg = sel ? RackPickRowSelected : (i % 2 == 0 ? RackPickRowBg : RackPickRowBgAlt);
+                    DrawTintedRect(row, bg);
+                }
 
-            if (rowStyle != null)
-            {
-                GUI.Label(row, label, rowStyle);
-            }
-            else
-            {
-                GUI.Label(row, label, _stMuted);
-            }
+                if (rowStyle != null)
+                {
+                    GUI.Label(row, label, rowStyle);
+                }
+                else
+                {
+                    GUI.Label(row, label, _stMuted);
+                }
 
-            y += TableRowH;
+                RackMountPickRowSelect(row, () => { _rackMountPickIdx = idx; });
+
+                y += TableRowH;
+            }
         }
-
-        GUI.EndScrollView();
-        HandleRackMountServerListMouse(scrollRect, innerW, filtered);
+        finally
+        {
+            SafeEndScrollView();
+        }
     }
 
-    private static void DrawRackSwitchPickScroll(Rect outer, List<int> filtered)
+    private static void DrawRackSwitchPickScroll(Rect outer, List<int> filtered, string rackId, int rackTotalU)
     {
         var innerH = filtered.Count * TableRowH;
         var viewH = Mathf.Min(160f, Mathf.Max(TableRowH + 4f, innerH));
@@ -488,41 +1111,47 @@ public static partial class IPAMOverlay
         var innerRect = new Rect(0f, 0f, innerW, Mathf.Max(innerH, viewH));
         var scrollRect = new Rect(outer.x, outer.y, outer.width, viewH);
         _rackMountSwitchPickViewportLast = scrollRect;
-        _rackMountSwitchListScroll = GUI.BeginScrollView(scrollRect, _rackMountSwitchListScroll, innerRect);
-        var rowStyle = RackPickRowLabelStyle();
-        var y = 0f;
-        for (var i = 0; i < filtered.Count; i++)
+        _rackMountSwitchListScroll = SafeBeginScrollView(scrollRect, _rackMountSwitchListScroll, innerRect);
+        try
         {
-            var idx = filtered[i];
-            var sw = SortedSwitchesBuffer[idx];
-            var label = sw != null ? DeviceInventoryReflection.GetDisplayName(sw) : "—";
-            if (label.Length > 72)
+            var rowStyle = RackPickRowLabelStyle();
+            var y = 0f;
+            for (var i = 0; i < filtered.Count; i++)
             {
-                label = label.Substring(0, 71) + "\u2026";
-            }
+                var idx = filtered[i];
+                var sw = SortedSwitchesBuffer[idx];
+                var label = sw != null ? DeviceInventoryReflection.GetDisplayName(sw) : "—";
+                if (label.Length > 72)
+                {
+                    label = label.Substring(0, 71) + "\u2026";
+                }
 
-            var row = new Rect(0f, y, innerW, TableRowH);
-            var sel = idx == _rackMountSwitchPickIdx;
-            if (Event.current.type == EventType.Repaint)
-            {
-                var bg = sel ? RackPickRowSelected : (i % 2 == 0 ? RackPickRowBg : RackPickRowBgAlt);
-                DrawTintedRect(row, bg);
-            }
+                var row = new Rect(0f, y, innerW, TableRowH);
+                var sel = idx == _rackMountSwitchPickIdx;
+                if (Event.current.type == EventType.Repaint)
+                {
+                    var bg = sel ? RackPickRowSelected : (i % 2 == 0 ? RackPickRowBg : RackPickRowBgAlt);
+                    DrawTintedRect(row, bg);
+                }
 
-            if (rowStyle != null)
-            {
-                GUI.Label(row, label, rowStyle);
-            }
-            else
-            {
-                GUI.Label(row, label, _stMuted);
-            }
+                if (rowStyle != null)
+                {
+                    GUI.Label(row, label, rowStyle);
+                }
+                else
+                {
+                    GUI.Label(row, label, _stMuted);
+                }
 
-            y += TableRowH;
+                RackMountPickRowSelect(row, () => { _rackMountSwitchPickIdx = idx; });
+
+                y += TableRowH;
+            }
         }
-
-        GUI.EndScrollView();
-        HandleRackMountSwitchListMouse(scrollRect, innerW, filtered);
+        finally
+        {
+            SafeEndScrollView();
+        }
     }
 
     private static List<RackDiagramDevice> BuildDiagramDevices(UnifiedRackEntry entry, out int totalU)
@@ -607,79 +1236,29 @@ public static partial class IPAMOverlay
     {
         var innerW = Mathf.Max(520f, _lastInventoryCardWidth > 80f ? _lastInventoryCardWidth + 20f : 920f);
         var cardW = innerW - CardPad * 2f;
-        var unified = BuildUnifiedRackList();
-        var topBlock = SectionTitleH + 10f + 76f + SectionTitleH + 72f + 28f;
-        if (unified.Count == 0)
-        {
-            return Mathf.Max(420f, CardPad * 2f + topBlock + 120f);
-        }
+        var topBlock = SectionTitleH + 10f + 76f + 8f;
+        ComputeRackFloorGridMetrics(cardW, out _, out _, out _, out _, out var gridTotalH);
+        var gridBlock = SectionTitleH + 42f + gridTotalH + 16f;
 
         if (string.IsNullOrEmpty(_racksTabDrilledUnifiedId))
         {
-            var listH = unified.Count * (TableRowH + 4f) + SectionTitleH + 48f;
-            return Mathf.Max(420f, CardPad * 2f + topBlock + listH);
+            return Mathf.Max(420f, CardPad * 2f + topBlock + gridBlock);
         }
 
+        var unified = BuildUnifiedRackList();
         var drilled = FindDrilledEntry(unified);
         if (drilled == null)
         {
-            var listH = unified.Count * (TableRowH + 4f) + SectionTitleH + 48f;
-            return Mathf.Max(420f, CardPad * 2f + topBlock + listH);
+            return Mathf.Max(420f, CardPad * 2f + topBlock + gridBlock);
         }
 
         var devices = BuildDiagramDevices(drilled, out _);
-        var leftListH = Mathf.Min(unified.Count * (TableRowH + 4f) + 12f, 420f);
         var metaH = drilled.IsPersistedEditable ? 160f : 120f;
         var rowH = TableHeaderH + Mathf.Max(1, devices.Count) * TableRowH + (drilled.IsPersistedEditable ? 380f : 40f);
         var middleCol = metaH + rowH + 24f;
         var rightCol = SectionTitleH + RackDiagramFixedHeight + 56f;
-        var body = Mathf.Max(leftListH + SectionTitleH + 20f, middleCol, rightCol);
+        var body = Mathf.Max(middleCol, rightCol) + 36f;
         return Mathf.Max(480f, CardPad * 2f + topBlock + body);
-    }
-
-    private static void DrawRackListRows(float x0, ref float y, float rowW, IReadOnlyList<UnifiedRackEntry> unified, int selIdx)
-    {
-        GUI.Label(new Rect(x0, y, rowW, SectionTitleH), "Rack list", _stSectionTitle);
-        y += SectionTitleH + 6f;
-
-        var btnY = y;
-        for (var i = 0; i < unified.Count; i++)
-        {
-            var rk = unified[i];
-            var selRow = i == selIdx;
-            var rowRect = new Rect(x0, btnY, rowW - 8f, TableRowH + 2f);
-
-            if (Event.current.type == EventType.MouseDown
-                && Event.current.button == 0
-                && rowRect.Contains(Event.current.mousePosition)
-                && Event.current.clickCount >= 2)
-            {
-                _racksTabSelectedUnifiedId = rk.UnifiedId;
-                _racksTabDrilledUnifiedId = rk.UnifiedId;
-                Event.current.Use();
-                RecomputeContentHeight();
-            }
-
-            if (Event.current.type == EventType.Repaint)
-            {
-                DrawTintedRect(
-                    rowRect,
-                    selRow ? new Color(0.12f, 0.28f, 0.38f, 0.85f) : new Color(0.06f, 0.08f, 0.1f, 0.45f));
-            }
-
-            var tag = rk.IsPersistedEditable ? "" : "[Scene] ";
-            var count = rk.Persisted?.Mounts?.Count ?? rk.SceneCopy?.Devices?.Count ?? 0;
-            var label = $"{tag}{GetUnifiedDisplayTitle(rk)}  ({count})";
-            if (ImguiButtonOnce(rowRect, label, 9300 + i, _stMutedBtn))
-            {
-                _racksTabSelectedUnifiedId = rk.UnifiedId;
-                RecomputeContentHeight();
-            }
-
-            btnY += TableRowH + 4f;
-        }
-
-        y = btnY + 8f;
     }
 
     private static void DrawRacksView(float innerW)
@@ -696,34 +1275,10 @@ public static partial class IPAMOverlay
 
         GUI.Label(
             new Rect(x0, y, cardW, 76f),
-            "All racks are standard 47 U cabinets. Create named racks and assign servers (3 U / 7 U), switches and routers (1 U), or patch panels (2 U). "
-            + "Data is saved to rack_data.json. Scene-only rows appear when the game exposes asset lines — import to edit them.",
+            "Standard 47 U cabinets on a 16×32 floor grid (rows A–P, columns 1–32). Assign servers (3 U / 7 U), switches and routers (1 U), or patch panels (2 U). "
+            + "Click a slot to open that rack. Scene-detected layouts appear when the game exposes asset lines.",
             _stHint);
         y += 80f;
-
-        GUI.Label(new Rect(x0, y, cardW, SectionTitleH), "Add rack", _stSectionTitle);
-        y += SectionTitleH + 4f;
-        GUI.Label(new Rect(x0, y, 72f, 22f), "Name", _stMuted);
-        DrawIpamFormTextField(
-            new Rect(x0 + 76f, y, Mathf.Min(360f, cardW - 200f), 22f),
-            IpamFormFocusRackNewName,
-            96,
-            IpamTextFieldKind.Name);
-        if (ImguiButtonOnce(new Rect(x0 + cardW - 132f, y, 120f, 24f), "Create rack", 9220, _stPrimaryBtn))
-        {
-            if (RackDataStore.TryAddRack(_rackFormNewName, out var newId, out var errC))
-            {
-                _racksTabSelectedUnifiedId = "p:" + newId;
-                ShowIpamToast("Created rack (47 U).");
-                RecomputeContentHeight();
-            }
-            else if (!string.IsNullOrEmpty(errC))
-            {
-                ShowIpamToast(errC);
-            }
-        }
-
-        y += 32f;
 
         var unified = BuildUnifiedRackList();
         if (!string.IsNullOrEmpty(_racksTabDrilledUnifiedId)
@@ -732,50 +1287,20 @@ public static partial class IPAMOverlay
             _racksTabDrilledUnifiedId = "";
         }
 
-        if (unified.Count == 0)
-        {
-            GUI.Label(
-                new Rect(x0, y, cardW, 72f),
-                "No racks yet — use Create rack above. Scene-only layouts appear here when the game creates contract rows.",
-                _stMuted);
-            return;
-        }
-
-        var selIdx = unified.FindIndex(u => string.Equals(u.UnifiedId, _racksTabSelectedUnifiedId, StringComparison.Ordinal));
-        if (selIdx < 0)
-        {
-            selIdx = 0;
-            _racksTabSelectedUnifiedId = unified[0].UnifiedId;
-        }
-
         var drilledEntry = FindDrilledEntry(unified);
         if (drilledEntry != null)
         {
-            var selDrilled = drilledEntry;
-            if (!string.Equals(selDrilled.UnifiedId, _racksLastUnifiedId, StringComparison.Ordinal))
+            if (!string.Equals(drilledEntry.UnifiedId, _racksLastUnifiedId, StringComparison.Ordinal))
             {
-                _racksLastUnifiedId = selDrilled.UnifiedId;
-                if (selDrilled.Persisted != null)
+                _racksLastUnifiedId = drilledEntry.UnifiedId;
+                if (drilledEntry.Persisted != null)
                 {
-                    _rackRenameDraft = selDrilled.Persisted.DisplayName ?? "";
+                    _rackRenameDraft = drilledEntry.Persisted.DisplayName ?? "";
                 }
-                else if (selDrilled.SceneCopy != null)
+                else if (drilledEntry.SceneCopy != null)
                 {
-                    _rackRenameDraft = selDrilled.SceneCopy.DisplayName ?? "Rack";
+                    _rackRenameDraft = drilledEntry.SceneCopy.DisplayName ?? "Rack";
                 }
-            }
-        }
-        else if (!string.Equals(unified[selIdx].UnifiedId, _racksLastUnifiedId, StringComparison.Ordinal))
-        {
-            var browseSel = unified[selIdx];
-            _racksLastUnifiedId = browseSel.UnifiedId;
-            if (browseSel.Persisted != null)
-            {
-                _rackRenameDraft = browseSel.Persisted.DisplayName ?? "";
-            }
-            else if (browseSel.SceneCopy != null)
-            {
-                _rackRenameDraft = browseSel.SceneCopy.DisplayName ?? "Rack";
             }
         }
 
@@ -791,29 +1316,22 @@ public static partial class IPAMOverlay
 
         if (string.IsNullOrEmpty(_racksTabDrilledUnifiedId))
         {
-            GUI.Label(new Rect(x0, y, cardW, 22f), "Double-click a rack to open details, mounts, and front view.", _stMuted);
-            y += 26f;
-            DrawRackListRows(x0, ref y, cardW, unified, selIdx);
+            DrawRackFloorGrid(x0, ref y, cardW, unified, allowOpenOnClick: true);
             return;
         }
 
         var gap = 12f;
-        var leftListW = Mathf.Clamp(cardW * 0.20f, 168f, 240f);
         var rightDiagW = Mathf.Clamp(cardW * 0.42f, 320f, 540f);
-        var midW = cardW - leftListW - rightDiagW - gap * 2f;
-        if (midW < 200f)
+        var midW = cardW - rightDiagW - gap;
+        if (midW < 240f)
         {
-            leftListW = 168f;
             rightDiagW = Mathf.Clamp(cardW * 0.40f, 300f, 540f);
-            midW = cardW - leftListW - rightDiagW - gap * 2f;
+            midW = cardW - rightDiagW - gap;
         }
 
-        var yList = y;
-        DrawRackListRows(x0, ref yList, leftListW, unified, selIdx);
-
-        var mx0 = x0 + leftListW + gap;
+        var mx0 = x0;
         var my = y;
-        if (ImguiButtonOnce(new Rect(mx0, my, 140f, 24f), "\u2190 All racks", 9290, _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(mx0, my, 140f, 24f), "\u2190 Floor plan", 9290, _stMutedBtn))
         {
             _racksTabDrilledUnifiedId = "";
             RecomputeContentHeight();
@@ -828,6 +1346,17 @@ public static partial class IPAMOverlay
 
         var selected = drilledEntry;
         var yMid = my;
+        var dx = mx0 + midW + gap;
+        var yDiagCol = my;
+        var ru = Mathf.Max(1, rackTotalU);
+        var diagramH = RackDiagramFixedHeight;
+        var unitLab = 56f;
+        var rackBodyW = Mathf.Max(180f, rightDiagW - unitLab - 12f);
+        var rackBodyRect = new Rect(dx + unitLab + 4f, yDiagCol + SectionTitleH + 6f, rackBodyW, diagramH);
+        _rackMountDropBodyLast = rackBodyRect;
+        _rackMountDropRackId = selected.IsPersistedEditable && selected.Persisted != null ? selected.Persisted.Id : "";
+        _rackMountDropRackTotalU = ru;
+
         GUI.Label(new Rect(mx0, yMid, midW, SectionTitleH), GetUnifiedDisplayTitle(selected), _stSectionTitle);
         yMid += SectionTitleH + 4f;
 
@@ -1012,7 +1541,7 @@ public static partial class IPAMOverlay
                 }
                 else
                 {
-                    DrawRackServerPickScroll(new Rect(mx0, yMid, midW, 162f), filteredSrv);
+                    DrawRackServerPickScroll(new Rect(mx0, yMid, midW, 162f), filteredSrv, selected.Persisted.Id, ru);
                     yMid += 162f;
                 }
 
@@ -1021,10 +1550,12 @@ public static partial class IPAMOverlay
                     && _rackMountPickIdx < SortedServersBuffer.Count
                     && SortedServersBuffer[_rackMountPickIdx] != null)
                 {
-                    var hintH = RackLayoutHelper.InferServerRackHeightU(SortedServersBuffer[_rackMountPickIdx]);
+                    var picked = SortedServersBuffer[_rackMountPickIdx];
+                    var hintH = RackLayoutHelper.InferServerRackHeightU(picked);
+                    var ff = DeviceInventoryReflection.GetServerFormFactorLabel(picked);
                     GUI.Label(
                         new Rect(mx0, yMid, midW, 22f),
-                        $"Selected height: {hintH} U (3 U or 7 U server)",
+                        $"Selected: {ff} ({hintH} U rack space) — drag row below into front view",
                         _stMuted);
                     yMid += 26f;
                 }
@@ -1060,11 +1591,11 @@ public static partial class IPAMOverlay
                 }
                 else
                 {
-                    DrawRackSwitchPickScroll(new Rect(mx0, yMid, midW, 162f), filteredSw);
+                    DrawRackSwitchPickScroll(new Rect(mx0, yMid, midW, 162f), filteredSw, selected.Persisted.Id, ru);
                     yMid += 162f;
                 }
 
-                GUI.Label(new Rect(mx0, yMid, midW, 22f), "Height: 1 U", _stMuted);
+                GUI.Label(new Rect(mx0, yMid, midW, 22f), "Height: 1 U — select above, drag row below into front view", _stMuted);
                 yMid += 26f;
             }
             else
@@ -1076,134 +1607,41 @@ public static partial class IPAMOverlay
                     96,
                     IpamTextFieldKind.Name);
                 yMid += 28f;
-                GUI.Label(new Rect(mx0, yMid, midW, 22f), "Height: 2 U", _stMuted);
+                GUI.Label(new Rect(mx0, yMid, midW, 22f), "Height: 2 U — drag row below into front view", _stMuted);
             }
 
             yMid += 28f;
-            GUI.Label(new Rect(mx0, yMid, 72f, 22f), "Start U", _stMuted);
-            DrawIpamFormTextField(
-                new Rect(mx0 + 76f, yMid, 56f, 22f),
-                IpamFormFocusRackMountStartU,
-                2,
-                IpamTextFieldKind.VlanIdDigits);
-            yMid += 28f;
-            if (ImguiButtonOnce(new Rect(mx0, yMid, 140f, 26f), "Add to rack", 9224, _stPrimaryBtn))
+            if (CanStartRackMountDrag())
             {
-                if (!int.TryParse((_rackMountStartU ?? "").Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var su))
-                {
-                    ShowIpamToast("Invalid start U.");
-                }
-                else if (_rackAddMountCategory == 0)
-                {
-                    EnsureSortedServers();
-                    var filtSrv = BuildFilteredServerIndices(_rackMountServerSearchBuf ?? "");
-                    if (SortedServersBuffer.Count <= 0)
-                    {
-                        ShowIpamToast("No servers in scene.");
-                    }
-                    else if (filtSrv.Count == 0)
-                    {
-                        ShowIpamToast("No servers match your search.");
-                    }
-                    else if (!filtSrv.Contains(_rackMountPickIdx) || SortedServersBuffer[_rackMountPickIdx] == null)
-                    {
-                        ShowIpamToast("Select a server from the filtered list.");
-                    }
-                    else
-                    {
-                        var srv = SortedServersBuffer[_rackMountPickIdx];
-                        int iid;
-                        try
-                        {
-                            iid = srv.GetInstanceID();
-                        }
-                        catch
-                        {
-                            iid = 0;
-                        }
-
-                        var hu = RackLayoutHelper.InferServerRackHeightU(srv);
-                        if (RackDataStore.TryAddRackMount(
-                                selected.Persisted.Id,
-                                RackDeviceTypes.Server,
-                                iid,
-                                null,
-                                su,
-                                hu,
-                                out var errM))
-                        {
-                            ShowIpamToast("Device added.");
-                            RecomputeContentHeight();
-                        }
-                        else if (!string.IsNullOrEmpty(errM))
-                        {
-                            ShowIpamToast(errM);
-                        }
-                    }
-                }
-                else if (_rackAddMountCategory is 1 or 2)
-                {
-                    EnsureSortedSwitches();
-                    var filtSw = BuildFilteredNetworkSwitchIndices(_rackMountSwitchSearchBuf ?? "", _rackAddMountCategory == 2);
-                    if (SortedSwitchesBuffer.Count <= 0)
-                    {
-                        ShowIpamToast("No switches/routers in scene.");
-                    }
-                    else if (filtSw.Count == 0)
-                    {
-                        ShowIpamToast("No devices match your search.");
-                    }
-                    else if (!filtSw.Contains(_rackMountSwitchPickIdx) || SortedSwitchesBuffer[_rackMountSwitchPickIdx] == null)
-                    {
-                        ShowIpamToast("Select a device from the filtered list.");
-                    }
-                    else
-                    {
-                        var sw = SortedSwitchesBuffer[_rackMountSwitchPickIdx];
-                        int iid;
-                        try
-                        {
-                            iid = sw.GetInstanceID();
-                        }
-                        catch
-                        {
-                            iid = 0;
-                        }
-
-                        var dtype = _rackAddMountCategory == 2 ? RackDeviceTypes.Router : RackDeviceTypes.Switch;
-                        if (RackDataStore.TryAddRackMount(selected.Persisted.Id, dtype, iid, null, su, 1, out var errM))
-                        {
-                            ShowIpamToast("Device added.");
-                            RecomputeContentHeight();
-                        }
-                        else if (!string.IsNullOrEmpty(errM))
-                        {
-                            ShowIpamToast(errM);
-                        }
-                    }
-                }
-                else
-                {
-                    if (RackDataStore.TryAddRackMount(
-                            selected.Persisted.Id,
-                            RackDeviceTypes.PatchPanel,
-                            0,
-                            _rackPatchLabelDraft,
-                            su,
-                            2,
-                            out var errM))
-                    {
-                        ShowIpamToast("Patch panel added.");
-                        RecomputeContentHeight();
-                    }
-                    else if (!string.IsNullOrEmpty(errM))
-                    {
-                        ShowIpamToast(errM);
-                    }
-                }
+                DrawRackMountDragRow(new Rect(mx0, yMid, midW, 34f), selected.Persisted.Id, ru);
+                yMid += 40f;
             }
 
-            // Run after "Add to rack" so that button click cannot clear the pick before validation.
+            if (_rackMountDragActive && _rackMountDragHoverStartU > 0)
+            {
+                GUI.Label(
+                    new Rect(mx0, yMid, midW, 20f),
+                    $"Drop at U {_rackMountDragHoverStartU} ({_rackMountDragHeightU} U tall)",
+                    _stHint);
+                yMid += 22f;
+            }
+            else if (!CanStartRackMountDrag() && _rackAddMountCategory != 3)
+            {
+                GUI.Label(
+                    new Rect(mx0, yMid, midW, 20f),
+                    "Select a device from the list above.",
+                    _stHint);
+                yMid += 22f;
+            }
+            else if (CanStartRackMountDrag())
+            {
+                GUI.Label(
+                    new Rect(mx0, yMid, midW, 20f),
+                    "Drag the row above into the front view.",
+                    _stHint);
+                yMid += 22f;
+            }
+
             if (_rackAddMountCategory == 0)
             {
                 TryDeselectRackPickIfClickedOutsideViewport(_rackMountServerPickViewportLast, ref _rackMountPickIdx);
@@ -1212,20 +1650,15 @@ public static partial class IPAMOverlay
             {
                 TryDeselectRackPickIfClickedOutsideViewport(_rackMountSwitchPickViewportLast, ref _rackMountSwitchPickIdx);
             }
-
-            yMid += 34f;
         }
 
-        var dx = mx0 + midW + gap;
-        var yDiagCol = my;
         GUI.Label(new Rect(dx, yDiagCol, rightDiagW, SectionTitleH), "Front view", _stSectionTitle);
         yDiagCol += SectionTitleH + 6f;
-        var ru = Mathf.Max(1, rackTotalU);
-        var diagramH = RackDiagramFixedHeight;
-        var unitLab = 56f;
-        var rackBodyW = Mathf.Max(180f, rightDiagW - unitLab - 12f);
-        DrawRackFrontDiagramDevices(new Rect(dx + unitLab + 4f, yDiagCol, rackBodyW, diagramH), ru, diagramDevices, eff);
+        DrawRackFrontDiagramDevices(rackBodyRect, ru, diagramDevices, eff);
+        DrawRackFrontDiagramDropTarget(rackBodyRect, selected.Persisted?.Id ?? _rackMountDropRackId, ru);
+        DrawRackMountDropPreview(rackBodyRect, ru, _rackMountDragHeightU, _rackMountDragHoverStartU);
         DrawRackUnitLabels(new Rect(dx, yDiagCol, unitLab, diagramH), ru);
+        DrawRackMountDragGhost();
         if (anyGuess)
         {
             GUI.Label(
@@ -1239,6 +1672,17 @@ public static partial class IPAMOverlay
     {
         if (e?.Persisted != null)
         {
+            if (!string.IsNullOrEmpty(e.Persisted.GridRow)
+                && e.Persisted.GridColumn >= 1
+                && e.Persisted.GridColumn <= RackFloorColCount)
+            {
+                var rowIndex = char.ToUpperInvariant(e.Persisted.GridRow[0]) - 'A';
+                if (rowIndex >= 0 && rowIndex < RackFloorRowCount)
+                {
+                    return FormatRackGridLabel(rowIndex, e.Persisted.GridColumn);
+                }
+            }
+
             return e.Persisted.DisplayName ?? "Rack";
         }
 
@@ -1249,22 +1693,24 @@ public static partial class IPAMOverlay
     {
         if (Event.current.type == EventType.Repaint)
         {
-            DrawTintedRect(rackBody, new Color(0.09f, 0.1f, 0.12f, 0.95f));
+            DrawTintedRect(rackBody, new Color(0.12f, 0.14f, 0.17f, 0.98f));
         }
 
         var tu = Mathf.Max(1, totalU);
         var cell = rackBody.height / tu;
+        var lineColor = new Color(0.52f, 0.56f, 0.62f, 0.85f);
 
         for (var u = 1; u < tu; u++)
         {
             var yLine = rackBody.yMax - u * cell;
-            GUI.DrawTexture(new Rect(rackBody.x, yLine, rackBody.width, 1f), _texTableHeader);
+            GUI.DrawTexture(new Rect(rackBody.x, yLine, rackBody.width, 1f), _texTableHeader, ScaleMode.StretchToFill, false, 0f, lineColor, 0f, 0f);
         }
 
-        GUI.DrawTexture(new Rect(rackBody.x, rackBody.y, rackBody.width, 2f), _texTableHeader);
-        GUI.DrawTexture(new Rect(rackBody.x, rackBody.yMax - 1f, rackBody.width, 2f), _texTableHeader);
-        GUI.DrawTexture(new Rect(rackBody.x, rackBody.y, 2f, rackBody.height), _texTableHeader);
-        GUI.DrawTexture(new Rect(rackBody.xMax - 2f, rackBody.y, 2f, rackBody.height), _texTableHeader);
+        var borderColor = new Color(0.58f, 0.64f, 0.72f, 0.95f);
+        GUI.DrawTexture(new Rect(rackBody.x, rackBody.y, rackBody.width, 2f), _texTableHeader, ScaleMode.StretchToFill, false, 0f, borderColor, 0f, 0f);
+        GUI.DrawTexture(new Rect(rackBody.x, rackBody.yMax - 1f, rackBody.width, 2f), _texTableHeader, ScaleMode.StretchToFill, false, 0f, borderColor, 0f, 0f);
+        GUI.DrawTexture(new Rect(rackBody.x, rackBody.y, 2f, rackBody.height), _texTableHeader, ScaleMode.StretchToFill, false, 0f, borderColor, 0f, 0f);
+        GUI.DrawTexture(new Rect(rackBody.xMax - 2f, rackBody.y, 2f, rackBody.height), _texTableHeader, ScaleMode.StretchToFill, false, 0f, borderColor, 0f, 0f);
 
         var maxChars = Mathf.Clamp((int)(rackBody.width / 6.2f), 16, 80);
 

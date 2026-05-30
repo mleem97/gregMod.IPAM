@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -27,6 +28,12 @@ internal static class RackDataStore
 
     private static RackPersistedRoot _root;
     private static bool _loaded;
+    private static RackPersistedRoot _deferEmptyRoot;
+
+    private static RackPersistedRoot NewEmptyRoot()
+    {
+        return new RackPersistedRoot { Version = FileVersion, Racks = new List<RackDefinition>() };
+    }
 
     private static string GetPath()
     {
@@ -109,8 +116,15 @@ internal static class RackDataStore
             return _root;
         }
 
+        if (!ModSaveScope.EnsureBindingChecked(out _))
+        {
+            _deferEmptyRoot ??= NewEmptyRoot();
+            return _deferEmptyRoot;
+        }
+
         _loaded = true;
-        _root = new RackPersistedRoot { Version = FileVersion, Racks = new List<RackDefinition>() };
+        _root = NewEmptyRoot();
+        _deferEmptyRoot = null;
         var path = GetPath();
         if (!File.Exists(path))
         {
@@ -140,6 +154,13 @@ internal static class RackDataStore
         }
 
         return _root;
+    }
+
+    internal static void ResetForNewSaveSession()
+    {
+        _loaded = false;
+        _root = null;
+        _deferEmptyRoot = null;
     }
 
     internal static IReadOnlyList<RackDefinition> GetRacks()
@@ -200,6 +221,56 @@ internal static class RackDataStore
 
         rack.DisplayName = name;
         rack.TotalU = RackStandardHeightU;
+        Save();
+        return true;
+    }
+
+    internal static bool TryEnsureRackAtGrid(int rowIndex, int column, out string id, out string error)
+    {
+        error = null;
+        id = null;
+        if (rowIndex < 0 || rowIndex > 15 || column < 1 || column > 32)
+        {
+            error = "Invalid rack position.";
+            return false;
+        }
+
+        var rowLetter = ((char)('A' + rowIndex)).ToString();
+        var label = rowLetter + column.ToString(CultureInfo.InvariantCulture);
+        var existing = EnsureLoaded().Racks.FirstOrDefault(r =>
+            r != null
+            && ((r.GridColumn == column && string.Equals(r.GridRow, rowLetter, StringComparison.OrdinalIgnoreCase))
+                || string.Equals((r.DisplayName ?? "").Trim(), label, StringComparison.OrdinalIgnoreCase)));
+
+        if (existing != null)
+        {
+            if (string.IsNullOrEmpty(existing.GridRow) || existing.GridColumn <= 0)
+            {
+                existing.GridRow = rowLetter;
+                existing.GridColumn = column;
+                if (string.IsNullOrWhiteSpace(existing.DisplayName))
+                {
+                    existing.DisplayName = label;
+                }
+
+                Save();
+            }
+
+            id = existing.Id;
+            return true;
+        }
+
+        var rack = new RackDefinition
+        {
+            Id = Guid.NewGuid().ToString("D"),
+            DisplayName = label,
+            GridRow = rowLetter,
+            GridColumn = column,
+            TotalU = RackStandardHeightU,
+            Mounts = new List<RackMountRecord>(),
+        };
+        EnsureLoaded().Racks.Add(rack);
+        id = rack.Id;
         Save();
         return true;
     }
@@ -551,6 +622,10 @@ internal sealed class RackDefinition
 {
     public string Id { get; set; }
     public string DisplayName { get; set; }
+    /// <summary>Floor row letter A–P (datacenter grid).</summary>
+    public string GridRow { get; set; }
+    /// <summary>Floor column 1–32 (datacenter grid).</summary>
+    public int GridColumn { get; set; }
     public int TotalU { get; set; }
     public string DiscoveredSourceKey { get; set; }
     public List<RackMountRecord> Mounts { get; set; }

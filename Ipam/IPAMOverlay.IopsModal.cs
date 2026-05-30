@@ -7,66 +7,6 @@ namespace DHCPSwitches;
 
 public static partial class IPAMOverlay
 {
-    /// <summary>
-    /// Largest 4U count first: solve <c>IopsPer4UServer × a + IopsPer2UServer × b = required</c> in non-negative integers when possible.
-    /// </summary>
-    private static bool TrySolveIopsServerMix(ulong requiredIops, out long fourU, out long twoU)
-    {
-        fourU = 0;
-        twoU = 0;
-        if (requiredIops == 0 || requiredIops % 1000ul != 0ul)
-        {
-            return false;
-        }
-
-        var n = requiredIops / 1000ul;
-        var aMax = (long)(n / 12ul);
-        if (aMax < 0)
-        {
-            return false;
-        }
-
-        var targetMod = (long)((3ul * (n % 5ul)) % 5ul);
-        long chosenA = -1;
-        for (var k = 0; k < 5; k++)
-        {
-            var trial = aMax - k;
-            if (trial < 0)
-            {
-                break;
-            }
-
-            var tm = trial % 5;
-            if (tm < 0)
-            {
-                tm += 5;
-            }
-
-            if (tm != targetMod)
-            {
-                continue;
-            }
-
-            chosenA = trial;
-            break;
-        }
-
-        if (chosenA < 0)
-        {
-            return false;
-        }
-
-        var remainder = (long)(n - 12ul * (ulong)chosenA);
-        if (remainder < 0 || remainder % 5 != 0)
-        {
-            return false;
-        }
-
-        fourU = chosenA;
-        twoU = remainder / 5;
-        return true;
-    }
-
     private static int IopsCalcKeyDigest(Event e)
     {
         unchecked
@@ -222,7 +162,7 @@ public static partial class IPAMOverlay
     {
         _iopsCalculatorOpen = true;
         const float ww = 460f;
-        const float wh = 280f;
+        const float wh = 320f;
         _iopsStandaloneWindowRect = new Rect(
             Mathf.Max(8f, (Screen.width - ww) * 0.5f),
             Mathf.Max(8f, (Screen.height - wh) * 0.5f),
@@ -275,10 +215,32 @@ public static partial class IPAMOverlay
         var y = 6f;
 
         GUI.Label(
-            new Rect(x, y, innerW, 44f),
-            "Mix sizing: finds how many 4U and 2U servers add up to your IOPS exactly (fewest servers, preferring 4U). Mod constants only — not read from the game.",
+            new Rect(x, y, innerW, 36f),
+            "Pick a server size, enter required IOPS, and see how many servers you need.",
             _stMuted);
-        y += 46f;
+        y += 38f;
+
+        GUI.Label(new Rect(x, y, 120f, 22f), "Server type", _stFormLabel);
+        var tierBtnW = (innerW - 8f) * 0.5f;
+        if (ImguiButtonOnce(new Rect(x, y + 24f, tierBtnW, 26f), "3 U server", 9301, _iopsCalcServerTier == 0 ? _stPrimaryBtn : _stMutedBtn))
+        {
+            _iopsCalcServerTier = 0;
+        }
+
+        if (ImguiButtonOnce(new Rect(x + tierBtnW + 8f, y + 24f, tierBtnW, 26f), "7 U server", 9302, _iopsCalcServerTier == 1 ? _stPrimaryBtn : _stMutedBtn))
+        {
+            _iopsCalcServerTier = 1;
+        }
+
+        y += 58f;
+
+        var iopsEach = _iopsCalcServerTier == 1 ? IopsPer7UServer : IopsPer3UServer;
+        var rackUEach = _iopsCalcServerTier == 1 ? RackUnits7U : RackUnits3U;
+        GUI.Label(
+            new Rect(x, y, innerW, 22f),
+            $"{rackUEach} U server = {iopsEach:N0} IOPS ({iopsEach / rackUEach:N0} IOPS/U)",
+            _stMuted);
+        y += 26f;
 
         GUI.Label(new Rect(x, y, 160f, 22f), "Required IOPS", _stFormLabel);
         y += 24f;
@@ -288,35 +250,23 @@ public static partial class IPAMOverlay
         GUI.Label(new Rect(fieldRect.x + 10f, fieldRect.y + 5f, fieldRect.width - 16f, 20f), disp, _stTableCell);
         y += 34f;
 
-        GUI.Label(
-            new Rect(x, y, innerW, 36f),
-            $"4U = {IopsPer4UServer:N0} IOPS each · 2U = {IopsPer2UServer:N0} IOPS each",
-            _stMuted);
-        y += 38f;
-
         string resultLine1;
         GUIStyle resultStyle1;
         if (string.IsNullOrEmpty(_iopsCalculatorDigits)
             || !ulong.TryParse(_iopsCalculatorDigits, out var reqIops)
             || reqIops == 0)
         {
-            resultLine1 = "Enter a positive IOPS requirement to see server counts.";
+            resultLine1 = "Enter a positive IOPS requirement to see how many servers you need.";
             resultStyle1 = _stIopsResultPlaceholder;
-        }
-        else if (TrySolveIopsServerMix(reqIops, out var n4, out var n2))
-        {
-            resultLine1 = $"{n4} = 4 U servers\n{n2} = 2 U servers";
-            resultStyle1 = _stIopsResultCounts;
-        }
-        else if (reqIops % 1000ul != 0ul)
-        {
-            resultLine1 = "No exact mix: the total must be a multiple of 1,000 IOPS (both server sizes step in 1,000s).";
-            resultStyle1 = _stError;
         }
         else
         {
-            resultLine1 = "No exact mix of 4U and 2U servers reaches this total with the mod’s IOPS constants.";
-            resultStyle1 = _stError;
+            var count = (long)((reqIops + (ulong)iopsEach - 1UL) / (ulong)iopsEach);
+            var rackU = count * rackUEach;
+            var delivered = (ulong)count * (ulong)iopsEach;
+            resultLine1 =
+                $"{count} × {rackUEach} U server{(count == 1 ? "" : "s")}\n{rackU} rack U · delivers {delivered:N0} IOPS";
+            resultStyle1 = _stIopsResultCounts;
         }
 
         var textW = innerW - resultPad * 2f;

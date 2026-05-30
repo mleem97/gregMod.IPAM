@@ -76,18 +76,6 @@ internal static class DeviceInventoryReflection
 
         try
         {
-            if (TryGetServerFormFactorFromPrefabCatalog(server, out var fromPrefab))
-            {
-                return fromPrefab;
-            }
-        }
-        catch
-        {
-            // Il2Cpp
-        }
-
-        try
-        {
             var sceneAssetName = server.name ?? "";
             var fromSceneObject = ClassifyServerPrefabAssetName(sceneAssetName);
             if (fromSceneObject != null)
@@ -107,6 +95,18 @@ internal static class DeviceInventoryReflection
             if (fromText != null)
             {
                 return fromText;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        try
+        {
+            if (TryGetServerFormFactorFromPrefabCatalog(server, out var fromPrefab))
+            {
+                return fromPrefab;
             }
         }
         catch
@@ -324,13 +324,14 @@ internal static class DeviceInventoryReflection
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>
-    /// Rack height fields in this game often use 2 for compact servers even though the product line is 3 U / 7 U only.
+    /// Rack height fields in this game often use internal counts (2 → 3 U tier, 4 → 7 U tier).
     /// </summary>
     private static string MapServerRackUnitsIntToLabel(int u)
     {
         return u switch
         {
             7 => "7 U",
+            4 => "7 U",
             3 => "3 U",
             2 => "3 U",
             _ => "—",

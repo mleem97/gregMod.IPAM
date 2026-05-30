@@ -107,7 +107,7 @@ public static partial class IPAMOverlay
         var topY = Sp(4);
         var closeX = w - topRightPad - topBtnWClose;
         var maxX = closeX - Sp(8f) - topBtnWMax;
-        if (GUI.Button(new Rect(maxX, topY, topBtnWMax, topBtnH), maxLabel, _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(maxX, topY, topBtnWMax, topBtnH), maxLabel, 8800, _stMutedBtn))
         {
             if (_windowMaximized)
             {
@@ -124,7 +124,7 @@ public static partial class IPAMOverlay
             }
         }
 
-        if (GUI.Button(new Rect(closeX, topY, topBtnWClose, topBtnH), "Close", _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(closeX, topY, topBtnWClose, topBtnH), "Close", 8799, _stMutedBtn))
         {
             IsVisible = false;
         }
@@ -200,9 +200,9 @@ public static partial class IPAMOverlay
             {
                 AutoFitCustomersTabCustomerListColumns(_lastInventoryCardWidth);
             }
-            else if (_lastInventoryCardWidth > 80f)
+            else if (_lastInventoryTableWidth > 80f)
             {
-                AutoFitInventoryTableColumns(_lastInventoryCardWidth);
+                AutoFitInventoryTableColumns(_lastInventoryTableWidth);
             }
             else
             {
@@ -376,10 +376,12 @@ public static partial class IPAMOverlay
 
         GUI.DrawTexture(new Rect(contentX + 2, scrollTop + 2, contentW - 4, scrollH - 4), _texCard);
 
-        _scroll = GUI.BeginScrollView(
+        _scroll = SafeBeginScrollView(
             scrollViewRect,
             _scroll,
             new Rect(0, 0, innerW, _cachedContentHeight));
+        _scroll.x = Mathf.Clamp(_scroll.x, 0f, Mathf.Max(0f, innerW - scrollViewRect.width + 20f));
+        _scroll.y = Mathf.Clamp(_scroll.y, 0f, Mathf.Max(0f, _cachedContentHeight - scrollH));
         BeginInventoryScrollRowRepaintCull(_scroll.y, scrollH);
         try
         {
@@ -422,7 +424,7 @@ public static partial class IPAMOverlay
             EndInventoryScrollRowRepaintCull();
         }
 
-        GUI.EndScrollView();
+        SafeEndScrollView();
 
         if (_selectedNetworkSwitchInstanceIds.Count > 0 && detailH > 0f)
         {
@@ -444,8 +446,10 @@ public static partial class IPAMOverlay
 
         GUI.DragWindow(new Rect(0, 0, w, TitleBarH + ToolbarH));
 
-        // Consume any unhandled mouse down events to prevent them from passing through to underlying UI
-        if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
+        // Block pass-through to game UI only when no IMGUI control claimed the click (Il2Cpp Event has no isUsed).
+        if (Event.current.type == EventType.MouseDown
+            && Event.current.button == 0
+            && GUIUtility.hotControl == 0)
         {
             Event.current.Use();
         }
@@ -937,14 +941,14 @@ public static partial class IPAMOverlay
         var sliderW = Mathf.Max(220f, cardW - 260f);
         var sliderX = x0 + 180f;
         var sliderRect = new Rect(sliderX, y + 3f, sliderW, 18f);
-        var newScale = GUI.HorizontalSlider(sliderRect, UiFontScale, 0.5f, 2.0f);
+        var newScale = ImguiHorizontalSlider(sliderRect, UiFontScale, 0.5f, 2.0f, 8811);
         if (Mathf.Abs(newScale - UiFontScale) > 0.0001f)
         {
             UiFontScale = newScale;
         }
 
         var resetRect = new Rect(sliderRect.xMax + 14f, y, 64f, 22f);
-        if (GUI.Button(resetRect, "100%", _stMutedBtn))
+        if (ImguiButtonOnce(resetRect, "100%", 8810, _stMutedBtn))
         {
             UiFontScale = 1f;
         }
@@ -1027,9 +1031,10 @@ public static partial class IPAMOverlay
         var cardW = innerW - CardPad * 2f;
         var tableW = cardW - IpamIpAddressGearColW;
         _lastInventoryCardWidth = cardW;
-        if (_tableColumnsAutoFitPending && cardW > 80f)
+        _lastInventoryTableWidth = tableW;
+        if (_tableColumnsAutoFitPending && tableW > 80f)
         {
-            AutoFitInventoryTableColumns(cardW);
+            AutoFitInventoryTableColumns(tableW);
             _tableColumnsAutoFitPending = false;
         }
 
@@ -1196,7 +1201,7 @@ public static partial class IPAMOverlay
             "Mgmt IPv4",
             "EOL",
             "Status",
-            600,
+            636,
             false);
         y += TableHeaderH;
 
@@ -1469,15 +1474,15 @@ public static partial class IPAMOverlay
 
     private static void CollectDashboardStats(
         out int customerContracts,
-        out int n4u,
-        out int n2u,
+        out int n7u,
+        out int n3u,
         out int nOther,
         out int totalServers,
         out long ratedIopsSum)
     {
         customerContracts = 0;
-        n4u = 0;
-        n2u = 0;
+        n7u = 0;
+        n3u = 0;
         nOther = 0;
         totalServers = 0;
         ratedIopsSum = 0;
@@ -1509,17 +1514,15 @@ public static partial class IPAMOverlay
 
             totalServers++;
             var lab = DeviceInventoryReflection.GetServerFormFactorLabel(s);
-            if (string.Equals(lab, "7 U", StringComparison.Ordinal)
-                || string.Equals(lab, "4 U", StringComparison.Ordinal))
+            if (string.Equals(lab, "7 U", StringComparison.Ordinal))
             {
-                n4u++;
-                ratedIopsSum += IopsPer4UServer;
+                n7u++;
+                ratedIopsSum += IopsPer7UServer;
             }
-            else if (string.Equals(lab, "3 U", StringComparison.Ordinal)
-                     || string.Equals(lab, "2 U", StringComparison.Ordinal))
+            else if (string.Equals(lab, "3 U", StringComparison.Ordinal))
             {
-                n2u++;
-                ratedIopsSum += IopsPer2UServer;
+                n3u++;
+                ratedIopsSum += IopsPer3UServer;
             }
             else
             {
@@ -1586,31 +1589,31 @@ public static partial class IPAMOverlay
         GUI.Label(new Rect(tx, ty, innerW, Mathf.Max(18f, Mathf.Round(22f * UiFontScale))), subtitle, _stMuted);
     }
 
-    private static void DrawDashboardServerMixBar(float x0, float y, float w, float h, int n4u, int n2u, int nOther)
+    private static void DrawDashboardServerMixBar(float x0, float y, float w, float h, int n7u, int n3u, int nOther)
     {
         var bar = new Rect(x0, y, w, h);
         DashboardDrawTintedRect(bar, DashboardTrackDim);
-        var mix = n4u + n2u + nOther;
+        var mix = n7u + n3u + nOther;
         if (mix <= 0)
         {
             GUI.Label(bar, "No servers in inventory cache", _stMutedCenter ?? _stMuted);
             return;
         }
 
-        var w4 = (n4u / (float)mix) * w;
-        var w2 = (n2u / (float)mix) * w;
-        var wO = Mathf.Max(0f, w - w4 - w2);
+        var w7 = (n7u / (float)mix) * w;
+        var w3 = (n3u / (float)mix) * w;
+        var wO = Mathf.Max(0f, w - w7 - w3);
         var x = x0;
-        if (w4 > 0.5f)
+        if (w7 > 0.5f)
         {
-            DashboardDrawTintedRect(new Rect(x, y, w4, h), DashboardColor4U);
-            x += w4;
+            DashboardDrawTintedRect(new Rect(x, y, w7, h), DashboardColor4U);
+            x += w7;
         }
 
-        if (w2 > 0.5f)
+        if (w3 > 0.5f)
         {
-            DashboardDrawTintedRect(new Rect(x, y, w2, h), DashboardColor2U);
-            x += w2;
+            DashboardDrawTintedRect(new Rect(x, y, w3, h), DashboardColor2U);
+            x += w3;
         }
 
         if (wO > 0.5f)
@@ -1657,8 +1660,8 @@ public static partial class IPAMOverlay
     {
         CollectDashboardStats(
             out var customerContracts,
-            out var n4u,
-            out var n2u,
+            out var n7u,
+            out var n3u,
             out var nOther,
             out var totalServers,
             out var ratedIopsSum);
@@ -1688,25 +1691,25 @@ public static partial class IPAMOverlay
             new Rect(x0 + half + heroGap, y, half, heroH),
             "Rated IOPS (3 U + 7 U)",
             ratedIopsSum.ToString("N0"),
-            $"{n4u}×{IopsPer4UServer:N0} + {n2u}×{IopsPer2UServer:N0} (7 U + 3 U tiers)");
+            $"{n7u}×{IopsPer7UServer:N0} + {n3u}×{IopsPer3UServer:N0} (7 U + 3 U tiers)");
         y += heroH + sectionGap;
 
         GUI.Label(new Rect(x0, y, w, SectionTitleH), "Server inventory (by rack type)", _stSectionTitle);
         y += SectionTitleH + 4f;
-        DrawDashboardServerMixBar(x0, y, w, barH, n4u, n2u, nOther);
+        DrawDashboardServerMixBar(x0, y, w, barH, n7u, n3u, nOther);
         y += barH + 10f;
 
-        var mix = n4u + n2u + nOther;
+        var mix = n7u + n3u + nOther;
         float P(int n) => mix > 0 ? (100f * n) / mix : 0f;
         DrawDashboardLegendLine(
             new Rect(x0, y, w, legendRowH),
             DashboardColor4U,
-            $"7 U servers  ·  {n4u}  ({P(n4u):0.#}%)  — {IopsPer4UServer:N0} IOPS each");
+            $"7 U servers  ·  {n7u}  ({P(n7u):0.#}%)  — {IopsPer7UServer:N0} IOPS each");
         y += legendRowH;
         DrawDashboardLegendLine(
             new Rect(x0, y, w, legendRowH),
             DashboardColor2U,
-            $"3 U servers  ·  {n2u}  ({P(n2u):0.#}%)  — {IopsPer2UServer:N0} IOPS each");
+            $"3 U servers  ·  {n3u}  ({P(n3u):0.#}%)  — {IopsPer3UServer:N0} IOPS each");
         y += legendRowH;
         DrawDashboardLegendLine(
             new Rect(x0, y, w, legendRowH),
@@ -1835,10 +1838,12 @@ public static partial class IPAMOverlay
         var x0 = CardPad;
         var y = CardPad;
         var cardW = innerW - CardPad * 2f;
+        var tableW = cardW - IpamIpAddressGearColW;
         _lastInventoryCardWidth = cardW;
-        if (_tableColumnsAutoFitPending && cardW > 80f)
+        _lastInventoryTableWidth = tableW;
+        if (_tableColumnsAutoFitPending && tableW > 80f)
         {
-            AutoFitInventoryTableColumns(cardW);
+            AutoFitInventoryTableColumns(tableW);
             _tableColumnsAutoFitPending = false;
         }
 
@@ -1864,7 +1869,6 @@ public static partial class IPAMOverlay
             y += 26f;
         }
 
-        var tableW = cardW - IpamIpAddressGearColW;
         var headerRowY = y;
         var gearRect = new Rect(x0 + tableW, headerRowY, IpamIpAddressGearColW, TableHeaderH);
         var menuDropRect = new Rect(x0 + cardW - 132f, headerRowY + TableHeaderH + 2f, 128f, 68f);
@@ -1941,7 +1945,7 @@ public static partial class IPAMOverlay
                 && InventoryScrollRowWantsRepaintTextOrSelected(r.yMin, r.yMax, IsServerRowSelected(server)))
             {
                 var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
-                var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
+                var ipRaw = FormatServerIpWithContainingPrefix(ip);
                 ipCol = CellTextForCol(3, ipRaw, tableW);
                 status = CellTextForCol(5, hasIp ? "Assigned" : "No address", tableW);
                 cust = CellTextForCol(1, GetCustomerDisplayName(server), tableW);
@@ -2437,7 +2441,7 @@ public static partial class IPAMOverlay
             summary = GetCustomerDropdownSummaryLabel() + "  ▾";
         }
 
-        if (CustomerPickBuffer.Count > 0 && GUI.Button(dropBtnRect, summary, _stMutedBtn))
+        if (CustomerPickBuffer.Count > 0 && ImguiButtonOnce(dropBtnRect, summary, 8811, _stMutedBtn))
         {
             _customerDropdownOpen = !_customerDropdownOpen;
         }
@@ -2453,7 +2457,7 @@ public static partial class IPAMOverlay
         }
 
         GUI.Box(dropListRect, GUIContent.none);
-        _customerDropdownScroll = GUI.BeginScrollView(
+        _customerDropdownScroll = SafeBeginScrollView(
             dropListRect,
             _customerDropdownScroll,
             new Rect(0, 0, fieldW - 22, CustomerPickBuffer.Count * 28f));
@@ -2462,13 +2466,13 @@ public static partial class IPAMOverlay
             var cb = CustomerPickBuffer[i];
             var nm = cb.customerItem != null ? cb.customerItem.customerName : "";
             var line = $"#{cb.customerID}  {(string.IsNullOrWhiteSpace(nm) ? "—" : nm.Trim())}";
-            if (GUI.Button(new Rect(4, i * 28f, fieldW - 28, 26), line, _stMutedBtn))
+            if (ImguiButtonOnce(new Rect(4, i * 28f, fieldW - 28, 26), line, 8812 + i, _stMutedBtn))
             {
                 StartInlineCustomerAssign(cb);
             }
         }
 
-        GUI.EndScrollView();
+        SafeEndScrollView();
         py += listH + 4f;
     }
 
@@ -2542,41 +2546,37 @@ public static partial class IPAMOverlay
                 IpamTextFieldKind.Name);
             py += 28f;
 
-            var plist = GetFilteredIpamPrefixesForInlineSearch(_inlineIpamPrefixSearchBuf);
+            var plist = BuildInlinePrefixPickOptions(_inlineIpamPrefixSearchBuf);
             var listH = Mathf.Clamp(_serverEditPopupRect.height - py - 160f, 80f, 220f);
             const float rowH = 26f;
             var innerW = iw - 16f;
             var inner = new Rect(0f, 0f, innerW, Mathf.Max(listH, plist.Count * rowH));
-            _inlineIpamPrefixListScroll = GUI.BeginScrollView(
+            _inlineIpamPrefixListScroll = SafeBeginScrollView(
                 new Rect(px, py, iw, listH),
                 _inlineIpamPrefixListScroll,
                 inner);
             for (var i = 0; i < plist.Count; i++)
             {
-                var p = plist[i];
-                if (p == null)
-                {
-                    continue;
-                }
-
-                var cc = (p.Cidr ?? "").Trim();
-                var marked = string.Equals(p.Id, _inlineIpamPrefixPickId, StringComparison.Ordinal);
-                var line = string.IsNullOrEmpty(p.Name) ? cc : $"{cc}  ({p.Name})";
+                var opt = plist[i];
+                var marked = string.Equals(opt.PickKey, _inlineIpamPrefixPickKey, StringComparison.Ordinal);
+                var rowStyle = opt.PickKey.StartsWith("free:", StringComparison.Ordinal) && !marked
+                    ? _stHint
+                    : marked ? _stPrimaryBtn : _stMutedBtn;
                 if (ImguiButtonOnce(
                         new Rect(0f, i * rowH, innerW, rowH - 2f),
-                        line,
+                        opt.Label,
                         930000 + i,
-                        marked ? _stPrimaryBtn : _stMutedBtn))
+                        rowStyle))
                 {
-                    _inlineIpamPrefixPickId = p.Id ?? "";
+                    _inlineIpamPrefixPickKey = opt.PickKey ?? "";
                 }
             }
 
-            GUI.EndScrollView();
+            SafeEndScrollView();
             py += listH + 8f;
             GUI.Label(
                 new Rect(px, py, iw, 36f),
-                "First free usable IPv4 in the chosen prefix for each server.",
+                "Created prefixes and Available free blocks (shows used/free). First free usable IPv4 in the chosen CIDR is assigned to each server.",
                 _stHint);
             py += 40f;
         }
