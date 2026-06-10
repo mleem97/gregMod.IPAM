@@ -6,7 +6,7 @@
     <Nullable>disable</Nullable>
     <PlatformTarget>x64</PlatformTarget>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>DHCPSwitches</AssemblyName>
+    <AssemblyName>DHCP and IPAM</AssemblyName>
     <RootNamespace>DHCPSwitches</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Prevent nested tool/obj output under artifacts/ from being compiled as mod sources -->

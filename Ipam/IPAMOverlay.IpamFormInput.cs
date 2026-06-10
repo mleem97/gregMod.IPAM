@@ -61,13 +61,32 @@ public static partial class IPAMOverlay
             && !_serverEditPopupDismissed
             && _inlineAssignCustomer != null
             && _ipamFormFieldFocus == IpamFormFocusInlinePrefixSearch;
+        var inlineAvailableCidrFocus =
+            ShouldDrawServerEditPopup()
+            && !_serverEditPopupDismissed
+            && _inlineAssignCustomer != null
+            && IsInlineAvailableBlockSelected()
+            && _ipamFormFieldFocus == IpamFormFocusInlineAvailableCidr;
         var racksTextFocus =
             _navSection == NavSection.Racks
             && _ipamFormFieldFocus >= IpamFormFocusRackNewName
             && _ipamFormFieldFocus <= IpamFormFocusRackMountSwitchSearch;
+        var devicesTabTextFocus =
+            _navSection == NavSection.Devices
+            && _ipamFormFieldFocus >= IpamFormFocusDevicesSwitchSearch
+            && _ipamFormFieldFocus <= IpamFormFocusDevicesServerSearch;
+        if (devicesTabTextFocus && _ipamFormFieldFocus != GetDevicesTabSearchFocusSlotForSub(_devicesSub))
+        {
+            _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamFormBackspaceHeldSince = -1f;
+            devicesTabTextFocus = false;
+        }
+
         if (!wizardChildPrefixFocus
             && !inlinePrefixSearchFocus
+            && !inlineAvailableCidrFocus
             && !racksTextFocus
+            && !devicesTabTextFocus
             && (_navSection != NavSection.Ipam || (_ipamSub != IpamSubSection.Prefixes && _ipamSub != IpamSubSection.Vlans)))
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
@@ -77,6 +96,17 @@ public static partial class IPAMOverlay
 
         if (_ipamFormFieldFocus == IpamFormFocusInlinePrefixSearch
             && (!ShouldDrawServerEditPopup() || _serverEditPopupDismissed || _inlineAssignCustomer == null))
+        {
+            _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamFormBackspaceHeldSince = -1f;
+            return;
+        }
+
+        if (_ipamFormFieldFocus == IpamFormFocusInlineAvailableCidr
+            && (!ShouldDrawServerEditPopup()
+                || _serverEditPopupDismissed
+                || _inlineAssignCustomer == null
+                || !IsInlineAvailableBlockSelected()))
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
             _ipamFormBackspaceHeldSince = -1f;
@@ -254,6 +284,7 @@ public static partial class IPAMOverlay
             IpamFormFocusVlanId => IpamTextFieldKind.VlanIdDigits,
             IpamFormFocusVlanName => IpamTextFieldKind.Name,
             IpamFormFocusInlinePrefixSearch => IpamTextFieldKind.Name,
+            IpamFormFocusInlineAvailableCidr => IpamTextFieldKind.Cidr,
             IpamFormFocusWizardChildCidr => IpamTextFieldKind.Cidr,
             IpamFormFocusWizardChildName => IpamTextFieldKind.Name,
             IpamFormFocusWizardChildTenant => IpamTextFieldKind.Name,
@@ -273,6 +304,7 @@ public static partial class IPAMOverlay
             IpamFormFocusVlanId => 4,
             IpamFormFocusVlanName => 128,
             IpamFormFocusInlinePrefixSearch => 128,
+            IpamFormFocusInlineAvailableCidr => 64,
             IpamFormFocusWizardChildCidr => 64,
             IpamFormFocusWizardChildName => 128,
             IpamFormFocusWizardChildTenant => 128,
@@ -282,6 +314,10 @@ public static partial class IPAMOverlay
             IpamFormFocusRackPatchLabel => 96,
             IpamFormFocusRackMountServerSearch => 96,
             IpamFormFocusRackMountSwitchSearch => 96,
+            IpamFormFocusDevicesSwitchSearch => 96,
+            IpamFormFocusDevicesRouterSearch => 96,
+            IpamFormFocusDevicesFirewallSearch => 96,
+            IpamFormFocusDevicesServerSearch => 96,
             _ => 0,
         };
     }
@@ -295,6 +331,7 @@ public static partial class IPAMOverlay
             IpamFormFocusVlanId => _ipamVlanFormId ?? "",
             IpamFormFocusVlanName => _ipamVlanFormName ?? "",
             IpamFormFocusInlinePrefixSearch => _inlineIpamPrefixSearchBuf ?? "",
+            IpamFormFocusInlineAvailableCidr => _inlineIpamAvailableCidrBuf ?? "",
             IpamFormFocusWizardChildCidr => _ipamChildPrefixWizardCidrBuf ?? "",
             IpamFormFocusWizardChildName => _ipamChildPrefixWizardNameBuf ?? "",
             IpamFormFocusWizardChildTenant => _ipamChildPrefixWizardTenantBuf ?? "",
@@ -304,6 +341,10 @@ public static partial class IPAMOverlay
             IpamFormFocusRackPatchLabel => _rackPatchLabelDraft ?? "",
             IpamFormFocusRackMountServerSearch => _rackMountServerSearchBuf ?? "",
             IpamFormFocusRackMountSwitchSearch => _rackMountSwitchSearchBuf ?? "",
+            IpamFormFocusDevicesSwitchSearch => _devicesTabSwitchSearchBuf ?? "",
+            IpamFormFocusDevicesRouterSearch => _devicesTabRouterSearchBuf ?? "",
+            IpamFormFocusDevicesFirewallSearch => _devicesTabFirewallSearchBuf ?? "",
+            IpamFormFocusDevicesServerSearch => _devicesTabServerSearchBuf ?? "",
             _ => "",
         };
     }
@@ -326,6 +367,10 @@ public static partial class IPAMOverlay
                 break;
             case IpamFormFocusInlinePrefixSearch:
                 _inlineIpamPrefixSearchBuf = s;
+                break;
+            case IpamFormFocusInlineAvailableCidr:
+                _inlineIpamAvailableCidrBuf = s;
+                SyncInlineAvailablePickKeyFromBuffer();
                 break;
             case IpamFormFocusWizardChildCidr:
                 _ipamChildPrefixWizardCidrBuf = s;
@@ -353,6 +398,42 @@ public static partial class IPAMOverlay
                 break;
             case IpamFormFocusRackMountSwitchSearch:
                 _rackMountSwitchSearchBuf = s;
+                break;
+            case IpamFormFocusDevicesSwitchSearch:
+                if (!string.Equals(_devicesTabSwitchSearchBuf, s, StringComparison.Ordinal))
+                {
+                    _devicesTabSwitchSearchBuf = s;
+                    _ipamDevicesSwitchPageIndex = 0;
+                    RecomputeContentHeight();
+                }
+
+                break;
+            case IpamFormFocusDevicesRouterSearch:
+                if (!string.Equals(_devicesTabRouterSearchBuf, s, StringComparison.Ordinal))
+                {
+                    _devicesTabRouterSearchBuf = s;
+                    _ipamDevicesRouterPageIndex = 0;
+                    RecomputeContentHeight();
+                }
+
+                break;
+            case IpamFormFocusDevicesFirewallSearch:
+                if (!string.Equals(_devicesTabFirewallSearchBuf, s, StringComparison.Ordinal))
+                {
+                    _devicesTabFirewallSearchBuf = s;
+                    _ipamDevicesFirewallPageIndex = 0;
+                    RecomputeContentHeight();
+                }
+
+                break;
+            case IpamFormFocusDevicesServerSearch:
+                if (!string.Equals(_devicesTabServerSearchBuf, s, StringComparison.Ordinal))
+                {
+                    _devicesTabServerSearchBuf = s;
+                    _ipamDevicesServerPageIndex = 0;
+                    RecomputeContentHeight();
+                }
+
                 break;
         }
     }
@@ -474,6 +555,7 @@ public static partial class IPAMOverlay
             IpamFormFocusVlanId => _ipamVlanFormId ?? "",
             IpamFormFocusVlanName => _ipamVlanFormName ?? "",
             IpamFormFocusInlinePrefixSearch => _inlineIpamPrefixSearchBuf ?? "",
+            IpamFormFocusInlineAvailableCidr => _inlineIpamAvailableCidrBuf ?? "",
             IpamFormFocusWizardChildCidr => _ipamChildPrefixWizardCidrBuf ?? "",
             IpamFormFocusWizardChildName => _ipamChildPrefixWizardNameBuf ?? "",
             IpamFormFocusWizardChildTenant => _ipamChildPrefixWizardTenantBuf ?? "",
@@ -483,6 +565,10 @@ public static partial class IPAMOverlay
             IpamFormFocusRackPatchLabel => _rackPatchLabelDraft ?? "",
             IpamFormFocusRackMountServerSearch => _rackMountServerSearchBuf ?? "",
             IpamFormFocusRackMountSwitchSearch => _rackMountSwitchSearchBuf ?? "",
+            IpamFormFocusDevicesSwitchSearch => _devicesTabSwitchSearchBuf ?? "",
+            IpamFormFocusDevicesRouterSearch => _devicesTabRouterSearchBuf ?? "",
+            IpamFormFocusDevicesFirewallSearch => _devicesTabFirewallSearchBuf ?? "",
+            IpamFormFocusDevicesServerSearch => _devicesTabServerSearchBuf ?? "",
             _ => "",
         };
     }

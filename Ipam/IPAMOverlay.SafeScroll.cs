@@ -11,7 +11,7 @@ namespace DHCPSwitches;
 public static partial class IPAMOverlay
 {
     private const float SafeScrollScrollbarThickness = 14f;
-    private const float SafeScrollWheelStep = 24f;
+    private const float SafeScrollWheelStep = 20f;
     private const float SafeScrollMinThumbSize = 24f;
     private const int SafeScrollThumbControlBase = unchecked((int)0xD1C0_7000);
 
@@ -213,7 +213,7 @@ public static partial class IPAMOverlay
         bool needsVertical,
         bool needsHorizontal)
     {
-        if (Event.current == null || Event.current.type != EventType.ScrollWheel)
+        if (Event.current == null || Event.current.type != EventType.ScrollWheel || !TryConsumeScrollWheelThisFrame())
         {
             return scroll;
         }
@@ -347,4 +347,16 @@ public static partial class IPAMOverlay
     }
 
     private static float _safeScrollDragGrabOffset;
+    private static int _safeScrollLastWheelFrame = -1;
+
+    private static bool TryConsumeScrollWheelThisFrame()
+    {
+        if (_safeScrollLastWheelFrame == Time.frameCount)
+        {
+            return false;
+        }
+
+        _safeScrollLastWheelFrame = Time.frameCount;
+        return true;
+    }
 }

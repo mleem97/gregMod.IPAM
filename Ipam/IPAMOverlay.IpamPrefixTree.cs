@@ -11,6 +11,8 @@ namespace DHCPSwitches;
 public static partial class IPAMOverlay
 {
     private const float IpamAssignedIpSubRowH = 17f;
+    private static int _ipamPrefixUtilCacheFrame = -1;
+    private static readonly Dictionary<string, (int Used, int Cap)> _ipamPrefixUtilCache = new(StringComparer.Ordinal);
 
     private struct MergedFolderRow
     {
@@ -441,6 +443,33 @@ public static partial class IPAMOverlay
             flatDirectChildrenOnly);
     }
 
+    private static (int Used, int Cap) GetPrefixRowUtilization(
+        IpamPrefixEntry p,
+        IReadOnlyList<IpamPrefixEntry> all,
+        int directChildren,
+        string cidr)
+    {
+        if (_ipamPrefixUtilCacheFrame != Time.frameCount)
+        {
+            _ipamPrefixUtilCache.Clear();
+            _ipamPrefixUtilCacheFrame = Time.frameCount;
+        }
+
+        var id = p?.Id ?? "";
+        if (_ipamPrefixUtilCache.TryGetValue(id, out var cached))
+        {
+            return cached;
+        }
+
+        var cap = Mathf.Max(1, RouteMath.CountIpamUsableHosts(cidr));
+        var used = directChildren > 0
+            ? CountAssignedServersWithIpInCidr(cidr)
+            : CountAssignedServersExclusiveToPrefix(p, all);
+        cached = (used, cap);
+        _ipamPrefixUtilCache[id] = cached;
+        return cached;
+    }
+
     private static void DrawFreeGapPrefixRow(
         MergedFolderRow mrow,
         IReadOnlyList<IpamPrefixEntry> all,
@@ -601,104 +630,107 @@ public static partial class IPAMOverlay
 
         var alt = (Mathf.FloorToInt(y / TableRowH) % 2) == 1;
         var sel = string.Equals(_ipamSelectedPrefixId, p.Id, StringComparison.Ordinal);
-        if (e.type == EventType.Repaint)
+        var rowYMin = y;
+        var rowYMax = y + TableRowH;
+        var wantsRepaint = InventoryScrollRowWantsRepaintTextOrSelected(rowYMin, rowYMax, sel);
+        if (e.type == EventType.Repaint && wantsRepaint)
         {
             var tint = sel ? new Color(0.12f, 0.28f, 0.38f, 0.85f) : (alt ? new Color(0.06f, 0.08f, 0.1f, 0.5f) : new Color(0.04f, 0.05f, 0.06f, 0.35f));
             DrawTintedRect(r, tint);
         }
 
-        var hasParent = !string.IsNullOrEmpty(p.ParentId);
-        string roleLabel;
-        if (directChildren > 0)
+        if (wantsRepaint || e.type != EventType.Repaint)
         {
-            roleLabel = "Parent";
-        }
-        else if (hasParent)
-        {
-            roleLabel = "Child";
-        }
-        else
-        {
-            roleLabel = "Root";
-        }
+            var hasParent = !string.IsNullOrEmpty(p.ParentId);
+            string roleLabel;
+            if (directChildren > 0)
+            {
+                roleLabel = "Parent";
+            }
+            else if (hasParent)
+            {
+                roleLabel = "Child";
+            }
+            else
+            {
+                roleLabel = "Root";
+            }
 
-        var cap = Mathf.Max(1, RouteMath.CountDhcpUsableHosts(cidr));
-        var used = directChildren > 0
-            ? CountAssignedServersWithIpInCidr(cidr)
-            : CountAssignedServersExclusiveToPrefix(p, all);
-        var util = Mathf.Clamp01(used / (float)cap);
+            var (used, cap) = GetPrefixRowUtilization(p, all, directChildren, cidr);
+            var util = Mathf.Clamp01(used / (float)cap);
 
-        if (showExpandChevron)
-        {
-            var collapsed = _ipamPrefixCollapsedIds.Contains(p.Id);
+            if (showExpandChevron)
+            {
+                var collapsed = _ipamPrefixCollapsedIds.Contains(p.Id);
+                GUI.Label(
+                    chevronRect,
+                    new GUIContent(collapsed ? "▸" : "▾", "Show or hide child prefixes in this list (does not change drill scope)."),
+                    _stTableCell);
+            }
+
+            GUI.Label(new Rect(labelLeft, y, prefixLabelRect.width, TableRowH), cidr + name, _stTableCell);
+            GUI.Label(new Rect(x0 + colPrefix, y, colStatus, TableRowH), roleLabel, _stTableCell);
             GUI.Label(
-                chevronRect,
-                new GUIContent(collapsed ? "▸" : "▾", "Show or hide child prefixes in this list (does not change drill scope)."),
+                new Rect(x0 + colPrefix + colStatus, y, colChild, TableRowH),
+                directChildren.ToString(CultureInfo.InvariantCulture),
                 _stTableCell);
+
+            var kids = all.Where(c => c != null && string.Equals(c.ParentId, p.Id, StringComparison.Ordinal)).ToList();
+            string freeDisp;
+            string freeTip;
+            if (!IpamPrefixAvailability.TryComputeFreeSplitSlots(cidr, kids, out var tpl, out _, out var fr, out var ov))
+            {
+                freeDisp = "—";
+                freeTip = "Could not compute free splits for this prefix (invalid CIDR or no template).";
+            }
+            else if (tpl == 24)
+            {
+                freeDisp = ov ? $"~{fr}" : fr.ToString(CultureInfo.InvariantCulture);
+                freeTip =
+                    $"Free /{tpl} subnets (aligned blocks) under this prefix after direct children. ~ means overlapping child ranges so the count is conservative.";
+            }
+            else if (IpamFreeSpace.TryFormatAggregatedFreeBlockCounts(cidr, kids, out var agg, out var aggTip))
+            {
+                freeDisp = ov ? $"~{agg}" : agg;
+                freeTip = aggTip + (ov ? " Overlapping child ranges: split counts may be conservative." : "");
+            }
+            else
+            {
+                freeDisp = "0";
+                freeTip = "No CIDR-aligned free space remains under this prefix after direct children.";
+            }
+
+            GUI.Label(
+                new Rect(x0 + colPrefix + colStatus + colChild, y, colFree, TableRowH),
+                new GUIContent(freeDisp, freeTip),
+                ov ? _stMuted : _stTableCell);
+
+            var utilColLeft = x0 + colPrefix + colStatus + colChild + colFree;
+            const float utilPctReserve = 76f;
+            var barX = utilColLeft + 4f;
+            var barW = Mathf.Max(28f, colUtil - utilPctReserve - 10f);
+            var barH = TableRowH - 10f;
+            var barY = y + 5f;
+            if (e.type == EventType.Repaint)
+            {
+                DrawTintedRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.22f, 0.25f, 1f));
+                DrawTintedRect(new Rect(barX, barY, barW * util, barH), new Color(0.2f, 0.75f, 0.45f, 1f));
+            }
+
+            var pct = Mathf.RoundToInt(util * 100f);
+            var pctLeft = barX + barW + 6f;
+            var utilBandRight = utilColLeft + colUtil - 6f;
+            var pctW = Mathf.Max(36f, utilBandRight - pctLeft);
+            GUI.Label(
+                new Rect(pctLeft, y, pctW, TableRowH),
+                $"{pct}% ({used}/{cap})",
+                _stMuted);
+
+            var tenantDisp = string.IsNullOrEmpty(p.Tenant) ? "—" : p.Tenant;
+            GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colFree + colUtil, y, colTenant, TableRowH), tenantDisp, _stTableCell);
+
+            GUI.Label(new Rect(actXEarly + 2f, y + 2f, colActions - 4f, TableRowH - 4f), "—", _stMuted);
         }
-
-        GUI.Label(new Rect(labelLeft, y, prefixLabelRect.width, TableRowH), cidr + name, _stTableCell);
-        GUI.Label(new Rect(x0 + colPrefix, y, colStatus, TableRowH), roleLabel, _stTableCell);
-        GUI.Label(
-            new Rect(x0 + colPrefix + colStatus, y, colChild, TableRowH),
-            directChildren.ToString(CultureInfo.InvariantCulture),
-            _stTableCell);
-
-        var kids = all.Where(c => c != null && string.Equals(c.ParentId, p.Id, StringComparison.Ordinal)).ToList();
-        string freeDisp;
-        string freeTip;
-        if (!IpamPrefixAvailability.TryComputeFreeSplitSlots(cidr, kids, out var tpl, out _, out var fr, out var ov))
-        {
-            freeDisp = "—";
-            freeTip = "Could not compute free splits for this prefix (invalid CIDR or no template).";
-        }
-        else if (tpl == 24)
-        {
-            freeDisp = ov ? $"~{fr}" : fr.ToString(CultureInfo.InvariantCulture);
-            freeTip =
-                $"Free /{tpl} subnets (aligned blocks) under this prefix after direct children. ~ means overlapping child ranges so the count is conservative.";
-        }
-        else if (IpamFreeSpace.TryFormatAggregatedFreeBlockCounts(cidr, kids, out var agg, out var aggTip))
-        {
-            freeDisp = ov ? $"~{agg}" : agg;
-            freeTip = aggTip + (ov ? " Overlapping child ranges: split counts may be conservative." : "");
-        }
-        else
-        {
-            freeDisp = "0";
-            freeTip = "No CIDR-aligned free space remains under this prefix after direct children.";
-        }
-
-        GUI.Label(
-            new Rect(x0 + colPrefix + colStatus + colChild, y, colFree, TableRowH),
-            new GUIContent(freeDisp, freeTip),
-            ov ? _stMuted : _stTableCell);
-
-        var utilColLeft = x0 + colPrefix + colStatus + colChild + colFree;
-        const float utilPctReserve = 76f;
-        var barX = utilColLeft + 4f;
-        var barW = Mathf.Max(28f, colUtil - utilPctReserve - 10f);
-        var barH = TableRowH - 10f;
-        var barY = y + 5f;
-        if (e.type == EventType.Repaint)
-        {
-            DrawTintedRect(new Rect(barX, barY, barW, barH), new Color(0.2f, 0.22f, 0.25f, 1f));
-            DrawTintedRect(new Rect(barX, barY, barW * util, barH), new Color(0.2f, 0.75f, 0.45f, 1f));
-        }
-
-        var pct = Mathf.RoundToInt(util * 100f);
-        var pctLeft = barX + barW + 6f;
-        var utilBandRight = utilColLeft + colUtil - 6f;
-        var pctW = Mathf.Max(36f, utilBandRight - pctLeft);
-        GUI.Label(
-            new Rect(pctLeft, y, pctW, TableRowH),
-            $"{pct}% ({used}/{cap})",
-            _stMuted);
-
-        var tenantDisp = string.IsNullOrEmpty(p.Tenant) ? "—" : p.Tenant;
-        GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colFree + colUtil, y, colTenant, TableRowH), tenantDisp, _stTableCell);
-
-        GUI.Label(new Rect(actXEarly + 2f, y + 2f, colActions - 4f, TableRowH - 4f), "—", _stMuted);
 
         y += TableRowH;
 

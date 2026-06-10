@@ -40,6 +40,11 @@ internal static class LegacyInputBlockPatches
         return false;
     }
 
+    private static bool ShouldBlockMouseButton(int button)
+    {
+        return IPAMOverlay.IsVisible && button >= 0 && button <= 6;
+    }
+
     /// <summary>Project Input Manager often maps Escape to a virtual "Cancel" button; that path does not use <see cref="KeyCode"/>.</summary>
     private static bool IsVirtualCancelButton(string buttonName)
     {
@@ -166,6 +171,66 @@ internal static class LegacyInputBlockPatches
         private static void Postfix(string buttonName, ref bool __result)
         {
             if (__result && ShouldBlockNamedAxisButton(buttonName))
+            {
+                __result = false;
+            }
+        }
+    }
+
+    [HarmonyPatch]
+    private static class GetMouseButtonDownPatch
+    {
+        private static MethodBase TargetMethod()
+        {
+            var t = InputType;
+            return t == null ? null : AccessTools.Method(t, "GetMouseButtonDown", new[] { typeof(int) });
+        }
+
+        private static bool Prepare() => TargetMethod() != null;
+
+        private static void Postfix(int button, ref bool __result)
+        {
+            if (__result && ShouldBlockMouseButton(button))
+            {
+                __result = false;
+            }
+        }
+    }
+
+    [HarmonyPatch]
+    private static class GetMouseButtonPatch
+    {
+        private static MethodBase TargetMethod()
+        {
+            var t = InputType;
+            return t == null ? null : AccessTools.Method(t, "GetMouseButton", new[] { typeof(int) });
+        }
+
+        private static bool Prepare() => TargetMethod() != null;
+
+        private static void Postfix(int button, ref bool __result)
+        {
+            if (__result && ShouldBlockMouseButton(button))
+            {
+                __result = false;
+            }
+        }
+    }
+
+    [HarmonyPatch]
+    private static class GetMouseButtonUpPatch
+    {
+        private static MethodBase TargetMethod()
+        {
+            var t = InputType;
+            return t == null ? null : AccessTools.Method(t, "GetMouseButtonUp", new[] { typeof(int) });
+        }
+
+        private static bool Prepare() => TargetMethod() != null;
+
+        private static void Postfix(int button, ref bool __result)
+        {
+            if (__result && ShouldBlockMouseButton(button))
             {
                 __result = false;
             }

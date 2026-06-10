@@ -122,6 +122,32 @@ internal static class IpamDataStore
         return EnsureLoaded().Prefixes;
     }
 
+    internal static bool TryGetPrefixByCidr(string cidr, out IpamPrefixEntry entry)
+    {
+        entry = null;
+        var trimmed = (cidr ?? "").Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return false;
+        }
+
+        foreach (var p in EnsureLoaded().Prefixes)
+        {
+            if (p == null)
+            {
+                continue;
+            }
+
+            if (string.Equals((p.Cidr ?? "").Trim(), trimmed, StringComparison.OrdinalIgnoreCase))
+            {
+                entry = p;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal static IReadOnlyList<IpamVlanEntry> GetVlans()
     {
         return EnsureLoaded().Vlans;
@@ -175,10 +201,31 @@ internal static class IpamDataStore
             }
         }
 
+        var parentIdStr = resolvedParent.HasValue ? resolvedParent.Value.ToString("D") : null;
+        foreach (var sib in root.Prefixes)
+        {
+            if (sib == null)
+            {
+                continue;
+            }
+
+            if (!string.Equals(sib.ParentId ?? "", parentIdStr ?? "", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var sc = (sib.Cidr ?? "").Trim();
+            if (RouteMath.Ipv4CidrRangesOverlap(trimmed, sc))
+            {
+                error = $"Overlaps existing prefix {sc}.";
+                return false;
+            }
+        }
+
         var entry = new IpamPrefixEntry
         {
             Id = Guid.NewGuid().ToString("D"),
-            ParentId = resolvedParent.HasValue ? resolvedParent.Value.ToString("D") : null,
+            ParentId = parentIdStr,
             Cidr = trimmed,
             Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim(),
             Tenant = string.IsNullOrWhiteSpace(tenant) ? null : tenant.Trim(),

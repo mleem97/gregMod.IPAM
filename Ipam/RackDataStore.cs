@@ -15,6 +15,12 @@ internal static class RackDataStore
     /// <summary>All racks in this mod use a standard 47 U cabinet.</summary>
     internal const int RackStandardHeightU = 47;
 
+    internal static string FormatFloorGridLabel(int rowIndex, int column)
+    {
+        return ((char)('A' + rowIndex)).ToString(CultureInfo.InvariantCulture)
+               + column.ToString(CultureInfo.InvariantCulture);
+    }
+
     private const int FileVersion = 1;
     private const string SubDir = "DHCPSwitches";
     private const string FileName = "rack_data.json";

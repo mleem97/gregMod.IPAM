@@ -658,6 +658,70 @@ internal static class DeviceInventoryReflection
         return false;
     }
 
+    /// <summary>L3 security appliances exposed as <see cref="NetworkSwitch"/> in some game builds.</summary>
+    internal static bool NetworkSwitchBehavesAsFirewall(NetworkSwitch sw)
+    {
+        if (sw == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var typeName = sw.GetType().Name ?? "";
+            if (typeName.IndexOf("Firewall", StringComparison.OrdinalIgnoreCase) >= 0
+                || typeName.IndexOf("FireWall", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        try
+        {
+            var disp = GetDisplayName(sw);
+            if (!string.IsNullOrWhiteSpace(disp)
+                && (disp.IndexOf("Firewall", StringComparison.OrdinalIgnoreCase) >= 0
+                    || disp.IndexOf("Fire wall", StringComparison.OrdinalIgnoreCase) >= 0
+                    || disp.IndexOf("NGFW", StringComparison.OrdinalIgnoreCase) >= 0))
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        try
+        {
+            var nm = sw.name ?? "";
+            if (nm.IndexOf("Firewall", StringComparison.OrdinalIgnoreCase) >= 0
+                || nm.IndexOf("NGFW", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        if (TryReadStringMember(sw, NetworkSwitchRouterStringHints, out var role) && !string.IsNullOrEmpty(role))
+        {
+            if (role.IndexOf("firewall", StringComparison.OrdinalIgnoreCase) >= 0
+                || role.IndexOf("ngfw", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal static string GetDisplayName(UnityEngine.Object o)
     {
         if (o == null)

@@ -35,4 +35,4 @@ Changes since **0.3.5** (Racks tab, prefix wizard).
 
 ## Install
 
-Copy `dist/gregMod.IPAM.dll` (or `bin/Release/net6.0/DHCPSwitches.dll`) into your game **Mods** folder alongside `gregCore.dll`.
+Copy `bin/Release/net6.0/DHCP and IPAM.dll` into your game **Mods** folder.

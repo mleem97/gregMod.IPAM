@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -84,6 +85,11 @@ public static partial class IPAMOverlay
         if (!Enum.IsDefined(typeof(NavSection), _navSection))
         {
             _navSection = NavSection.Devices;
+        }
+
+        if (!Enum.IsDefined(typeof(DevicesSubSection), _devicesSub))
+        {
+            _devicesSub = DevicesSubSection.Switches;
         }
 
         if (!ipamUnlocked)
@@ -282,9 +288,59 @@ public static partial class IPAMOverlay
         var navRowH = Mathf.Max(28f, Sp(32f));
         var navStartY = navHeaderY + navHeaderH + Sp(6f);
         DrawNavEntry(new Rect(navX, navStartY + navRowH * 0, navW, navRowH), NavSection.Dashboard, "Dashboard");
-        DrawNavEntry(new Rect(navX, navStartY + navRowH * 1, navW, navRowH), NavSection.Devices, "Devices");
-        DrawNavEntry(new Rect(navX, navStartY + navRowH * 2, navW, navRowH), NavSection.Racks, "Racks");
-        var ipamToggleRect = new Rect(navX, navStartY + navRowH * 3, navW, navRowH);
+
+        var devicesToggleRect = new Rect(navX, navStartY + navRowH * 1, navW, navRowH);
+        var devicesChevron = _devicesSidebarExpanded ? "\u25BC" : "\u25B6";
+        var devicesToggleLabel = $"Devices  {devicesChevron}";
+        var devicesNavActive = _navSection == NavSection.Devices;
+        if (devicesNavActive)
+        {
+            GUI.DrawTexture(devicesToggleRect, _texNavActive);
+        }
+
+        var devicesToggleStyle = devicesNavActive ? _stNavItemActive : _stNavBtn;
+        if (ImguiButtonOnce(devicesToggleRect, devicesToggleLabel, 9047, devicesToggleStyle))
+        {
+            _devicesSidebarExpanded = !_devicesSidebarExpanded;
+            _ipamFormFieldFocus = IpamFormFocusNone;
+        }
+
+        float navAfterDevices;
+        if (_devicesSidebarExpanded)
+        {
+            var devicesSubIndent = Sp(10f);
+            var devicesSubNavW = navW - devicesSubIndent;
+            var devicesSubBaseY = navStartY + navRowH * 2;
+            DrawDevicesSubNav(
+                new Rect(navX + devicesSubIndent, devicesSubBaseY + navRowH * 0, devicesSubNavW, navRowH),
+                DevicesSubSection.Switches,
+                "Switches",
+                9060);
+            DrawDevicesSubNav(
+                new Rect(navX + devicesSubIndent, devicesSubBaseY + navRowH * 1, devicesSubNavW, navRowH),
+                DevicesSubSection.Routers,
+                "Routers",
+                9061);
+            DrawDevicesSubNav(
+                new Rect(navX + devicesSubIndent, devicesSubBaseY + navRowH * 2, devicesSubNavW, navRowH),
+                DevicesSubSection.Firewall,
+                "Firewall",
+                9062);
+            DrawDevicesSubNav(
+                new Rect(navX + devicesSubIndent, devicesSubBaseY + navRowH * 3, devicesSubNavW, navRowH),
+                DevicesSubSection.Servers,
+                "Servers",
+                9063);
+            navAfterDevices = devicesSubBaseY + navRowH * 4 + Sp(8f);
+        }
+        else
+        {
+            navAfterDevices = navStartY + navRowH * 2 + Sp(8f);
+        }
+
+        DrawNavEntry(new Rect(navX, navAfterDevices, navW, navRowH), NavSection.Racks, "Racks");
+        var racksEndY = navAfterDevices + navRowH;
+        var ipamToggleRect = new Rect(navX, racksEndY, navW, navRowH);
         var ipamChevron = _ipamSidebarExpanded ? "\u25BC" : "\u25B6";
         var ipamToggleLabel = $"IPAM  {ipamChevron}";
         var ipamNavActive = _navSection == NavSection.Ipam;
@@ -305,7 +361,7 @@ public static partial class IPAMOverlay
         {
             var ipamSubIndent = Sp(10f);
             var subNavW = navW - ipamSubIndent;
-            var ipamSubBaseY = navStartY + navRowH * 4;
+            var ipamSubBaseY = racksEndY + navRowH;
             DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 0, subNavW, navRowH), IpamSubSection.IpAddresses, "IP addresses", 9050);
             DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 1, subNavW, navRowH), IpamSubSection.Prefixes, "Prefixes", 9051);
             DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 2, subNavW, navRowH), IpamSubSection.Vlans, "VLANs", 9052);
@@ -313,7 +369,7 @@ public static partial class IPAMOverlay
         }
         else
         {
-            navAfterIpam = navStartY + navRowH * 4 + Sp(8f);
+            navAfterIpam = racksEndY + navRowH + Sp(8f);
         }
         DrawNavEntry(new Rect(navX, navAfterIpam, navW, navRowH), NavSection.Customers, "Customers");
         DrawNavEntry(new Rect(navX, navAfterIpam + navRowH, navW, navRowH), NavSection.Settings, "Settings");
@@ -436,23 +492,68 @@ public static partial class IPAMOverlay
         // BeginScrollView/EndScrollView can leave GUI.enabled false on Unity's internal stack.
         GUI.enabled = true;
 
-        if (!_iopsCalculatorOpen
-            && !_customersTabAddServerWizardOpen
-            && !_ipamChildPrefixWizardOpen
-            && !ShouldDrawServerEditPopup())
+        if (!_ipamResizeDrag)
         {
-            DrawWindowResizeHandle(w, h);
+            GUI.DragWindow(new Rect(0, 0, w, TitleBarH + ToolbarH));
         }
 
-        GUI.DragWindow(new Rect(0, 0, w, TitleBarH + ToolbarH));
+        if (ShouldDrawWindowResizeHandle())
+        {
+            var gripLocal = GetWindowResizeGripLocalRect(w, h);
+            var gripHover = _ipamResizeDrag;
+            if (!gripHover && TryHardwareGuiScreenPointer(out var gripPtr))
+            {
+                gripHover = GetWindowResizeGripScreenRect().Contains(gripPtr);
+            }
+
+            DrawWindowResizeGripVisual(gripLocal, gripHover);
+        }
 
         // Block pass-through to game UI only when no IMGUI control claimed the click (Il2Cpp Event has no isUsed).
         if (Event.current.type == EventType.MouseDown
             && Event.current.button == 0
-            && GUIUtility.hotControl == 0)
+            && GUIUtility.hotControl == 0
+            && !_ipamResizeDrag
+            && !IsMouseOverWindowResizeGripLocal(w, h))
         {
             Event.current.Use();
         }
+    }
+
+    private const float WindowResizeGripSize = 32f;
+
+    private static bool ShouldDrawWindowResizeHandle()
+    {
+        return !_windowMaximized
+               && !_iopsCalculatorOpen
+               && !_customersTabAddServerWizardOpen
+               && !_ipamChildPrefixWizardOpen
+               && !_ipamPrefixDeleteConfirmOpen
+               && !ShouldDrawServerEditPopup();
+    }
+
+    private static Rect GetWindowResizeGripLocalRect(float w, float h)
+    {
+        return new Rect(w - WindowResizeGripSize, h - WindowResizeGripSize, WindowResizeGripSize, WindowResizeGripSize);
+    }
+
+    private static Rect GetWindowResizeGripScreenRect()
+    {
+        return new Rect(
+            _windowRect.xMax - WindowResizeGripSize,
+            _windowRect.yMax - WindowResizeGripSize,
+            WindowResizeGripSize,
+            WindowResizeGripSize);
+    }
+
+    private static bool IsMouseOverWindowResizeGripLocal(float w, float h)
+    {
+        if (!ShouldDrawWindowResizeHandle() || Event.current == null)
+        {
+            return false;
+        }
+
+        return GetWindowResizeGripLocalRect(w, h).Contains(Event.current.mousePosition);
     }
     private static bool IsServerRowSelected(Server server)
     {
@@ -726,57 +827,80 @@ public static partial class IPAMOverlay
         }
     }
 
-    private static void DrawWindowResizeHandle(float w, float h)
+    /// <summary>
+    /// Screen-space corner grip paint only — pointer input is handled in <see cref="TickInputSystemWindowResize"/>
+    /// because <see cref="UiRaycastBlocker"/> blocks IMGUI mouse events while IPAM is open.
+    /// </summary>
+    private static void DrawWindowResizeHandleScreenSpace()
     {
-        if (_windowMaximized)
+        if (!ShouldDrawWindowResizeHandle() || Event.current == null || Event.current.type != EventType.Repaint)
         {
             return;
         }
 
-        const float sz = 18f;
-        var r = new Rect(w - sz, h - sz, sz, sz);
-        var id = GUIUtility.GetControlID(0x5E11C0A1, FocusType.Passive, r);
-        var e = Event.current;
-        switch (e.GetTypeForControl(id))
+        var r = GetWindowResizeGripScreenRect();
+        var hover = _ipamResizeDrag;
+        if (!hover && TryHardwareGuiScreenPointer(out var ptr))
         {
-            case EventType.MouseDown:
-                if (e.button == 0 && r.Contains(e.mousePosition))
-                {
-                    _ipamResizeDrag = true;
-                    _ipamResizeStartMouse = e.mousePosition;
-                    _ipamResizeStartSize = new Vector2(_windowRect.width, _windowRect.height);
-                    GUIUtility.hotControl = id;
-                    e.Use();
-                }
-
-                break;
-            case EventType.MouseDrag:
-                if (GUIUtility.hotControl == id && _ipamResizeDrag)
-                {
-                    var dx = e.mousePosition.x - _ipamResizeStartMouse.x;
-                    var dy = e.mousePosition.y - _ipamResizeStartMouse.y;
-                    _windowRect.width = Mathf.Max(WindowMinW, _ipamResizeStartSize.x + dx);
-                    _windowRect.height = Mathf.Max(WindowMinH, _ipamResizeStartSize.y + dy);
-                    e.Use();
-                }
-
-                break;
-            case EventType.MouseUp:
-                if (GUIUtility.hotControl == id)
-                {
-                    GUIUtility.hotControl = 0;
-                    _ipamResizeDrag = false;
-                    _windowRectRestored = _windowRect;
-                    var dphR = HasDetailSelection() ? GetDetailPanelHeight() : 0f;
-                    _ipamWindowBaseHeight = Mathf.Max(WindowMinH, _windowRect.height - dphR);
-                    e.Use();
-                }
-
-                break;
-            case EventType.Repaint:
-                GUI.Box(r, "⋰", _stMutedBtn);
-                break;
+            hover = r.Contains(ptr);
         }
+        else if (!hover)
+        {
+            hover = r.Contains(Event.current.mousePosition);
+        }
+
+        DrawWindowResizeGripVisual(r, hover);
+    }
+
+    private static void DrawWindowResizeGripVisual(Rect r, bool hover)
+    {
+        if (Event.current == null || Event.current.type != EventType.Repaint)
+        {
+            return;
+        }
+
+        var fill = hover ? _texNavActive ?? _texMutedBtnHover : _texMutedBtn ?? _texRowA;
+        if (fill != null)
+        {
+            GUI.DrawTexture(r, fill, ScaleMode.StretchToFill);
+        }
+
+        var oc = GUI.color;
+        GUI.color = hover ? new Color(0.45f, 1f, 0.94f, 1f) : new Color(0f, 0.88f, 0.78f, 1f);
+        const float border = 2f;
+        GUI.DrawTexture(new Rect(r.x, r.y, r.width, border), Texture2D.whiteTexture, ScaleMode.StretchToFill);
+        GUI.DrawTexture(new Rect(r.x, r.yMax - border, r.width, border), Texture2D.whiteTexture, ScaleMode.StretchToFill);
+        GUI.DrawTexture(new Rect(r.x, r.y, border, r.height), Texture2D.whiteTexture, ScaleMode.StretchToFill);
+        GUI.DrawTexture(new Rect(r.xMax - border, r.y, border, r.height), Texture2D.whiteTexture, ScaleMode.StretchToFill);
+        GUI.color = oc;
+    }
+
+    private static void ApplyWindowResizeDragDelta(Vector2 mousePosition)
+    {
+        var dx = mousePosition.x - _ipamResizeStartMouse.x;
+        var dy = mousePosition.y - _ipamResizeStartMouse.y;
+        _windowRect.width = Mathf.Max(WindowMinW, _ipamResizeStartSize.x + dx);
+        _windowRect.height = Mathf.Max(WindowMinH, _ipamResizeStartSize.y + dy);
+        var maxW = Screen.width - _windowRect.x - 8f;
+        var maxH = Screen.height - _windowRect.y - 8f;
+        if (maxW > WindowMinW)
+        {
+            _windowRect.width = Mathf.Min(_windowRect.width, maxW);
+        }
+
+        if (maxH > WindowMinH)
+        {
+            _windowRect.height = Mathf.Min(_windowRect.height, maxH);
+        }
+    }
+
+    private static void FinishWindowResizeDrag()
+    {
+        GUIUtility.hotControl = 0;
+        _ipamResizeDrag = false;
+        _windowRectRestored = _windowRect;
+        var dphR = HasDetailSelection() ? GetDetailPanelHeight() : 0f;
+        _ipamWindowBaseHeight = Mathf.Max(WindowMinH, _windowRect.height - dphR);
     }
 
     private static void CollectSelectedServersIntoScratch()
@@ -830,11 +954,271 @@ public static partial class IPAMOverlay
             if (target != NavSection.Devices)
             {
                 _ipamDevicesSwitchPageMenuOpen = false;
+                _ipamDevicesFirewallPageMenuOpen = false;
                 _ipamDevicesServerPageMenuOpen = false;
             }
 
             RecomputeContentHeight();
         }
+    }
+
+    private static void DrawDevicesSubNav(Rect r, DevicesSubSection sub, string text, int dedupeKey)
+    {
+        var active = _navSection == NavSection.Devices && _devicesSub == sub;
+        if (active)
+        {
+            GUI.DrawTexture(r, _texNavActive);
+            GUI.Label(new Rect(r.x + 6, r.y, r.width - 8, r.height), text, _stNavItemActive);
+            return;
+        }
+
+        if (ImguiButtonOnce(r, text, dedupeKey, _stNavBtn))
+        {
+            _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamIpAddrPageMenuOpen = false;
+            _ipamPrefixPageMenuOpen = false;
+            _ipamDevicesSwitchPageMenuOpen = false;
+            _ipamDevicesFirewallPageMenuOpen = false;
+            _ipamDevicesServerPageMenuOpen = false;
+            _customersTabAddServerWizardOpen = false;
+            _ipamFormFieldFocus = IpamFormFocusNone;
+            _navSection = NavSection.Devices;
+            _devicesSub = sub;
+            _scroll = Vector2.zero;
+            RecomputeContentHeight();
+        }
+    }
+
+    private static int GetDevicesTabSearchFocusSlot() => _devicesSub switch
+    {
+        DevicesSubSection.Switches => IpamFormFocusDevicesSwitchSearch,
+        DevicesSubSection.Routers => IpamFormFocusDevicesRouterSearch,
+        DevicesSubSection.Firewall => IpamFormFocusDevicesFirewallSearch,
+        DevicesSubSection.Servers => IpamFormFocusDevicesServerSearch,
+        _ => IpamFormFocusDevicesSwitchSearch,
+    };
+
+    private static string GetDevicesTabSearchBuf() => _devicesSub switch
+    {
+        DevicesSubSection.Switches => _devicesTabSwitchSearchBuf,
+        DevicesSubSection.Routers => _devicesTabRouterSearchBuf,
+        DevicesSubSection.Firewall => _devicesTabFirewallSearchBuf,
+        DevicesSubSection.Servers => _devicesTabServerSearchBuf,
+        _ => "",
+    };
+
+    private static bool InventorySearchQueryMatches(string query, string text)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrEmpty(text)
+               && text.IndexOf(query.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool DeviceSwitchSearchMatches(NetworkSwitch sw, string query, string roleLabel)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return true;
+        }
+
+        if (sw == null)
+        {
+            return InventorySearchQueryMatches(query, "(removed)");
+        }
+
+        if (InventorySearchQueryMatches(query, DeviceInventoryReflection.GetDisplayName(sw)))
+        {
+            return true;
+        }
+
+        if (InventorySearchQueryMatches(query, roleLabel))
+        {
+            return true;
+        }
+
+        if (InventorySearchQueryMatches(query, "Active"))
+        {
+            return true;
+        }
+
+        if (TryGetIpamEolString(sw, out var eol) && InventorySearchQueryMatches(query, eol))
+        {
+            return true;
+        }
+
+        try
+        {
+            return InventorySearchQueryMatches(query, sw.name);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool DeviceServerSearchMatches(Server server, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return true;
+        }
+
+        if (server == null)
+        {
+            return InventorySearchQueryMatches(query, "(removed)");
+        }
+
+        if (InventorySearchQueryMatches(query, DeviceInventoryReflection.GetDisplayName(server)))
+        {
+            return true;
+        }
+
+        if (InventorySearchQueryMatches(query, GetCustomerDisplayName(server)))
+        {
+            return true;
+        }
+
+        if (InventorySearchQueryMatches(query, DeviceInventoryReflection.GetServerFormFactorLabel(server)))
+        {
+            return true;
+        }
+
+        var ip = DHCPManager.GetServerIP(server);
+        if (InventorySearchQueryMatches(query, ip))
+        {
+            return true;
+        }
+
+        if (TryGetIpamEolString(server, out var eol) && InventorySearchQueryMatches(query, eol))
+        {
+            return true;
+        }
+
+        var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
+        return InventorySearchQueryMatches(query, hasIp ? "Assigned" : "No address");
+    }
+
+    private static void BuildFilteredDeviceSwitchRowIndices(
+        List<NetworkSwitch> source,
+        string query,
+        string roleLabel,
+        List<int> dest)
+    {
+        dest.Clear();
+        for (var i = 0; i < source.Count; i++)
+        {
+            if (DeviceSwitchSearchMatches(source[i], query, roleLabel))
+            {
+                dest.Add(i);
+            }
+        }
+    }
+
+    private static void BuildFilteredDeviceServerRowIndices(string query, List<int> dest)
+    {
+        dest.Clear();
+        EnsureSortedServers();
+        for (var i = 0; i < SortedServersBuffer.Count; i++)
+        {
+            if (DeviceServerSearchMatches(SortedServersBuffer[i], query))
+            {
+                dest.Add(i);
+            }
+        }
+    }
+
+    private static int GetDevicesSubFilteredRowCount()
+    {
+        PartitionSortedSwitchesForDeviceTab();
+        switch (_devicesSub)
+        {
+            case DevicesSubSection.Switches:
+                BuildFilteredDeviceSwitchRowIndices(
+                    DeviceTabSwitchesOnlyScratch,
+                    _devicesTabSwitchSearchBuf,
+                    "Switch",
+                    DeviceTabFilteredRowScratch);
+                return DeviceTabFilteredRowScratch.Count;
+            case DevicesSubSection.Routers:
+                BuildFilteredDeviceSwitchRowIndices(
+                    DeviceTabRoutersOnlyScratch,
+                    _devicesTabRouterSearchBuf,
+                    "Router",
+                    DeviceTabFilteredRowScratch);
+                return DeviceTabFilteredRowScratch.Count;
+            case DevicesSubSection.Firewall:
+                BuildFilteredDeviceSwitchRowIndices(
+                    DeviceTabFirewallsOnlyScratch,
+                    _devicesTabFirewallSearchBuf,
+                    "Firewall",
+                    DeviceTabFilteredRowScratch);
+                return DeviceTabFilteredRowScratch.Count;
+            case DevicesSubSection.Servers:
+                BuildFilteredDeviceServerRowIndices(_devicesTabServerSearchBuf, DeviceTabFilteredRowScratch);
+                return DeviceTabFilteredRowScratch.Count;
+            default:
+                return 0;
+        }
+    }
+
+    private static void ClearDevicesTabSearchBuf(DevicesSubSection sub)
+    {
+        switch (sub)
+        {
+            case DevicesSubSection.Switches:
+                _devicesTabSwitchSearchBuf = "";
+                _ipamDevicesSwitchPageIndex = 0;
+                break;
+            case DevicesSubSection.Routers:
+                _devicesTabRouterSearchBuf = "";
+                _ipamDevicesRouterPageIndex = 0;
+                break;
+            case DevicesSubSection.Firewall:
+                _devicesTabFirewallSearchBuf = "";
+                _ipamDevicesFirewallPageIndex = 0;
+                break;
+            case DevicesSubSection.Servers:
+                _devicesTabServerSearchBuf = "";
+                _ipamDevicesServerPageIndex = 0;
+                break;
+        }
+
+        if (_ipamFormFieldFocus == GetDevicesTabSearchFocusSlotForSub(sub))
+        {
+            _ipamFormFieldFocus = IpamFormFocusNone;
+        }
+
+        RecomputeContentHeight();
+    }
+
+    private static int GetDevicesTabSearchFocusSlotForSub(DevicesSubSection sub) => sub switch
+    {
+        DevicesSubSection.Switches => IpamFormFocusDevicesSwitchSearch,
+        DevicesSubSection.Routers => IpamFormFocusDevicesRouterSearch,
+        DevicesSubSection.Firewall => IpamFormFocusDevicesFirewallSearch,
+        DevicesSubSection.Servers => IpamFormFocusDevicesServerSearch,
+        _ => IpamFormFocusNone,
+    };
+
+    private static void DrawDevicesTabSearchBar(ref float y, float x0, float tableW, int focusSlot, DevicesSubSection sub)
+    {
+        GUI.Label(new Rect(x0, y, 72f, 22f), "Search", _stMuted);
+        var buf = GetIpamFormFocusBufferForSlot(focusSlot);
+        const float clearW = 56f;
+        var showClear = !string.IsNullOrWhiteSpace(buf);
+        var fieldW = Mathf.Max(120f, tableW - 76f - (showClear ? clearW + 8f : 0f));
+        DrawIpamFormTextField(new Rect(x0 + 76f, y, fieldW, 22f), focusSlot, 96, IpamTextFieldKind.Name);
+        if (showClear
+            && ImguiButtonOnce(new Rect(x0 + 76f + fieldW + 8f, y, clearW, 22f), "Clear", 9064 + (int)sub, _stMutedBtn))
+        {
+            ClearDevicesTabSearchBuf(sub);
+        }
+
+        y += DevicesTabSearchBarH;
     }
 
     private static void RecomputeContentHeight()
@@ -892,33 +1276,46 @@ public static partial class IPAMOverlay
 
                 return;
             }
+            case NavSection.Devices:
+            {
+                var totalRows = GetDevicesSubFilteredRowCount();
+                var ps = _ipamIpAddressPageSize;
+                int pageStart;
+                switch (_devicesSub)
+                {
+                    case DevicesSubSection.Switches:
+                        ClampInventoryPageIndex(ref _ipamDevicesSwitchPageIndex, totalRows);
+                        pageStart = _ipamDevicesSwitchPageIndex * ps;
+                        break;
+                    case DevicesSubSection.Routers:
+                        ClampInventoryPageIndex(ref _ipamDevicesRouterPageIndex, totalRows);
+                        pageStart = _ipamDevicesRouterPageIndex * ps;
+                        break;
+                    case DevicesSubSection.Firewall:
+                        ClampInventoryPageIndex(ref _ipamDevicesFirewallPageIndex, totalRows);
+                        pageStart = _ipamDevicesFirewallPageIndex * ps;
+                        break;
+                    case DevicesSubSection.Servers:
+                        ClampInventoryPageIndex(ref _ipamDevicesServerPageIndex, totalRows);
+                        pageStart = _ipamDevicesServerPageIndex * ps;
+                        break;
+                    default:
+                        pageStart = 0;
+                        break;
+                }
+
+                var bodyRows = totalRows == 0 ? 1 : Mathf.Min(ps, totalRows - pageStart);
+                const float devicesPaginationBarH = 28f;
+                var yd = CardPad + SectionTitleH + 2f + 7f + SectionTitleH + 4f + DevicesTabSearchBarH + TableHeaderH
+                    + bodyRows * TableRowH + devicesPaginationBarH + CardPad;
+                _cachedContentHeight = Mathf.Max(220f, yd);
+                return;
+            }
             default:
                 break;
         }
 
-        EnsureSortedSwitches();
-        EnsureSortedServers();
-        PartitionSortedSwitchesForDeviceTab();
-        var switchOnlyN = DeviceTabSwitchesOnlyScratch.Count;
-        var routerN = DeviceTabRoutersOnlyScratch.Count;
-        var svN = SortedServersBuffer.Count;
-        ClampInventoryPageIndex(ref _ipamDevicesSwitchPageIndex, switchOnlyN);
-        ClampInventoryPageIndex(ref _ipamDevicesRouterPageIndex, routerN);
-        ClampInventoryPageIndex(ref _ipamDevicesServerPageIndex, svN);
-        var ps = _ipamIpAddressPageSize;
-        var swStart = _ipamDevicesSwitchPageIndex * ps;
-        var rtStart = _ipamDevicesRouterPageIndex * ps;
-        var svStart = _ipamDevicesServerPageIndex * ps;
-        var swBody = switchOnlyN == 0 ? 1 : Mathf.Min(ps, switchOnlyN - swStart);
-        var rtBody = routerN == 0 ? 1 : Mathf.Min(ps, routerN - rtStart);
-        var svBody = svN == 0 ? 1 : Mathf.Min(ps, svN - svStart);
-        const float devicesPaginationBarH = 28f;
-        var yd = CardPad;
-        yd += SectionTitleH + 2f + 7f;
-        yd += SectionTitleH + 4f + TableHeaderH + swBody * TableRowH + devicesPaginationBarH;
-        yd += 18f + SectionTitleH + 4f + TableHeaderH + rtBody * TableRowH + devicesPaginationBarH;
-        yd += 18f + SectionTitleH + 4f + TableHeaderH + svBody * TableRowH + devicesPaginationBarH;
-        _cachedContentHeight = Mathf.Max(260f, yd + CardPad);
+        _cachedContentHeight = 260f;
     }
 
     private static void DrawSettingsView(float innerW)
@@ -1002,6 +1399,7 @@ public static partial class IPAMOverlay
     {
         DeviceTabSwitchesOnlyScratch.Clear();
         DeviceTabRoutersOnlyScratch.Clear();
+        DeviceTabFirewallsOnlyScratch.Clear();
         EnsureSortedSwitches();
         foreach (var sw in SortedSwitchesBuffer)
         {
@@ -1010,7 +1408,11 @@ public static partial class IPAMOverlay
                 continue;
             }
 
-            if (DeviceInventoryReflection.NetworkSwitchBehavesAsRouter(sw))
+            if (DeviceInventoryReflection.NetworkSwitchBehavesAsFirewall(sw))
+            {
+                DeviceTabFirewallsOnlyScratch.Add(sw);
+            }
+            else if (DeviceInventoryReflection.NetworkSwitchBehavesAsRouter(sw))
             {
                 DeviceTabRoutersOnlyScratch.Add(sw);
             }
@@ -1020,6 +1422,15 @@ public static partial class IPAMOverlay
             }
         }
     }
+
+    private static string DevicesSubBreadcrumbLabel() => _devicesSub switch
+    {
+        DevicesSubSection.Switches => "Switches",
+        DevicesSubSection.Routers => "Routers",
+        DevicesSubSection.Firewall => "Firewall",
+        DevicesSubSection.Servers => "Servers",
+        _ => "Devices",
+    };
 
     /// <summary>
     /// IMGUI assigns control IDs in call order. Always emit the same control sequence (full-width table rows).
@@ -1038,32 +1449,145 @@ public static partial class IPAMOverlay
             _tableColumnsAutoFitPending = false;
         }
 
-        GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), "Organization  /  Devices  /  All", _stBreadcrumb);
+        GUI.Label(
+            new Rect(x0, y - 2, cardW, SectionTitleH),
+            $"Organization  /  Devices  /  {DevicesSubBreadcrumbLabel()}",
+            _stBreadcrumb);
         y += SectionTitleH + 2f;
 
         GUI.DrawTexture(new Rect(x0, y, cardW, 1f), _texTableHeader);
         y += 6f;
 
         PartitionSortedSwitchesForDeviceTab();
+        var ps = _ipamIpAddressPageSize;
 
-        // --- Switches card ---
-        GUI.Label(new Rect(x0, y, 200, SectionTitleH), "Network switches", _stSectionTitle);
+        switch (_devicesSub)
+        {
+            case DevicesSubSection.Switches:
+                DrawDevicesNetworkSwitchTable(
+                    ref y,
+                    x0,
+                    cardW,
+                    tableW,
+                    ps,
+                    DevicesSubSection.Switches,
+                    "Network switches",
+                    DeviceTabSwitchesOnlyScratch,
+                    _devicesTabSwitchSearchBuf,
+                    "Switch",
+                    ref _ipamDevicesSwitchPageIndex,
+                    ref _ipamDevicesSwitchPageMenuOpen,
+                    600,
+                    9201,
+                    9202,
+                    9203,
+                    9204,
+                    9205,
+                    9206,
+                    1,
+                    "No network switches");
+                break;
+            case DevicesSubSection.Routers:
+                DrawDevicesNetworkSwitchTable(
+                    ref y,
+                    x0,
+                    cardW,
+                    tableW,
+                    ps,
+                    DevicesSubSection.Routers,
+                    "Network routers",
+                    DeviceTabRoutersOnlyScratch,
+                    _devicesTabRouterSearchBuf,
+                    "Router",
+                    ref _ipamDevicesRouterPageIndex,
+                    ref _ipamDevicesRouterPageMenuOpen,
+                    636,
+                    0,
+                    9270,
+                    9271,
+                    0,
+                    0,
+                    0,
+                    8,
+                    "No network routers",
+                    showGear: false,
+                    pageSizeHint: "Page size matches Network switches (gear on Switches tab).");
+                break;
+            case DevicesSubSection.Firewall:
+                DrawDevicesNetworkSwitchTable(
+                    ref y,
+                    x0,
+                    cardW,
+                    tableW,
+                    ps,
+                    DevicesSubSection.Firewall,
+                    "Firewalls",
+                    DeviceTabFirewallsOnlyScratch,
+                    _devicesTabFirewallSearchBuf,
+                    "Firewall",
+                    ref _ipamDevicesFirewallPageIndex,
+                    ref _ipamDevicesFirewallPageMenuOpen,
+                    650,
+                    9281,
+                    9282,
+                    9283,
+                    9284,
+                    9285,
+                    9286,
+                    9,
+                    "No firewalls");
+                break;
+            case DevicesSubSection.Servers:
+                DrawDevicesServerTable(ref y, x0, cardW, tableW, ps);
+                break;
+        }
+    }
+
+    private static void DrawDevicesNetworkSwitchTable(
+        ref float y,
+        float x0,
+        float cardW,
+        float tableW,
+        int ps,
+        DevicesSubSection sub,
+        string sectionTitle,
+        List<NetworkSwitch> rows,
+        string searchQuery,
+        string roleLabel,
+        ref int pageIndex,
+        ref bool pageMenuOpen,
+        int headerDedupeBase,
+        int gearBtnId,
+        int prevBtnId,
+        int nextBtnId,
+        int pageMenuId25,
+        int pageMenuId50,
+        int pageMenuId100,
+        int rowHintSection,
+        string emptyLabel,
+        bool showGear = true,
+        string pageSizeHint = null)
+    {
+        GUI.Label(new Rect(x0, y, 260, SectionTitleH), sectionTitle, _stSectionTitle);
         y += SectionTitleH + 4f;
 
-        var headerRowSw = y;
-        var gearRectSw = new Rect(x0 + tableW, headerRowSw, IpamIpAddressGearColW, TableHeaderH);
-        var menuDropRectSw = new Rect(x0 + cardW - 132f, headerRowSw + TableHeaderH + 2f, 128f, 68f);
-        var eCloseSw = Event.current;
-        if (eCloseSw != null && eCloseSw.type == EventType.MouseDown && eCloseSw.button == 0 && _ipamDevicesSwitchPageMenuOpen)
+        DrawDevicesTabSearchBar(ref y, x0, tableW, GetDevicesTabSearchFocusSlotForSub(sub), sub);
+        BuildFilteredDeviceSwitchRowIndices(rows, searchQuery, roleLabel, DeviceTabFilteredRowScratch);
+
+        var headerRow = y;
+        var gearRect = new Rect(x0 + tableW, headerRow, IpamIpAddressGearColW, TableHeaderH);
+        var menuDropRect = new Rect(x0 + cardW - 132f, headerRow + TableHeaderH + 2f, 128f, 68f);
+        var eClose = Event.current;
+        if (eClose != null && eClose.type == EventType.MouseDown && eClose.button == 0 && pageMenuOpen)
         {
-            if (!menuDropRectSw.Contains(eCloseSw.mousePosition) && !gearRectSw.Contains(eCloseSw.mousePosition))
+            if (!menuDropRect.Contains(eClose.mousePosition) && (!showGear || !gearRect.Contains(eClose.mousePosition)))
             {
-                _ipamDevicesSwitchPageMenuOpen = false;
+                pageMenuOpen = false;
             }
         }
 
         DrawSortableTableHeader(
-            new Rect(x0, headerRowSw, tableW, TableHeaderH),
+            new Rect(x0, headerRow, tableW, TableHeaderH),
             ref _switchSortColumn,
             ref _switchSortAscending,
             "Name",
@@ -1072,27 +1596,29 @@ public static partial class IPAMOverlay
             "Mgmt IPv4",
             "EOL",
             "Status",
-            600,
+            headerDedupeBase,
             false);
-        if (ImguiButtonOnce(gearRectSw, "\u2699", 9201, _stMutedBtn))
+        if (showGear && gearBtnId != 0 && ImguiButtonOnce(gearRect, "\u2699", gearBtnId, _stMutedBtn))
         {
-            _ipamDevicesSwitchPageMenuOpen = !_ipamDevicesSwitchPageMenuOpen;
+            pageMenuOpen = !pageMenuOpen;
+            _ipamDevicesSwitchPageMenuOpen = false;
+            _ipamDevicesFirewallPageMenuOpen = false;
             _ipamDevicesServerPageMenuOpen = false;
         }
 
         y += TableHeaderH;
 
-        var totalSw = DeviceTabSwitchesOnlyScratch.Count;
-        ClampInventoryPageIndex(ref _ipamDevicesSwitchPageIndex, totalSw);
-        var ps = _ipamIpAddressPageSize;
-        var swPageStart = _ipamDevicesSwitchPageIndex * ps;
-        var swPageEnd = totalSw == 0 ? 0 : Mathf.Min(totalSw, swPageStart + ps);
+        var total = DeviceTabFilteredRowScratch.Count;
+        ClampInventoryPageIndex(ref pageIndex, total);
+        var pageStart = pageIndex * ps;
+        var pageEnd = total == 0 ? 0 : Mathf.Min(total, pageStart + ps);
 
-        for (var pi = swPageStart; pi < swPageEnd; pi++)
+        for (var pi = pageStart; pi < pageEnd; pi++)
         {
-            var sw = DeviceTabSwitchesOnlyScratch[pi];
+            var rowIdx = DeviceTabFilteredRowScratch[pi];
+            var sw = rows[rowIdx];
             var r = new Rect(x0, y, tableW, TableRowH);
-            var menuBlocksRowPointer = _ipamDevicesSwitchPageMenuOpen && menuDropRectSw.Overlaps(r);
+            var menuBlocksRowPointer = pageMenuOpen && menuDropRect.Overlaps(r);
             string name;
             string role;
             string eolCol;
@@ -1102,7 +1628,7 @@ public static partial class IPAMOverlay
             {
                 var nameRaw = sw != null ? DeviceInventoryReflection.GetDisplayName(sw) : "(removed)";
                 name = CellTextForCol(0, string.IsNullOrEmpty(nameRaw) ? "—" : nameRaw, tableW);
-                role = CellTextForCol(2, "Switch", tableW);
+                role = CellTextForCol(2, roleLabel, tableW);
                 eolCol = TableEolCellDisplay(sw, tableW);
                 statusCol = CellTextForCol(5, "Active", tableW);
             }
@@ -1114,9 +1640,10 @@ public static partial class IPAMOverlay
                 statusCol = "";
             }
 
+            var sortedIdx = sw != null ? FindSortedSwitchIndex(sw.GetInstanceID()) : rowIdx;
             if (TableDataRowClick(
                     r,
-                    StableRowHint(1, sw, pi),
+                    StableRowHint(rowHintSection, sw, rowIdx),
                     pi % 2 == 1,
                     IsSwitchRowSelected(sw),
                     name,
@@ -1128,22 +1655,23 @@ public static partial class IPAMOverlay
                     tableW,
                     menuBlocksRowPointer))
             {
-                HandleSwitchRowClick(sw, pi);
+                HandleSwitchRowClick(sw, sortedIdx >= 0 ? sortedIdx : rowIdx);
             }
 
             y += TableRowH;
         }
 
-        if (totalSw == 0)
+        if (total == 0)
         {
             var stubR = new Rect(x0, y, tableW, TableRowH);
-            var stubMenuBlock = _ipamDevicesSwitchPageMenuOpen && menuDropRectSw.Overlaps(stubR);
+            var stubMenuBlock = pageMenuOpen && menuDropRect.Overlaps(stubR);
+            var stubText = !string.IsNullOrWhiteSpace(searchQuery) ? "No matches" : "—";
             TableDataRowClick(
                 stubR,
-                StableRowHint(1, null, 0),
+                StableRowHint(rowHintSection, null, 0),
                 false,
                 false,
-                "—",
+                stubText,
                 "—",
                 "—",
                 "—",
@@ -1154,159 +1682,60 @@ public static partial class IPAMOverlay
             y += TableRowH;
         }
 
-        var pageCountSw = totalSw == 0 ? 1 : (totalSw + ps - 1) / ps;
-        var swDispStart = totalSw == 0 ? 0 : swPageStart + 1;
-        var swDispEnd = totalSw == 0 ? 0 : swPageEnd;
-        var labelSw = totalSw == 0
-            ? "No network switches"
-            : $"Page {_ipamDevicesSwitchPageIndex + 1} / {pageCountSw}   ·   {swDispStart}-{swDispEnd} of {totalSw}";
-        GUI.Label(new Rect(x0, y + 2f, tableW - 200f, 22f), labelSw, _stHint);
-        var navYSw = y + 1f;
-        if (ImguiButtonOnce(new Rect(x0 + tableW - 168f, navYSw, 72f, 22f), "Previous", 9202, _stMutedBtn))
+        var pageCount = total == 0 ? 1 : (total + ps - 1) / ps;
+        var dispStart = total == 0 ? 0 : pageStart + 1;
+        var dispEnd = total == 0 ? 0 : pageEnd;
+        var noRowsLabel = !string.IsNullOrWhiteSpace(searchQuery) && total == 0
+            ? "No matches — adjust search"
+            : emptyLabel;
+        var label = total == 0
+            ? noRowsLabel
+            : $"Page {pageIndex + 1} / {pageCount}   ·   {dispStart}-{dispEnd} of {total}";
+        GUI.Label(new Rect(x0, y + 2f, tableW - 200f, 22f), label, _stHint);
+        var navY = y + 1f;
+        if (prevBtnId != 0 && ImguiButtonOnce(new Rect(x0 + tableW - 168f, navY, 72f, 22f), "Previous", prevBtnId, _stMutedBtn))
         {
-            if (_ipamDevicesSwitchPageIndex > 0)
+            if (pageIndex > 0)
             {
-                _ipamDevicesSwitchPageIndex--;
+                pageIndex--;
                 RecomputeContentHeight();
             }
         }
 
-        if (ImguiButtonOnce(new Rect(x0 + tableW - 90f, navYSw, 82f, 22f), "Next", 9203, _stMutedBtn))
+        if (nextBtnId != 0 && ImguiButtonOnce(new Rect(x0 + tableW - 90f, navY, 82f, 22f), "Next", nextBtnId, _stMutedBtn))
         {
-            if (_ipamDevicesSwitchPageIndex < pageCountSw - 1)
+            if (pageIndex < pageCount - 1)
             {
-                _ipamDevicesSwitchPageIndex++;
-                RecomputeContentHeight();
-            }
-        }
-
-        y += 28f;
-
-        DrawInventoryPageSizePopup(menuDropRectSw, ref _ipamDevicesSwitchPageMenuOpen, 9204, 9205, 9206);
-
-        y += 18f;
-
-        // --- Routers card (L3; scene type may still be NetworkSwitch) ---
-        GUI.Label(new Rect(x0, y, 220, SectionTitleH), "Network routers", _stSectionTitle);
-        y += SectionTitleH + 4f;
-
-        var headerRowRt = y;
-        DrawSortableTableHeader(
-            new Rect(x0, headerRowRt, tableW, TableHeaderH),
-            ref _switchSortColumn,
-            ref _switchSortAscending,
-            "Name",
-            "Customer",
-            "Role",
-            "Mgmt IPv4",
-            "EOL",
-            "Status",
-            636,
-            false);
-        y += TableHeaderH;
-
-        var totalRt = DeviceTabRoutersOnlyScratch.Count;
-        ClampInventoryPageIndex(ref _ipamDevicesRouterPageIndex, totalRt);
-        var rtPageStart = _ipamDevicesRouterPageIndex * ps;
-        var rtPageEnd = totalRt == 0 ? 0 : Mathf.Min(totalRt, rtPageStart + ps);
-
-        for (var pi = rtPageStart; pi < rtPageEnd; pi++)
-        {
-            var sw = DeviceTabRoutersOnlyScratch[pi];
-            var r = new Rect(x0, y, tableW, TableRowH);
-            string name;
-            string role;
-            string eolCol;
-            string statusCol;
-            if (ShouldComputeTruncatedInventoryCellText
-                && InventoryScrollRowWantsRepaintTextOrSelected(r.yMin, r.yMax, IsSwitchRowSelected(sw)))
-            {
-                var nameRaw = sw != null ? DeviceInventoryReflection.GetDisplayName(sw) : "(removed)";
-                name = CellTextForCol(0, string.IsNullOrEmpty(nameRaw) ? "—" : nameRaw, tableW);
-                role = CellTextForCol(2, "Router", tableW);
-                eolCol = TableEolCellDisplay(sw, tableW);
-                statusCol = CellTextForCol(5, "Active", tableW);
-            }
-            else
-            {
-                name = "";
-                role = "";
-                eolCol = "";
-                statusCol = "";
-            }
-
-            if (TableDataRowClick(
-                    r,
-                    StableRowHint(8, sw, pi),
-                    pi % 2 == 1,
-                    IsSwitchRowSelected(sw),
-                    name,
-                    "—",
-                    role,
-                    "—",
-                    eolCol,
-                    statusCol,
-                    tableW,
-                    false))
-            {
-                HandleSwitchRowClick(sw, pi);
-            }
-
-            y += TableRowH;
-        }
-
-        if (totalRt == 0)
-        {
-            var stubRt = new Rect(x0, y, tableW, TableRowH);
-            TableDataRowClick(
-                stubRt,
-                StableRowHint(8, null, 0),
-                false,
-                false,
-                "—",
-                "—",
-                "—",
-                "—",
-                "—",
-                "—",
-                tableW,
-                false);
-            y += TableRowH;
-        }
-
-        var pageCountRt = totalRt == 0 ? 1 : (totalRt + ps - 1) / ps;
-        var rtDispStart = totalRt == 0 ? 0 : rtPageStart + 1;
-        var rtDispEnd = totalRt == 0 ? 0 : rtPageEnd;
-        var labelRt = totalRt == 0
-            ? "No network routers"
-            : $"Page {_ipamDevicesRouterPageIndex + 1} / {pageCountRt}   ·   {rtDispStart}-{rtDispEnd} of {totalRt}";
-        GUI.Label(new Rect(x0, y + 2f, tableW - 200f, 22f), labelRt, _stHint);
-        var navYRt = y + 1f;
-        if (ImguiButtonOnce(new Rect(x0 + tableW - 168f, navYRt, 72f, 22f), "Previous", 9270, _stMutedBtn))
-        {
-            if (_ipamDevicesRouterPageIndex > 0)
-            {
-                _ipamDevicesRouterPageIndex--;
-                RecomputeContentHeight();
-            }
-        }
-
-        if (ImguiButtonOnce(new Rect(x0 + tableW - 90f, navYRt, 82f, 22f), "Next", 9271, _stMutedBtn))
-        {
-            if (_ipamDevicesRouterPageIndex < pageCountRt - 1)
-            {
-                _ipamDevicesRouterPageIndex++;
+                pageIndex++;
                 RecomputeContentHeight();
             }
         }
 
         y += 28f;
-        GUI.Label(new Rect(x0, y, tableW, 18f), "Page size matches Network switches (gear above).", _stMuted);
-        y += 22f;
 
-        // --- Servers card ---
+        if (showGear && pageMenuId25 != 0)
+        {
+            DrawInventoryPageSizePopup(menuDropRect, ref pageMenuOpen, pageMenuId25, pageMenuId50, pageMenuId100);
+        }
+        else if (!string.IsNullOrEmpty(pageSizeHint))
+        {
+            GUI.Label(new Rect(x0, y, tableW, 18f), pageSizeHint, _stMuted);
+            y += 22f;
+        }
+    }
+
+    private static void DrawDevicesServerTable(ref float y, float x0, float cardW, float tableW, int ps)
+    {
         GUI.Label(new Rect(x0, y, 200, SectionTitleH), "Servers", _stSectionTitle);
         y += SectionTitleH + 4f;
+
+        DrawDevicesTabSearchBar(
+            ref y,
+            x0,
+            tableW,
+            IpamFormFocusDevicesServerSearch,
+            DevicesSubSection.Servers);
+        BuildFilteredDeviceServerRowIndices(_devicesTabServerSearchBuf, DeviceTabFilteredRowScratch);
 
         var headerRowSv = y;
         var gearRectSv = new Rect(x0 + tableW, headerRowSv, IpamIpAddressGearColW, TableHeaderH);
@@ -1336,19 +1765,21 @@ public static partial class IPAMOverlay
         {
             _ipamDevicesServerPageMenuOpen = !_ipamDevicesServerPageMenuOpen;
             _ipamDevicesSwitchPageMenuOpen = false;
+            _ipamDevicesFirewallPageMenuOpen = false;
         }
 
         y += TableHeaderH;
 
         EnsureSortedServers();
-        var totalSv = SortedServersBuffer.Count;
+        var totalSv = DeviceTabFilteredRowScratch.Count;
         ClampInventoryPageIndex(ref _ipamDevicesServerPageIndex, totalSv);
         var svPageStart = _ipamDevicesServerPageIndex * ps;
         var svPageEnd = totalSv == 0 ? 0 : Mathf.Min(totalSv, svPageStart + ps);
 
         for (var pi = svPageStart; pi < svPageEnd; pi++)
         {
-            var server = SortedServersBuffer[pi];
+            var rowIdx = DeviceTabFilteredRowScratch[pi];
+            var server = SortedServersBuffer[rowIdx];
             var r = new Rect(x0, y, tableW, TableRowH);
             var menuBlocksRowPointerSv = _ipamDevicesServerPageMenuOpen && menuDropRectSv.Overlaps(r);
 
@@ -1356,7 +1787,7 @@ public static partial class IPAMOverlay
             {
                 TableDataRowClick(
                     r,
-                    StableRowHint(2, null, pi),
+                    StableRowHint(2, null, rowIdx),
                     pi % 2 == 1,
                     false,
                     "(removed)",
@@ -1403,7 +1834,7 @@ public static partial class IPAMOverlay
 
             if (TableDataRowClick(
                     r,
-                    StableRowHint(2, server, pi),
+                    StableRowHint(2, server, rowIdx),
                     pi % 2 == 1,
                     IsServerRowSelected(server),
                     dispName,
@@ -1415,7 +1846,7 @@ public static partial class IPAMOverlay
                     tableW,
                     menuBlocksRowPointerSv))
             {
-                HandleServerRowClick(server, pi, ip, SortedServersBuffer);
+                HandleServerRowClick(server, rowIdx, ip, SortedServersBuffer);
             }
 
             y += TableRowH;
@@ -1425,12 +1856,13 @@ public static partial class IPAMOverlay
         {
             var stubR = new Rect(x0, y, tableW, TableRowH);
             var stubMenuBlockSv = _ipamDevicesServerPageMenuOpen && menuDropRectSv.Overlaps(stubR);
+            var stubText = !string.IsNullOrWhiteSpace(_devicesTabServerSearchBuf) ? "No matches" : "—";
             TableDataRowClick(
                 stubR,
                 StableRowHint(2, null, 0),
                 false,
                 false,
-                "—",
+                stubText,
                 "—",
                 "—",
                 "—",
@@ -1444,8 +1876,11 @@ public static partial class IPAMOverlay
         var pageCountSv = totalSv == 0 ? 1 : (totalSv + ps - 1) / ps;
         var svDispStart = totalSv == 0 ? 0 : svPageStart + 1;
         var svDispEnd = totalSv == 0 ? 0 : svPageEnd;
+        var noSvLabel = !string.IsNullOrWhiteSpace(_devicesTabServerSearchBuf) && totalSv == 0
+            ? "No matches — adjust search"
+            : "No servers";
         var labelSv = totalSv == 0
-            ? "No servers"
+            ? noSvLabel
             : $"Page {_ipamDevicesServerPageIndex + 1} / {pageCountSv}   ·   {svDispStart}-{svDispEnd} of {totalSv}";
         GUI.Label(new Rect(x0, y + 2f, tableW - 200f, 22f), labelSv, _stHint);
         var navYSv = y + 1f;
@@ -1803,6 +2238,7 @@ public static partial class IPAMOverlay
             _ipamIpAddressPageIndex = 0;
             _ipamDevicesSwitchPageIndex = 0;
             _ipamDevicesRouterPageIndex = 0;
+            _ipamDevicesFirewallPageIndex = 0;
             _ipamDevicesServerPageIndex = 0;
             menuOpen = false;
             RecomputeContentHeight();
@@ -1815,6 +2251,7 @@ public static partial class IPAMOverlay
             _ipamIpAddressPageIndex = 0;
             _ipamDevicesSwitchPageIndex = 0;
             _ipamDevicesRouterPageIndex = 0;
+            _ipamDevicesFirewallPageIndex = 0;
             _ipamDevicesServerPageIndex = 0;
             menuOpen = false;
             RecomputeContentHeight();
@@ -1827,6 +2264,7 @@ public static partial class IPAMOverlay
             _ipamIpAddressPageIndex = 0;
             _ipamDevicesSwitchPageIndex = 0;
             _ipamDevicesRouterPageIndex = 0;
+            _ipamDevicesFirewallPageIndex = 0;
             _ipamDevicesServerPageIndex = 0;
             menuOpen = false;
             RecomputeContentHeight();
@@ -2547,7 +2985,8 @@ public static partial class IPAMOverlay
             py += 28f;
 
             var plist = BuildInlinePrefixPickOptions(_inlineIpamPrefixSearchBuf);
-            var listH = Mathf.Clamp(_serverEditPopupRect.height - py - 160f, 80f, 220f);
+            var reserveBottom = IsInlineAvailableBlockSelected() ? 248f : 160f;
+            var listH = Mathf.Clamp(_serverEditPopupRect.height - py - reserveBottom, 80f, 220f);
             const float rowH = 26f;
             var innerW = iw - 16f;
             var inner = new Rect(0f, 0f, innerW, Mathf.Max(listH, plist.Count * rowH));
@@ -2558,7 +2997,13 @@ public static partial class IPAMOverlay
             for (var i = 0; i < plist.Count; i++)
             {
                 var opt = plist[i];
-                var marked = string.Equals(opt.PickKey, _inlineIpamPrefixPickKey, StringComparison.Ordinal);
+                var marked = string.Equals(opt.PickKey, _inlineIpamPrefixPickKey, StringComparison.Ordinal)
+                             || (IsInlineAvailableBlockSelected()
+                                 && opt.PickKey.StartsWith("free:", StringComparison.Ordinal)
+                                 && string.Equals(
+                                     opt.PickKey.Substring("free:".Length).Trim(),
+                                     (_inlineIpamFreeBlockAnchorCidr ?? "").Trim(),
+                                     StringComparison.OrdinalIgnoreCase));
                 var rowStyle = opt.PickKey.StartsWith("free:", StringComparison.Ordinal) && !marked
                     ? _stHint
                     : marked ? _stPrimaryBtn : _stMutedBtn;
@@ -2568,12 +3013,57 @@ public static partial class IPAMOverlay
                         930000 + i,
                         rowStyle))
                 {
-                    _inlineIpamPrefixPickKey = opt.PickKey ?? "";
+                    SetInlineIpamPrefixPick(opt.PickKey ?? "");
                 }
             }
 
             SafeEndScrollView();
             py += listH + 8f;
+
+            if (IsInlineAvailableBlockSelected())
+            {
+                GUI.Label(new Rect(px, py, iw, 20f), "Resize Available block", _stSectionTitle);
+                py += 24f;
+
+                GUI.Label(new Rect(px, py + 2f, 44f, 22f), "CIDR", _stFormLabel);
+                DrawIpamFormTextField(
+                    new Rect(px + 48f, py, Mathf.Min(iw - 52f, 360f), 22f),
+                    IpamFormFocusInlineAvailableCidr,
+                    64,
+                    IpamTextFieldKind.Cidr);
+                py += 28f;
+
+                GUI.Label(new Rect(px, py + 2f, 96f, 22f), "Prefix length", _stFormLabel);
+                var stepX = px + 100f;
+                const int plHintBase = 0x49A19000;
+                if (OctetStepButton(new Rect(stepX, py, 26f, 26f), "−", plHintBase))
+                {
+                    TryAdjustInlineAvailablePrefixLen(-1);
+                }
+
+                stepX += 30f;
+                var usableN = RouteMath.CountIpamUsableHosts((_inlineIpamAvailableCidrBuf ?? "").Trim());
+                var plText = "/—";
+                if (RouteMath.TryParseIpv4Cidr((_inlineIpamAvailableCidrBuf ?? "").Trim(), out _, out var plNow))
+                {
+                    plText = "/" + plNow.ToString(CultureInfo.InvariantCulture) + "   " + usableN.ToString(CultureInfo.InvariantCulture);
+                }
+
+                GUI.Label(new Rect(stepX, py + 2f, 96f, 22f), plText, _stTableCell);
+                stepX += 100f;
+                if (OctetStepButton(new Rect(stepX, py, 26f, 26f), "+", plHintBase + 1))
+                {
+                    TryAdjustInlineAvailablePrefixLen(1);
+                }
+
+                py += 30f;
+                GUI.Label(
+                    new Rect(px, py, iw, 28f),
+                    $"Inside {_inlineIpamFreeBlockAnchorCidr}. Use − / + or edit CIDR; cannot exceed the selected Available row.",
+                    _stHint);
+                py += 32f;
+            }
+
             GUI.Label(
                 new Rect(px, py, iw, 36f),
                 "Created prefixes and Available free blocks (shows used/free). First free usable IPv4 in the chosen CIDR is assigned to each server.",

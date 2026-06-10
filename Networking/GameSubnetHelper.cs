@@ -2055,7 +2055,7 @@ public static class GameSubnetHelper
         return true;
     }
 
-    public static Il2CppStringArray GetUsableIpsForSubnet(string cidr, bool logDetail = false)
+    public static Il2CppStringArray GetUsableIpsForSubnet(string cidr, bool logDetail = false, bool forIpamManagedPrefix = false)
     {
         if (string.IsNullOrWhiteSpace(cidr))
         {
@@ -2067,29 +2067,39 @@ public static class GameSubnetHelper
             return null;
         }
 
-        if (logDetail)
-        {
-            ModDebugLog.WriteDhcpStep($"GetUsableIpsForSubnet: probing game API for cidr={cidr}");
-        }
-
-        var fromGame = TryInvokeGameGetUsableIpsForSubnet(cidr);
-        if (fromGame != null && fromGame.Length > 0)
+        if (!forIpamManagedPrefix)
         {
             if (logDetail)
             {
-                ModDebugLog.WriteDhcpStep($"GetUsableIpsForSubnet: source=GameAPI cidr={cidr} length={fromGame.Length}");
+                ModDebugLog.WriteDhcpStep($"GetUsableIpsForSubnet: probing game API for cidr={cidr}");
             }
 
-            return fromGame;
+            var fromGame = TryInvokeGameGetUsableIpsForSubnet(cidr);
+            if (fromGame != null && fromGame.Length > 0)
+            {
+                if (logDetail)
+                {
+                    ModDebugLog.WriteDhcpStep($"GetUsableIpsForSubnet: source=GameAPI cidr={cidr} length={fromGame.Length}");
+                }
+
+                return fromGame;
+            }
+        }
+        else if (logDetail)
+        {
+            ModDebugLog.WriteDhcpStep($"GetUsableIpsForSubnet: IPAM prefix — using RouteMath (not game API) for cidr={cidr}");
         }
 
-        if (logDetail)
+        if (logDetail && !forIpamManagedPrefix)
         {
             ModDebugLog.WriteDhcpStep($"GetUsableIpsForSubnet: game API empty; generating via RouteMath for cidr={cidr}");
         }
 
+        var skipGateway = forIpamManagedPrefix
+            ? RouteMath.ShouldReserveTypicalGateway(cidr)
+            : true;
         var generated = new List<string>();
-        foreach (var ip in RouteMath.EnumerateDhcpCandidates(cidr, skipTypicalGatewayLastOctet: true))
+        foreach (var ip in RouteMath.EnumerateDhcpCandidates(cidr, skipTypicalGatewayLastOctet: skipGateway))
         {
             generated.Add(ip);
         }

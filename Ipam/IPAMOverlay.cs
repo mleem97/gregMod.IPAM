@@ -91,6 +91,7 @@ public static partial class IPAMOverlay
                 _eolDisplayByInstanceId.Clear();
                 _ipamResizeDrag = false;
                 _columnGripWeightsStart = null;
+                _ipamPrefixColumnGripWeightsStart = null;
                 _activeOctetSlot = -1;
                 _ipamFormFieldFocus = IpamFormFocusNone;
                 _ipamPrefixesDrillParentId = null;
@@ -311,10 +312,22 @@ public static partial class IPAMOverlay
         IpAddresses = 0,
         Prefixes = 1,
         Vlans = 2,
+   }
+
+    private enum DevicesSubSection
+    {
+        Switches = 0,
+        Routers = 1,
+        Firewall = 2,
+        Servers = 3,
     }
 
     private static NavSection _navSection = NavSection.Devices;
     private static IpamSubSection _ipamSub = IpamSubSection.IpAddresses;
+    private static DevicesSubSection _devicesSub = DevicesSubSection.Switches;
+
+    /// <summary>Sidebar: show Switches / Routers / Firewall / Servers under Devices.</summary>
+    private static bool _devicesSidebarExpanded = true;
 
     /// <summary>Sidebar: show IP addresses / Prefixes / VLANs under the IPAM header.</summary>
     private static bool _ipamSidebarExpanded = true;
@@ -326,6 +339,7 @@ public static partial class IPAMOverlay
     private const int IpamFormFocusVlanName = 3;
     /// <summary>Search box for IPAM prefix list inside the server edit popup (inline assign).</summary>
     private const int IpamFormFocusInlinePrefixSearch = 6;
+    private const int IpamFormFocusInlineAvailableCidr = 7;
     private const int IpamFormFocusWizardChildCidr = 10;
     private const int IpamFormFocusWizardChildName = 11;
     private const int IpamFormFocusWizardChildTenant = 12;
@@ -336,7 +350,18 @@ public static partial class IPAMOverlay
     private const int IpamFormFocusRackPatchLabel = 23;
     private const int IpamFormFocusRackMountServerSearch = 24;
     private const int IpamFormFocusRackMountSwitchSearch = 25;
+    private const int IpamFormFocusDevicesSwitchSearch = 30;
+    private const int IpamFormFocusDevicesRouterSearch = 31;
+    private const int IpamFormFocusDevicesFirewallSearch = 32;
+    private const int IpamFormFocusDevicesServerSearch = 33;
     private static int _ipamFormFieldFocus = IpamFormFocusNone;
+
+    private static string _devicesTabSwitchSearchBuf = "";
+    private static string _devicesTabRouterSearchBuf = "";
+    private static string _devicesTabFirewallSearchBuf = "";
+    private static string _devicesTabServerSearchBuf = "";
+
+    private const float DevicesTabSearchBarH = 28f;
 
     /// <summary>After clicking the rack &quot;Start U&quot; box, full replace on first key (highlight drawn by IPAM form text field).</summary>
     private static bool _ipamFormRackMountStartUSelectAll;
@@ -347,6 +372,10 @@ public static partial class IPAMOverlay
     private static int _inlineAssignMode;
     private static string _inlineIpamPrefixPickKey = "";
     private static string _inlineIpamPrefixSearchBuf = "";
+    /// <summary>Maximal Available row CIDR from the pick list (resize cannot exceed this block).</summary>
+    private static string _inlineIpamFreeBlockAnchorCidr = "";
+    /// <summary>Editable CIDR when an Available free block is selected (prefix length / full CIDR).</summary>
+    private static string _inlineIpamAvailableCidrBuf = "";
     private static Vector2 _inlineIpamPrefixListScroll;
     private static string _inlineAssignError = "";
 
@@ -376,8 +405,11 @@ public static partial class IPAMOverlay
 
     private static int _ipamDevicesSwitchPageIndex;
     private static int _ipamDevicesRouterPageIndex;
+    private static int _ipamDevicesFirewallPageIndex;
     private static int _ipamDevicesServerPageIndex;
     private static bool _ipamDevicesSwitchPageMenuOpen;
+    private static bool _ipamDevicesRouterPageMenuOpen;
+    private static bool _ipamDevicesFirewallPageMenuOpen;
     private static bool _ipamDevicesServerPageMenuOpen;
 
     /// <summary>Reserved width on the right of table headers for the page-size (gear) control.</summary>
@@ -391,6 +423,7 @@ public static partial class IPAMOverlay
 
     /// <summary>Prefixes table: column weight sum = 1 (Prefix, Role, Children, Free/N, Utilization, Tenant, Actions).</summary>
     private static readonly float[] IpamPrefixTableColWeight = { 0.22f, 0.09f, 0.06f, 0.10f, 0.20f, 0.15f, 0.18f };
+    private static float[] _ipamPrefixColumnGripWeightsStart;
 
     /// <summary>Prefix ids whose subtree rows are hidden (collapsed). Absence means expanded.</summary>
     private static readonly HashSet<string> _ipamPrefixCollapsedIds = new(StringComparer.Ordinal);
@@ -457,6 +490,8 @@ public static partial class IPAMOverlay
     private static readonly List<NetworkSwitch> SortedSwitchesBuffer = new();
     private static readonly List<NetworkSwitch> DeviceTabSwitchesOnlyScratch = new();
     private static readonly List<NetworkSwitch> DeviceTabRoutersOnlyScratch = new();
+    private static readonly List<NetworkSwitch> DeviceTabFirewallsOnlyScratch = new();
+    private static readonly List<int> DeviceTabFilteredRowScratch = new();
     private static bool _serverSortListDirty = true;
     private static bool _switchSortListDirty = true;
     private static int _serverSortColumn;
@@ -724,6 +759,10 @@ public static partial class IPAMOverlay
 
         var tWindow0 = perf ? Time.realtimeSinceStartupAsDouble : 0d;
         _windowRect = GUI.Window(9001, _windowRect, (GUI.WindowFunction)DrawWindow, " ");
+        var gripDepth = GUI.depth;
+        GUI.depth = 0;
+        DrawWindowResizeHandleScreenSpace();
+        GUI.depth = gripDepth;
         if (perf)
         {
             var tEnd = Time.realtimeSinceStartupAsDouble;

@@ -135,8 +135,8 @@ internal static class UiRaycastBlocker
         var image = plate.AddComponent<Image>();
         // Fully transparent meshes are occasionally skipped by the UI batcher; tiny alpha keeps raycasts reliable.
         image.color = new Color(0f, 0f, 0f, 0.004f);
-        // IMGUI receives pointer events directly; a full-screen uGUI raycast plate can steal clicks on new builds.
-        image.raycastTarget = false;
+        // Block uGUI menus behind IPAM. IMGUI uses Event.current in OnGUI and is unaffected.
+        image.raycastTarget = true;
 
         _root.SetActive(false);
     }

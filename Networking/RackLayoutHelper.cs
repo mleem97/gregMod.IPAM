@@ -21,13 +21,20 @@ public static class RackLayoutHelper
         public int StartU;
         public int HeightU;
         public string DisplayName;
+        public string ConfiguredName;
+        public string StableId;
     }
 
     public sealed class RackInfo
     {
         public string Key;
+        public string StableKey;
         public string DisplayName;
         public int TotalU;
+        public Vector3 AnchorPosition;
+        public int? GameRowIndex;
+        public int? GameColumn;
+        public string GamePositionLabel;
         public List<RackDeviceEntry> Devices;
     }
 

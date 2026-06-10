@@ -28,6 +28,8 @@ public static partial class IPAMOverlay
         _inlineAssignMode = 0;
         _inlineIpamPrefixPickKey = "";
         _inlineIpamPrefixSearchBuf = "";
+        _inlineIpamFreeBlockAnchorCidr = "";
+        _inlineIpamAvailableCidrBuf = "";
         _inlineAssignError = "";
         _inlineIpamPrefixListScroll = Vector2.zero;
         _ipamFormFieldFocus = IpamFormFocusNone;
@@ -40,10 +42,125 @@ public static partial class IPAMOverlay
         _inlineAssignError = "";
         _inlineIpamPrefixSearchBuf = "";
         _inlineIpamPrefixPickKey = "";
-        if (_ipamFormFieldFocus == IpamFormFocusInlinePrefixSearch)
+        _inlineIpamFreeBlockAnchorCidr = "";
+        _inlineIpamAvailableCidrBuf = "";
+        if (_ipamFormFieldFocus == IpamFormFocusInlinePrefixSearch
+            || _ipamFormFieldFocus == IpamFormFocusInlineAvailableCidr)
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
         }
+    }
+
+    private static bool IsInlineAvailableBlockSelected()
+    {
+        return (_inlineIpamPrefixPickKey ?? "").StartsWith("free:", StringComparison.Ordinal)
+               || !string.IsNullOrWhiteSpace(_inlineIpamFreeBlockAnchorCidr);
+    }
+
+    private static void SetInlineIpamPrefixPick(string pickKey)
+    {
+        _inlineIpamPrefixPickKey = pickKey ?? "";
+        if (_inlineIpamPrefixPickKey.StartsWith("free:", StringComparison.Ordinal))
+        {
+            var cidr = _inlineIpamPrefixPickKey.Substring("free:".Length).Trim();
+            _inlineIpamFreeBlockAnchorCidr = cidr;
+            _inlineIpamAvailableCidrBuf = cidr;
+            return;
+        }
+
+        _inlineIpamFreeBlockAnchorCidr = "";
+        _inlineIpamAvailableCidrBuf = "";
+        if (_ipamFormFieldFocus == IpamFormFocusInlineAvailableCidr)
+        {
+            _ipamFormFieldFocus = IpamFormFocusNone;
+        }
+    }
+
+    private static void SyncInlineAvailablePickKeyFromBuffer()
+    {
+        var cidr = (_inlineIpamAvailableCidrBuf ?? "").Trim();
+        if (string.IsNullOrEmpty(cidr) || string.IsNullOrWhiteSpace(_inlineIpamFreeBlockAnchorCidr))
+        {
+            return;
+        }
+
+        _inlineIpamPrefixPickKey = "free:" + cidr;
+    }
+
+    private static bool TryGetInlineAvailableAnchorPrefixLen(out int anchorLen)
+    {
+        anchorLen = 0;
+        return RouteMath.TryParseIpv4Cidr((_inlineIpamFreeBlockAnchorCidr ?? "").Trim(), out _, out anchorLen);
+    }
+
+    private static bool TryAdjustInlineAvailablePrefixLen(int delta)
+    {
+        var edited = (_inlineIpamAvailableCidrBuf ?? "").Trim();
+        if (!RouteMath.TryParseIpv4Cidr(edited, out var net, out var len)
+            || !TryGetInlineAvailableAnchorPrefixLen(out var anchorLen))
+        {
+            return false;
+        }
+
+        var newLen = len + delta;
+        if (newLen < anchorLen || newLen > 30)
+        {
+            return false;
+        }
+
+        _inlineIpamAvailableCidrBuf = RouteMath.FormatIpv4Cidr(net, newLen);
+        SyncInlineAvailablePickKeyFromBuffer();
+        return true;
+    }
+
+    private static bool IsCidrWithinInlineAvailableAnchor(string edited, string anchor)
+    {
+        var e = (edited ?? "").Trim();
+        var a = (anchor ?? "").Trim();
+        if (string.IsNullOrEmpty(e) || string.IsNullOrEmpty(a))
+        {
+            return false;
+        }
+
+        if (string.Equals(e, a, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return RouteMath.IsStrictChildOf(e, a);
+    }
+
+    private static bool TryValidateInlineAvailableSubnet(string cidr, int serverCount, out string error)
+    {
+        error = null;
+        var anchor = (_inlineIpamFreeBlockAnchorCidr ?? "").Trim();
+        var trimmed = (cidr ?? "").Trim();
+        if (string.IsNullOrEmpty(anchor))
+        {
+            error = "No Available block anchor.";
+            return false;
+        }
+
+        if (!RouteMath.TryParseIpv4Cidr(trimmed, out _, out _))
+        {
+            error = "Subnet CIDR is invalid.";
+            return false;
+        }
+
+        if (!IsCidrWithinInlineAvailableAnchor(trimmed, anchor))
+        {
+            error = $"Subnet must stay inside the selected Available block ({anchor}).";
+            return false;
+        }
+
+        var usable = RouteMath.CountIpamUsableHosts(trimmed);
+        if (usable < serverCount)
+        {
+            error = $"Only {usable} usable IPv4 in {trimmed}; need {serverCount} for the current selection.";
+            return false;
+        }
+
+        return true;
     }
 
     private static void ApplyInlineCustomerAssign()
@@ -96,8 +213,14 @@ public static partial class IPAMOverlay
                     return;
                 }
 
-                if ((_inlineIpamPrefixPickKey ?? "").StartsWith("free:", StringComparison.Ordinal)
-                    && !TryEnsureIpamPrefixForFreeBlock(cidr, cb, out pickErr))
+                var fromAvailableBlock = IsInlineAvailableBlockSelected();
+                if (fromAvailableBlock && !TryValidateInlineAvailableSubnet(cidr, servers.Count, out pickErr))
+                {
+                    _inlineAssignError = pickErr;
+                    return;
+                }
+
+                if (!TryEnsureIpamPrefixForAssignment(cidr, cb, fromAvailableBlock, out pickErr))
                 {
                     _inlineAssignError = pickErr;
                     return;
@@ -152,7 +275,9 @@ public static partial class IPAMOverlay
 
         if (key.StartsWith("free:", StringComparison.Ordinal))
         {
-            cidr = key.Substring("free:".Length).Trim();
+            cidr = !string.IsNullOrWhiteSpace(_inlineIpamAvailableCidrBuf)
+                ? _inlineIpamAvailableCidrBuf.Trim()
+                : key.Substring("free:".Length).Trim();
             if (string.IsNullOrEmpty(cidr))
             {
                 error = "Choose a prefix or Available free block.";
@@ -181,9 +306,19 @@ public static partial class IPAMOverlay
         return false;
     }
 
-    private static bool TryEnsureIpamPrefixForFreeBlock(string cidr, CustomerBase cb, out string error)
+    /// <summary>
+    /// When assigning from an Available free block, materialize that CIDR as a real IPAM prefix (tenant = customer)
+    /// before handing out addresses so it appears on the Prefixes tab.
+    /// </summary>
+    private static bool TryEnsureIpamPrefixForAssignment(
+        string cidr,
+        CustomerBase cb,
+        bool fromAvailableBlock,
+        out string error)
     {
         error = null;
+        ModSaveScope.EnsureBindingChecked(out _);
+
         var trimmed = (cidr ?? "").Trim();
         if (string.IsNullOrEmpty(trimmed))
         {
@@ -191,18 +326,37 @@ public static partial class IPAMOverlay
             return false;
         }
 
-        var exists = IpamDataStore.GetPrefixes().Any(p =>
-            p != null && string.Equals((p.Cidr ?? "").Trim(), trimmed, StringComparison.OrdinalIgnoreCase));
-        if (exists)
+        if (!RouteMath.TryParseIpv4Cidr(trimmed, out _, out _))
+        {
+            error = "Invalid prefix CIDR.";
+            return false;
+        }
+
+        var tenant = DeriveInlinePrefixTenantLabel(cb);
+        if (IpamDataStore.TryGetPrefixByCidr(trimmed, out var existing))
+        {
+            if (fromAvailableBlock && !string.IsNullOrWhiteSpace(tenant))
+            {
+                var name = string.IsNullOrWhiteSpace(existing.Name) ? tenant : existing.Name;
+                if (!IpamDataStore.TryUpdatePrefixMetadata(existing.Id, name, tenant, out error))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (!fromAvailableBlock)
         {
             return true;
         }
 
-        var label = DeriveInlinePrefixLabel(cb);
+        var prefixName = DeriveInlinePrefixNameLabel(cb);
         if (!IpamDataStore.TryAddPrefix(
                 trimmed,
-                label,
-                label,
+                prefixName,
+                tenant,
                 IpamPrefixParentMode.AutoPickContainedParent,
                 null,
                 out error))
@@ -210,19 +364,45 @@ public static partial class IPAMOverlay
             return false;
         }
 
+        if (IpamDataStore.TryGetPrefixByCidr(trimmed, out var created))
+        {
+            _ipamSelectedPrefixId = created.Id;
+        }
+
         RecomputeContentHeight();
+        ShowIpamToast(
+            string.IsNullOrWhiteSpace(tenant)
+                ? $"Created prefix {trimmed} in IPAM."
+                : $"Created prefix {trimmed} · tenant {tenant}");
         return true;
     }
 
-    private static string DeriveInlinePrefixLabel(CustomerBase cb)
+    private static string DeriveInlinePrefixTenantLabel(CustomerBase cb)
     {
-        var cn = GetCustomerName(cb);
-        if (string.IsNullOrWhiteSpace(cn))
+        if (cb == null)
         {
             return null;
         }
 
-        return cn.Length > 24 ? cn.Substring(0, 24).Trim() : cn.Trim();
+        var cn = GetCustomerName(cb);
+        if (string.IsNullOrWhiteSpace(cn))
+        {
+            return $"#{cb.customerID}";
+        }
+
+        cn = cn.Trim();
+        return cn.Length > 48 ? cn.Substring(0, 48).Trim() : cn;
+    }
+
+    private static string DeriveInlinePrefixNameLabel(CustomerBase cb)
+    {
+        var tenant = DeriveInlinePrefixTenantLabel(cb);
+        if (string.IsNullOrWhiteSpace(tenant))
+        {
+            return null;
+        }
+
+        return tenant.Length > 24 ? tenant.Substring(0, 24).Trim() : tenant;
     }
 
     private static List<InlinePrefixPickOption> BuildInlinePrefixPickOptions(string rawQuery)
@@ -265,7 +445,7 @@ public static partial class IPAMOverlay
                 .Where(c => c != null && string.Equals(c.ParentId, p.Id, StringComparison.Ordinal))
                 .ToList();
             var hasChildren = kids.Count > 0;
-            var cap = RouteMath.CountDhcpUsableHosts(cidr);
+            var cap = RouteMath.CountIpamUsableHosts(cidr);
             var used = hasChildren
                 ? CountAssignedServersWithIpInCidr(cidr)
                 : CountAssignedServersExclusiveToPrefix(p, all);
@@ -294,7 +474,7 @@ public static partial class IPAMOverlay
                         continue;
                     }
 
-                    var fcCap = RouteMath.CountDhcpUsableHosts(fcTrim);
+                    var fcCap = RouteMath.CountIpamUsableHosts(fcTrim);
                     var fcUsed = CountAssignedServersWithIpInCidr(fcTrim);
                     var fcFree = Math.Max(0, fcCap - fcUsed);
                     if (fcFree <= 0)

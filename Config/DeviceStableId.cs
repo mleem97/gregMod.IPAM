@@ -20,7 +20,28 @@ internal static class DeviceStableId
             return "null";
         }
 
-        var tr = sw.transform;
+        return ForTransform(sw.transform);
+    }
+
+    internal static string ForServer(Server srv)
+    {
+        if (srv == null)
+        {
+            return "null";
+        }
+
+        return ForTransform(srv.transform);
+    }
+
+    internal static string ForRackTransform(Transform tr) => ForTransform(tr);
+
+    private static string ForTransform(Transform tr)
+    {
+        if (tr == null)
+        {
+            return "null";
+        }
+
         var scene = tr.gameObject.scene;
         var scenePart = scene.IsValid() ? scene.name : "invalid_scene";
         var path = HierarchyPath(tr);

@@ -58,6 +58,48 @@ public static class RouteMath
         return true;
     }
 
+    /// <summary>True for RFC1918 space (10/8, 172.16–31/12, 192.168/16). IPAM private prefixes do not reserve .1.</summary>
+    public static bool IsPrivateRfc1918Cidr(string cidr)
+    {
+        if (!TryParseIpv4Cidr(cidr, out var networkBe, out _))
+        {
+            return false;
+        }
+
+        var b0 = (byte)((networkBe >> 24) & 0xff);
+        var b1 = (byte)((networkBe >> 16) & 0xff);
+        if (b0 == 10)
+        {
+            return true;
+        }
+
+        if (b0 == 172 && b1 >= 16 && b1 <= 31)
+        {
+            return true;
+        }
+
+        return b0 == 192 && b1 == 168;
+    }
+
+    /// <summary>
+    /// Contract subnets may reserve x.x.x.1 on /24-or-shorter; IPAM RFC1918 prefixes use every host (.1–.14 on a /28, etc.).
+    /// </summary>
+    public static bool ShouldReserveTypicalGateway(string cidr)
+    {
+        if (IsPrivateRfc1918Cidr(cidr))
+        {
+            return false;
+        }
+
+        return TryParseIpv4Cidr(cidr, out _, out var prefixLen) && prefixLen <= 24;
+    }
+
+    /// <summary>Usable host count for IPAM display and assignment (subnet-calculator semantics on private space).</summary>
+    public static int CountIpamUsableHosts(string cidr)
+    {
+        return CountDhcpUsableHosts(cidr, skipTypicalGatewayLastOctet: ShouldReserveTypicalGateway(cidr));
+    }
+
     /// <summary>
     /// Enumerates assignable host addresses in the CIDR (network + 1 .. broadcast - 1).
     /// For /31 and /32, yields nothing (no classic host range).
@@ -95,7 +137,9 @@ public static class RouteMath
             var b = (byte)((h >> 16) & 0xff);
             var c = (byte)((h >> 8) & 0xff);
             var d = (byte)(h & 0xff);
-            if (skipTypicalGatewayLastOctet && d == 1)
+            // Reserve .1 as gateway only on /24-or-shorter networks (e.g. 10.10.1.0/24). Smaller subnets like
+            // 10.10.2.0/28 use .1 as the first assignable host and must count all 14 usable addresses.
+            if (skipTypicalGatewayLastOctet && prefixLen <= 24 && d == 1)
             {
                 continue;
             }

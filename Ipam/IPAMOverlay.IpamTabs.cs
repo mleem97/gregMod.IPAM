@@ -41,6 +41,7 @@ public static partial class IPAMOverlay
             _ipamIpAddrPageMenuOpen = false;
             _ipamPrefixPageMenuOpen = false;
             _ipamDevicesSwitchPageMenuOpen = false;
+            _ipamDevicesFirewallPageMenuOpen = false;
             _ipamDevicesServerPageMenuOpen = false;
             _customersTabAddServerWizardOpen = false;
             if (sub != IpamSubSection.Prefixes)
@@ -396,20 +397,7 @@ public static partial class IPAMOverlay
 
         y += 4f;
 
-        GetIpamPrefixColumnWidths(cardW, out var colPrefix, out var colStatus, out var colChild, out var colFree, out var colUtil, out var colTenant, out var colActions);
-
-        GUI.Label(new Rect(x0, y, colPrefix, TableHeaderH), "Prefix", _stTableHeaderText);
-        GUI.Label(new Rect(x0 + colPrefix, y, colStatus, TableHeaderH), "Role", _stTableHeaderText);
-        GUI.Label(new Rect(x0 + colPrefix + colStatus, y, colChild, TableHeaderH), "Children", _stTableHeaderText);
-        GUI.Label(
-            new Rect(x0 + colPrefix + colStatus + colChild, y, colFree, TableHeaderH),
-            new GUIContent(
-                "Free /N",
-                "Non-overlapping CIDR-aligned subnets of the template size (/N) that still fit under this prefix after direct child prefixes. ~ indicates overlapping children."),
-            _stTableHeaderText);
-        GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colFree, y, colUtil, TableHeaderH), "Utilization", _stTableHeaderText);
-        GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colFree + colUtil, y, colTenant, TableHeaderH), "Tenant", _stTableHeaderText);
-        GUI.Label(new Rect(x0 + colPrefix + colStatus + colChild + colFree + colUtil + colTenant, y, colActions, TableHeaderH), "Actions", _stTableHeaderText);
+        DrawIpamPrefixTableHeader(x0, y, cardW, out var colPrefix, out var colStatus, out var colChild, out var colFree, out var colUtil, out var colTenant, out var colActions);
         y += TableHeaderH;
 
         if (prefixes.Count == 0)
@@ -889,6 +877,192 @@ public static partial class IPAMOverlay
         return top + SectionTitleH + 4f + TableHeaderH + n * TableRowH + 24f;
     }
 
+    private static void DrawIpamPrefixTableHeader(
+        float x0,
+        float y,
+        float cardW,
+        out float colPrefix,
+        out float colStatus,
+        out float colChild,
+        out float colFree,
+        out float colUtil,
+        out float colTenant,
+        out float colActions)
+    {
+        var headerR = new Rect(x0, y, cardW, TableHeaderH);
+        GUI.DrawTexture(headerR, _texTableHeader);
+        GetIpamPrefixColumnWidths(cardW, out colPrefix, out colStatus, out colChild, out colFree, out colUtil, out colTenant, out colActions);
+        const int gripBase = 91480;
+        ProcessIpamPrefixColumnGripsInteraction(headerR, cardW, gripBase);
+
+        var x = x0;
+        var widths = new[] { colPrefix, colStatus, colChild, colFree, colUtil, colTenant, colActions };
+        var labels = new[]
+        {
+            "Prefix",
+            "Role",
+            "Children",
+            "Free /N",
+            "Utilization",
+            "Tenant",
+            "Actions",
+        };
+        for (var i = 0; i < 7; i++)
+        {
+            var leftPad = i > 0 ? ColumnGripHalfWidth : 0f;
+            var rightPad = i < 6 ? ColumnGripHalfWidth : 0f;
+            var cell = new Rect(x + leftPad + 4f, y, widths[i] - leftPad - rightPad - 8f, TableHeaderH);
+            if (i == 3)
+            {
+                GUI.Label(
+                    cell,
+                    new GUIContent(
+                        labels[i],
+                        "Non-overlapping CIDR-aligned subnets of the template size (/N) that still fit under this prefix after direct child prefixes. ~ indicates overlapping children."),
+                    _stTableHeaderText);
+            }
+            else
+            {
+                GUI.Label(cell, labels[i], _stTableHeaderText);
+            }
+
+            x += widths[i];
+        }
+
+        DrawIpamPrefixColumnGripGuides(headerR, cardW, gripBase);
+    }
+
+    private static void ProcessIpamPrefixColumnGripsInteraction(Rect headerRect, float cardWidth, int gripHintBase)
+    {
+        var e = Event.current;
+        if (e == null)
+        {
+            return;
+        }
+
+        var et = e.type;
+        if (et != EventType.MouseDown && et != EventType.MouseDrag && et != EventType.MouseUp)
+        {
+            return;
+        }
+
+        GetIpamPrefixColumnWidths(
+            cardWidth,
+            out var w0,
+            out var w1,
+            out var w2,
+            out var w3,
+            out var w4,
+            out var w5,
+            out var w6);
+        var ws = new[] { w0, w1, w2, w3, w4, w5, w6 };
+        var x = headerRect.x;
+        for (var boundary = 0; boundary < 6; boundary++)
+        {
+            x += ws[boundary];
+            var grip = new Rect(
+                x - ColumnGripHalfWidth,
+                headerRect.y,
+                ColumnGripHalfWidth * 2f,
+                headerRect.height);
+            var id = GUIUtility.GetControlID(gripHintBase + boundary, FocusType.Passive, grip);
+
+            switch (e.GetTypeForControl(id))
+            {
+                case EventType.MouseDown:
+                    if (GUI.enabled && e.button == 0 && grip.Contains(e.mousePosition))
+                    {
+                        GUIUtility.hotControl = id;
+                        _columnGripMouseStartX = e.mousePosition.x;
+                        _ipamPrefixColumnGripWeightsStart = (float[])IpamPrefixTableColWeight.Clone();
+                        e.Use();
+                    }
+
+                    break;
+                case EventType.MouseDrag:
+                    if (GUIUtility.hotControl != id)
+                    {
+                        break;
+                    }
+
+                    e.Use();
+                    if (_ipamPrefixColumnGripWeightsStart == null || _ipamPrefixColumnGripWeightsStart.Length != 7)
+                    {
+                        break;
+                    }
+
+                    var dx = e.mousePosition.x - _columnGripMouseStartX;
+                    var dw = dx / Mathf.Max(80f, cardWidth);
+                    var left = Mathf.Clamp(_ipamPrefixColumnGripWeightsStart[boundary] + dw, MinColWeight, MaxColWeight);
+                    var right = Mathf.Clamp(_ipamPrefixColumnGripWeightsStart[boundary + 1] - dw, MinColWeight, MaxColWeight);
+                    var pairSum = left + right;
+                    var origPair = _ipamPrefixColumnGripWeightsStart[boundary] + _ipamPrefixColumnGripWeightsStart[boundary + 1];
+                    if (pairSum > 0.0001f)
+                    {
+                        var scale = origPair / pairSum;
+                        IpamPrefixTableColWeight[boundary] = left * scale;
+                        IpamPrefixTableColWeight[boundary + 1] = right * scale;
+                        NormalizeIpamPrefixTableColWeights();
+                    }
+
+                    break;
+                case EventType.MouseUp:
+                    if (GUIUtility.hotControl == id)
+                    {
+                        GUIUtility.hotControl = 0;
+                        _ipamPrefixColumnGripWeightsStart = null;
+                        e.Use();
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    private static void DrawIpamPrefixColumnGripGuides(Rect headerRect, float cardWidth, int gripHintBase)
+    {
+        if (Event.current == null || Event.current.type != EventType.Repaint || cardWidth < 120f)
+        {
+            return;
+        }
+
+        GetIpamPrefixColumnWidths(
+            cardWidth,
+            out var w0,
+            out var w1,
+            out var w2,
+            out var w3,
+            out var w4,
+            out var w5,
+            out var w6);
+        var ws = new[] { w0, w1, w2, w3, w4, w5, w6 };
+        var x = headerRect.x;
+        var lineH = Mathf.Max(1f, headerRect.height);
+        var lineY = headerRect.y;
+        var oc = GUI.color;
+        var mouse = Event.current.mousePosition;
+        for (var boundary = 0; boundary < 6; boundary++)
+        {
+            x += ws[boundary];
+            var grip = new Rect(
+                x - ColumnGripHalfWidth,
+                headerRect.y,
+                ColumnGripHalfWidth * 2f,
+                headerRect.height);
+            var id = GUIUtility.GetControlID(gripHintBase + boundary, FocusType.Passive, grip);
+            var hover = grip.Contains(mouse) || GUIUtility.hotControl == id;
+            GUI.color = hover
+                ? new Color(0.4f, 1f, 0.92f, 1f)
+                : new Color(0f, 0.78f, 0.66f, 1f);
+            GUI.DrawTexture(
+                new Rect(x - 1f - (hover ? 1f : 0f), lineY, hover ? 4f : 2f, lineH),
+                Texture2D.whiteTexture,
+                ScaleMode.StretchToFill);
+        }
+
+        GUI.color = oc;
+    }
+
     private static void NormalizeIpamPrefixTableColWeights()
     {
         var s = 0f;
@@ -1009,7 +1183,7 @@ public static partial class IPAMOverlay
                 BumpCell(3, "—");
             }
 
-            var cap = Mathf.Max(1, RouteMath.CountDhcpUsableHosts(cidr));
+            var cap = Mathf.Max(1, RouteMath.CountIpamUsableHosts(cidr));
             var used = directChildren > 0
                 ? CountAssignedServersWithIpInCidr(cidr)
                 : CountAssignedServersExclusiveToPrefix(p, all);

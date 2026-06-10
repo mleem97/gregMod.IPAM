@@ -447,7 +447,7 @@ public static class DHCPManager
         }
     }
 
-    /// <summary>Skips x.x.x.1 — same convention as the in-game hint (gateway is usually .1 on contract subnets).</summary>
+    /// <summary>True when the host ends in .1 (typical gateway on contract /24-or-shorter prefixes).</summary>
     private static bool IsTypicalGatewayLastOctet(string ip)
     {
         if (string.IsNullOrWhiteSpace(ip))
@@ -462,6 +462,11 @@ public static class DHCPManager
         }
 
         return last == 1;
+    }
+
+    private static bool ShouldSkipTypicalGateway(string ip, string cidr)
+    {
+        return IsTypicalGatewayLastOctet(ip) && RouteMath.ShouldReserveTypicalGateway(cidr);
     }
 
     private static bool IsIpUsedByAnotherServer(Server self, string ip, Server[] allServers)
@@ -494,7 +499,8 @@ public static class DHCPManager
         Server[] allServers,
         string cidrForLog,
         bool logStep,
-        bool logEachReject)
+        bool logEachReject,
+        bool applyGatewaySkip = true)
     {
         if (usable == null)
         {
@@ -510,6 +516,7 @@ public static class DHCPManager
         var nInAssigned = 0;
         var nOtherServer = 0;
         var nGatewaySkip = 0;
+        var ownIp = GetServerIP(server);
 
         for (var i = 0; i < usable.Length; i++)
         {
@@ -525,7 +532,8 @@ public static class DHCPManager
                 continue;
             }
 
-            if (AssignedIPs.Contains(candidate))
+            if (AssignedIPs.Contains(candidate)
+                && !string.Equals(candidate, ownIp, StringComparison.OrdinalIgnoreCase))
             {
                 nInAssigned++;
                 if (logEachReject)
@@ -547,7 +555,7 @@ public static class DHCPManager
                 continue;
             }
 
-            if (IsTypicalGatewayLastOctet(candidate))
+            if (applyGatewaySkip && ShouldSkipTypicalGateway(candidate, cidrForLog))
             {
                 nGatewaySkip++;
                 if (logEachReject)
@@ -578,7 +586,8 @@ public static class DHCPManager
 
     /// <summary>
     /// Picks the first usable IPv4 in <paramref name="cidr"/> that passes the same DHCP UI rules as batch assign
-    /// (assigned pool, other servers, typical .1 gateway skip).
+    /// (assigned pool, other servers, .1 gateway skip on /24-or-shorter only). Reuses the server's current IP when
+    /// it already lies inside the chosen prefix.
     /// </summary>
     public static bool TryPickUnusedIpFromSubnet(string cidr, Server server, out string ip)
     {
@@ -590,8 +599,28 @@ public static class DHCPManager
 
         var trimmed = cidr.Trim();
         var allServers = UnityEngine.Object.FindObjectsOfType<Server>();
-        var usable = GameSubnetHelper.GetUsableIpsForSubnet(trimmed, logDetail: false);
-        var picked = PickFromUsableArray(usable, server, allServers, trimmed, logStep: false, logEachReject: false);
+        RebuildAssignedIpsFromScene(allServers);
+        var applyGatewaySkip = RouteMath.ShouldReserveTypicalGateway(trimmed);
+        var current = GetServerIP(server);
+        if (!string.IsNullOrWhiteSpace(current)
+            && current != "0.0.0.0"
+            && RouteMath.IsIpv4InCidr(current.Trim(), trimmed)
+            && !IsIpUsedByAnotherServer(server, current.Trim(), allServers)
+            && (!applyGatewaySkip || !ShouldSkipTypicalGateway(current.Trim(), trimmed)))
+        {
+            ip = current.Trim();
+            return true;
+        }
+
+        var usable = GameSubnetHelper.GetUsableIpsForSubnet(trimmed, logDetail: false, forIpamManagedPrefix: true);
+        var picked = PickFromUsableArray(
+            usable,
+            server,
+            allServers,
+            trimmed,
+            logStep: false,
+            logEachReject: false,
+            applyGatewaySkip: applyGatewaySkip);
         if (string.IsNullOrEmpty(picked))
         {
             return false;

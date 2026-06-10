@@ -50,6 +50,23 @@ public static partial class IPAMOverlay
         IpamEscapePressedThisFrame = false;
     }
 
+    private static bool TryHardwareGuiScreenPointer(out Vector2 guiScreen)
+    {
+        guiScreen = default;
+        using (IpamGameInputGate.BeginHardwareMouseBypass())
+        {
+            var mouse = Mouse.current;
+            if (mouse == null)
+            {
+                return false;
+            }
+
+            var mp = mouse.position.ReadValue();
+            guiScreen = new Vector2(mp.x, Screen.height - mp.y);
+            return true;
+        }
+    }
+
     private static bool HardwarePointerInWindowLocalRect(Rect windowRect, Rect localRect, out Vector2 localPointer)
     {
         localPointer = default;
@@ -58,14 +75,11 @@ public static partial class IPAMOverlay
             return false;
         }
 
-        var mouse = Mouse.current;
-        if (mouse == null)
+        if (!TryHardwareGuiScreenPointer(out var guiScreen))
         {
             return false;
         }
 
-        var mp = mouse.position.ReadValue();
-        var guiScreen = new Vector2(mp.x, Screen.height - mp.y);
         localPointer = new Vector2(guiScreen.x - windowRect.x, guiScreen.y - windowRect.y);
         return localRect.Contains(localPointer);
     }
@@ -229,6 +243,53 @@ public static partial class IPAMOverlay
     }
 
     /// <summary>
+    /// Full-screen <see cref="UiRaycastBlocker"/> blocks IMGUI mouse on IPAM; resize via hardware pointer instead.
+    /// </summary>
+    public static void TickInputSystemWindowResize()
+    {
+        if (!IsVisible || !ShouldDrawWindowResizeHandle())
+        {
+            if (_ipamResizeDrag)
+            {
+                FinishWindowResizeDrag();
+            }
+
+            return;
+        }
+
+        var mouse = Mouse.current;
+        if (mouse == null)
+        {
+            return;
+        }
+
+        if (!TryHardwareGuiScreenPointer(out var guiScreen))
+        {
+            return;
+        }
+
+        var grip = GetWindowResizeGripScreenRect();
+        if (_ipamResizeDrag)
+        {
+            if (mouse.leftButton.isPressed)
+            {
+                ApplyWindowResizeDragDelta(guiScreen);
+                return;
+            }
+
+            FinishWindowResizeDrag();
+            return;
+        }
+
+        if (mouse.leftButton.wasPressedThisFrame && grip.Contains(guiScreen))
+        {
+            _ipamResizeDrag = true;
+            _ipamResizeStartMouse = guiScreen;
+            _ipamResizeStartSize = new Vector2(_windowRect.width, _windowRect.height);
+        }
+    }
+
+    /// <summary>
     /// Full-screen <see cref="UiRaycastBlocker"/> can prevent IMGUI from seeing mouse clicks while IPAM is open.
     /// Hardware mouse + last frame's screen rect opens the IOPS dialog when IMGUI does not fire.
     /// </summary>
@@ -239,30 +300,33 @@ public static partial class IPAMOverlay
             return;
         }
 
-        var mouse = Mouse.current;
-        if (mouse == null || !mouse.leftButton.wasPressedThisFrame)
+        using (IpamGameInputGate.BeginHardwareMouseBypass())
         {
-            return;
-        }
+            var mouse = Mouse.current;
+            if (mouse == null || !mouse.leftButton.wasPressedThisFrame)
+            {
+                return;
+            }
 
-        var mp = mouse.position.ReadValue();
-        var rectEmpty = _iopsToolbarRectWindowLocal.width <= 0f;
-        var hit = HardwarePointerInWindowLocalRect(_windowRect, _iopsToolbarRectWindowLocal, out var ptrLocal);
+            var mp = mouse.position.ReadValue();
+            var rectEmpty = _iopsToolbarRectWindowLocal.width <= 0f;
+            var hit = HardwarePointerInWindowLocalRect(_windowRect, _iopsToolbarRectWindowLocal, out var ptrLocal);
 
-        if (ModDebugLog.IsIpamFileLogEnabled && (rectEmpty || !hit))
-        {
-            IpamDebugLog.IopsHardwareProbe(mp, ptrLocal, _windowRect, _iopsToolbarRectWindowLocal, rectEmpty, hit);
-        }
+            if (ModDebugLog.IsIpamFileLogEnabled && (rectEmpty || !hit))
+            {
+                IpamDebugLog.IopsHardwareProbe(mp, ptrLocal, _windowRect, _iopsToolbarRectWindowLocal, rectEmpty, hit);
+            }
 
-        if (rectEmpty || !hit)
-        {
-            return;
-        }
+            if (rectEmpty || !hit)
+            {
+                return;
+            }
 
-        OpenIopsCalculator();
-        if (ModDebugLog.IsIpamFileLogEnabled)
-        {
-            IpamDebugLog.IopsOpenedViaInputFallback(Time.frameCount, mp, _iopsToolbarScreenRect);
+            OpenIopsCalculator();
+            if (ModDebugLog.IsIpamFileLogEnabled)
+            {
+                IpamDebugLog.IopsOpenedViaInputFallback(Time.frameCount, mp, _iopsToolbarScreenRect);
+            }
         }
     }
 
@@ -396,6 +460,11 @@ public static partial class IPAMOverlay
     /// <summary>Call from <c>OnGUI</c> (start and, when overlays are closed, end of pass) so IMGUI does not keep capture after closing windows.</summary>
     public static void PumpImGuiInputRecovery()
     {
+        if (_ipamResizeDrag)
+        {
+            return;
+        }
+
         var inBurst = _imguiRecoverUntilExclusive != 0 && Time.frameCount < _imguiRecoverUntilExclusive;
         if (!_pendingImguiStateRelease && !inBurst)
         {
