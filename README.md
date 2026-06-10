@@ -1,15 +1,15 @@
-# gregMod.IPAM - Network Management
+# DHCP-IPAM — Network Management
 
 > IP Address Management and subnet automation for your data center network.
-> Migrated from [DataCenter_DHCPSwitches](https://github.com/mleem97/DataCenter_DHCPSwitches).
 
-**Author:** teamGreg (MLeeM97 & Mochimus) | **License:** MIT | **Framework:** [gregCore](https://git.datacentermods.com/teamGreg/gregCore)
+**Repository:** [github.com/Mochimus/DHCP-IPAM](https://github.com/Mochimus/DHCP-IPAM)  
+**Author:** Mochimus | **License:** MIT | **Framework:** [gregCore](https://git.datacentermods.com/teamGreg/gregCore)
 
 ---
 
 ## Overview
 
-`gregMod.IPAM` is a gamified networking system and IPAM layer for **Data Center**. It expands network management depth while keeping the experience practical and fun.
+**DHCP Switches & IPAM** is a gamified networking system and IPAM layer for **Data Center**. It expands network management depth while keeping the experience practical and fun.
 
 ## Features
 - Auto-subnetting (/24, /22, /16 blocks)
@@ -56,16 +56,12 @@
 ## Building from Source
 
 ```bash
-cd gregFramework/src/gregMod.IPAM
+git clone https://github.com/Mochimus/DHCP-IPAM.git
+cd DHCP-IPAM
 dotnet build -c Release
 ```
 
-Or build everything at once:
-
-```bash
-cd gregFramework/deploy
-./build-all.ps1
-```
+Release DLL: `bin/Release/net6.0/DHCP and IPAM.dll` (also packaged under `dist/`).
 
 ---
 
