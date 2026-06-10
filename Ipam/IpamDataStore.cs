@@ -488,6 +488,9 @@ internal static class IpamDataStore
         return true;
     }
 
+    /// <summary>Bumped whenever prefix/VLAN data is saved — used to invalidate IMGUI pick-list caches.</summary>
+    internal static int DataRevision { get; private set; }
+
     private static void Save()
     {
         var path = GetPath();
@@ -501,6 +504,7 @@ internal static class IpamDataStore
 
             var json = JsonSerializer.Serialize(EnsureLoaded(), JsonOptions);
             File.WriteAllText(path, json);
+            DataRevision++;
         }
         catch (Exception ex)
         {

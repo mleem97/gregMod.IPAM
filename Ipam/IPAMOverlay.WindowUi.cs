@@ -432,12 +432,10 @@ public static partial class IPAMOverlay
 
         GUI.DrawTexture(new Rect(contentX + 2, scrollTop + 2, contentW - 4, scrollH - 4), _texCard);
 
-        _scroll = SafeBeginScrollView(
+        SafeBeginScrollView(
             scrollViewRect,
             _scroll,
             new Rect(0, 0, innerW, _cachedContentHeight));
-        _scroll.x = Mathf.Clamp(_scroll.x, 0f, Mathf.Max(0f, innerW - scrollViewRect.width + 20f));
-        _scroll.y = Mathf.Clamp(_scroll.y, 0f, Mathf.Max(0f, _cachedContentHeight - scrollH));
         BeginInventoryScrollRowRepaintCull(_scroll.y, scrollH);
         try
         {
@@ -480,6 +478,9 @@ public static partial class IPAMOverlay
             EndInventoryScrollRowRepaintCull();
         }
 
+        _scroll = SafeConsumeManualScrollPosition(_scroll);
+        _scroll.x = Mathf.Clamp(_scroll.x, 0f, Mathf.Max(0f, innerW - scrollViewRect.width + 20f));
+        _scroll.y = Mathf.Clamp(_scroll.y, 0f, Mathf.Max(0f, _cachedContentHeight - scrollH));
         SafeEndScrollView();
 
         if (_selectedNetworkSwitchInstanceIds.Count > 0 && detailH > 0f)
@@ -1007,17 +1008,6 @@ public static partial class IPAMOverlay
         _ => "",
     };
 
-    private static bool InventorySearchQueryMatches(string query, string text)
-    {
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            return true;
-        }
-
-        return !string.IsNullOrEmpty(text)
-               && text.IndexOf(query.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
-    }
-
     private static bool DeviceSwitchSearchMatches(NetworkSwitch sw, string query, string roleLabel)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -1027,32 +1017,32 @@ public static partial class IPAMOverlay
 
         if (sw == null)
         {
-            return InventorySearchQueryMatches(query, "(removed)");
+            return DeviceInventoryReflection.InventorySearchQueryMatches(query, "(removed)");
         }
 
-        if (InventorySearchQueryMatches(query, DeviceInventoryReflection.GetDisplayName(sw)))
+        if (DeviceInventoryReflection.InventorySearchQueryMatches(query, DeviceInventoryReflection.GetDisplayName(sw)))
         {
             return true;
         }
 
-        if (InventorySearchQueryMatches(query, roleLabel))
+        if (DeviceInventoryReflection.InventorySearchQueryMatches(query, roleLabel))
         {
             return true;
         }
 
-        if (InventorySearchQueryMatches(query, "Active"))
+        if (DeviceInventoryReflection.InventorySearchQueryMatches(query, "Active"))
         {
             return true;
         }
 
-        if (TryGetIpamEolString(sw, out var eol) && InventorySearchQueryMatches(query, eol))
+        if (TryGetIpamEolString(sw, out var eol) && DeviceInventoryReflection.InventorySearchQueryMatches(query, eol))
         {
             return true;
         }
 
         try
         {
-            return InventorySearchQueryMatches(query, sw.name);
+            return DeviceInventoryReflection.InventorySearchQueryMatches(query, sw.name);
         }
         catch
         {
@@ -1069,37 +1059,55 @@ public static partial class IPAMOverlay
 
         if (server == null)
         {
-            return InventorySearchQueryMatches(query, "(removed)");
+            return DeviceInventoryReflection.InventorySearchQueryMatches(query, "(removed)");
         }
 
-        if (InventorySearchQueryMatches(query, DeviceInventoryReflection.GetDisplayName(server)))
+        if (DeviceInventoryReflection.InventorySearchQueryMatches(query, DeviceInventoryReflection.GetDisplayName(server)))
         {
             return true;
         }
 
-        if (InventorySearchQueryMatches(query, GetCustomerDisplayName(server)))
+        try
+        {
+            if (DeviceInventoryReflection.InventorySearchQueryMatches(query, server.lastDisplayedLabel))
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        var overrideName = NamingConventionStore.TryGetOverrideName(server);
+        if (DeviceInventoryReflection.InventorySearchQueryMatches(query, overrideName))
         {
             return true;
         }
 
-        if (InventorySearchQueryMatches(query, DeviceInventoryReflection.GetServerFormFactorLabel(server)))
+        if (DeviceInventoryReflection.InventorySearchQueryMatches(query, GetCustomerDisplayName(server)))
+        {
+            return true;
+        }
+
+        if (DeviceInventoryReflection.InventorySearchQueryMatches(query, DeviceInventoryReflection.GetServerFormFactorLabel(server)))
         {
             return true;
         }
 
         var ip = DHCPManager.GetServerIP(server);
-        if (InventorySearchQueryMatches(query, ip))
+        if (DeviceInventoryReflection.InventorySearchQueryMatches(query, ip))
         {
             return true;
         }
 
-        if (TryGetIpamEolString(server, out var eol) && InventorySearchQueryMatches(query, eol))
+        if (TryGetIpamEolString(server, out var eol) && DeviceInventoryReflection.InventorySearchQueryMatches(query, eol))
         {
             return true;
         }
 
         var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
-        return InventorySearchQueryMatches(query, hasIp ? "Assigned" : "No address");
+        return DeviceInventoryReflection.InventorySearchQueryMatches(query, hasIp ? "Assigned" : "No address");
     }
 
     private static void BuildFilteredDeviceSwitchRowIndices(
@@ -2895,7 +2903,7 @@ public static partial class IPAMOverlay
         }
 
         GUI.Box(dropListRect, GUIContent.none);
-        _customerDropdownScroll = SafeBeginScrollView(
+        SafeBeginScrollView(
             dropListRect,
             _customerDropdownScroll,
             new Rect(0, 0, fieldW - 22, CustomerPickBuffer.Count * 28f));
@@ -2910,6 +2918,7 @@ public static partial class IPAMOverlay
             }
         }
 
+        _customerDropdownScroll = SafeConsumeManualScrollPosition(_customerDropdownScroll);
         SafeEndScrollView();
         py += listH + 4f;
     }
@@ -2917,56 +2926,78 @@ public static partial class IPAMOverlay
     private static void DrawInlineCustomerAssignSection(float px, ref float py, float iw)
     {
         var cust = _inlineAssignCustomer;
-        if (cust == null)
-        {
-            return;
-        }
 
         CollectSelectedServersIntoScratch();
         var n = SelectedServersScratch.Count;
 
-        GUI.Label(new Rect(px, py, iw, 22f), "Assign + address", _stSectionTitle);
+        GUI.Label(new Rect(px, py, iw, 22f), "Assign + address / Naming", _stSectionTitle);
         py += 26f;
 
-        var cn = GetCustomerName(cust);
-        GUI.Label(
-            new Rect(px, py, iw, 22f),
-            $"Customer   #{cust.customerID}  {Trunc(cn ?? "", 48)}",
-            _stMuted);
-        py += 24f;
+        if (cust != null && _inlineAssignMode != 2)
+        {
+            var cn = GetCustomerName(cust);
+            GUI.Label(
+                new Rect(px, py, iw, 22f),
+                $"Customer   #{cust.customerID}  {Trunc(cn ?? "", 48)}",
+                _stMuted);
+            py += 24f;
+        }
 
         GUI.Label(new Rect(px, py, iw, 20f), $"{n} server(s) selected.", _stMuted);
         py += 24f;
 
         GUI.Label(new Rect(px, py + 3, 52f, 22f), "Mode", _stFormLabel);
         var mx = px + 56f;
+        var modeCount = LicenseManager.IsIPAMUnlocked ? 3 : 2;
+        var mw = (iw - 60f) / modeCount - 4f;
+        var sel0 = _inlineAssignMode == 0;
+        if (ImguiButtonOnce(new Rect(mx, py, mw, 26f), "Contract+DHCP", 9055, sel0 ? _stPrimaryBtn : _stMutedBtn))
+        {
+            _inlineAssignMode = 0;
+            ResetServerEditPopupScrollForModeChange();
+        }
+
+        mx += mw + 6f;
         if (LicenseManager.IsIPAMUnlocked)
         {
-            var mw = (iw - 60f) * 0.5f - 4f;
-            var sel0 = _inlineAssignMode == 0;
-            if (ImguiButtonOnce(new Rect(mx, py, mw, 26f), "Contract+DHCP", 9055, sel0 ? _stPrimaryBtn : _stMutedBtn))
-            {
-                _inlineAssignMode = 0;
-            }
-
             if (ImguiButtonOnce(
-                    new Rect(mx + mw + 8f, py, mw, 26f),
+                    new Rect(mx, py, mw, 26f),
                     "IPAM prefix",
                     9056,
                     _inlineAssignMode == 1 ? _stPrimaryBtn : _stMutedBtn))
             {
                 _inlineAssignMode = 1;
+                ResetServerEditPopupScrollForModeChange();
             }
+
+            mx += mw + 6f;
         }
-        else
+
+        if (ImguiButtonOnce(
+                new Rect(mx, py, mw, 26f),
+                "Naming",
+                9057,
+                _inlineAssignMode == 2 ? _stPrimaryBtn : _stMutedBtn))
         {
-            _inlineAssignMode = 0;
-            GUI.Label(new Rect(mx, py, iw - 56f, 26f), "Contract+DHCP (IPAM prefix requires IPAM license)", _stHint);
+            _inlineAssignMode = 2;
+            ResetServerEditPopupScrollForModeChange();
         }
 
         py += 34f;
 
-        if (_inlineAssignMode == 0)
+        if (_inlineAssignMode == 2)
+        {
+            DrawInlineNamingSection(px, ref py, iw, cust);
+        }
+        else if (cust == null)
+        {
+            GUI.Label(
+                new Rect(px, py, iw, 44f),
+                "Choose a customer above for Contract+DHCP or IPAM prefix. Naming mode works without a customer.",
+                _stHint);
+            py += 48f;
+        }
+        else if (_inlineAssignMode == 0)
         {
             GUI.Label(
                 new Rect(px, py, iw, 48f),
@@ -2976,6 +3007,12 @@ public static partial class IPAMOverlay
         }
         else if (LicenseManager.IsIPAMUnlocked)
         {
+            GUI.Label(
+                new Rect(px, py, iw, 36f),
+                "Created prefixes and Available free blocks (shows used/free). First free usable IPv4 in the chosen CIDR is assigned to each server.",
+                _stHint);
+            py += 40f;
+
             GUI.Label(new Rect(px, py, 72f, 22f), "Search", _stFormLabel);
             DrawIpamFormTextField(
                 new Rect(px + 76f, py, Mathf.Min(iw - 80f, 360f), 22f),
@@ -2984,16 +3021,9 @@ public static partial class IPAMOverlay
                 IpamTextFieldKind.Name);
             py += 28f;
 
-            var plist = BuildInlinePrefixPickOptions(_inlineIpamPrefixSearchBuf);
-            var reserveBottom = IsInlineAvailableBlockSelected() ? 248f : 160f;
-            var listH = Mathf.Clamp(_serverEditPopupRect.height - py - reserveBottom, 80f, 220f);
+            var plist = GetInlinePrefixPickOptions(_inlineIpamPrefixSearchBuf);
             const float rowH = 26f;
-            var innerW = iw - 16f;
-            var inner = new Rect(0f, 0f, innerW, Mathf.Max(listH, plist.Count * rowH));
-            _inlineIpamPrefixListScroll = SafeBeginScrollView(
-                new Rect(px, py, iw, listH),
-                _inlineIpamPrefixListScroll,
-                inner);
+            var rowW = Mathf.Max(120f, iw - 18f);
             for (var i = 0; i < plist.Count; i++)
             {
                 var opt = plist[i];
@@ -3008,17 +3038,18 @@ public static partial class IPAMOverlay
                     ? _stHint
                     : marked ? _stPrimaryBtn : _stMutedBtn;
                 if (ImguiButtonOnce(
-                        new Rect(0f, i * rowH, innerW, rowH - 2f),
+                        new Rect(px, py, rowW, rowH - 2f),
                         opt.Label,
                         930000 + i,
                         rowStyle))
                 {
                     SetInlineIpamPrefixPick(opt.PickKey ?? "");
                 }
+
+                py += rowH;
             }
 
-            SafeEndScrollView();
-            py += listH + 8f;
+            py += 4f;
 
             if (IsInlineAvailableBlockSelected())
             {
@@ -3064,11 +3095,6 @@ public static partial class IPAMOverlay
                 py += 32f;
             }
 
-            GUI.Label(
-                new Rect(px, py, iw, 36f),
-                "Created prefixes and Available free blocks (shows used/free). First free usable IPv4 in the chosen CIDR is assigned to each server.",
-                _stHint);
-            py += 40f;
         }
 
         if (!string.IsNullOrEmpty(_inlineAssignError))
@@ -3089,6 +3115,62 @@ public static partial class IPAMOverlay
         }
 
         py += 36f;
+    }
+
+    private static void ResetServerEditPopupScrollForModeChange()
+    {
+        _serverEditPopupScroll = Vector2.zero;
+        _serverEditPopupContentH = EstimateServerEditPopupContentHeight();
+        _inlineIpamPrefixListScroll = Vector2.zero;
+        InvalidateInlineIpamPrefixPickCache();
+    }
+
+    private static float EstimateServerEditPopupContentHeight()
+    {
+        CollectSelectedServersIntoScratch();
+        var n = SelectedServersScratch.Count;
+        var h = 120f;
+        if (n > 1)
+        {
+            h += 38f;
+        }
+        else
+        {
+            h += 44f;
+        }
+
+        h += 72f;
+        h += 120f;
+
+        if (_inlineAssignMode == 2)
+        {
+            h += 520f + Mathf.Min(SelectedServersScratch.Count, 32) * 22f;
+        }
+        else if (_inlineAssignMode == 1 && LicenseManager.IsIPAMUnlocked)
+        {
+            var plist = GetInlinePrefixPickOptions(_inlineIpamPrefixSearchBuf);
+            h += 72f + plist.Count * 26f;
+            if (IsInlineAvailableBlockSelected())
+            {
+                h += 120f;
+            }
+        }
+        else
+        {
+            h += 56f;
+        }
+
+        h += 52f;
+        if (n > 1)
+        {
+            h += 72f;
+        }
+        else
+        {
+            h += 52f;
+        }
+
+        return h;
     }
 
     private static void DrawServerEditPopupWindow(int windowId)
@@ -3119,10 +3201,25 @@ public static partial class IPAMOverlay
         }
 
         var px = 12f;
-        var py = 28f;
-        DrawServerEditPopupBody(px, ref py, w - 24f);
-
+        var iw = w - 24f;
         var err = DHCPManager.LastSetIpError;
+        var errReserve = !string.IsNullOrEmpty(err) ? 38f : 0f;
+        const float headerH = 28f;
+        var viewH = Mathf.Max(120f, h - headerH - errReserve - 4f);
+        var innerH = Mathf.Max(EstimateServerEditPopupContentHeight(), _serverEditPopupContentH, 1f);
+        var maxScrollY = Mathf.Max(0f, innerH - viewH);
+        _serverEditPopupScroll.y = Mathf.Clamp(_serverEditPopupScroll.y, 0f, maxScrollY);
+        var inner = new Rect(0f, 0f, iw, innerH);
+        SafeBeginScrollView(
+            new Rect(px, headerH, iw, viewH),
+            _serverEditPopupScroll,
+            inner);
+        var contentPy = 0f;
+        DrawServerEditPopupBody(0f, ref contentPy, iw);
+        _serverEditPopupContentH = Mathf.Max(_serverEditPopupContentH, contentPy + 16f);
+        _serverEditPopupScroll = SafeConsumeManualScrollPosition(_serverEditPopupScroll);
+        SafeEndScrollView();
+
         if (!string.IsNullOrEmpty(err))
         {
             GUI.Label(new Rect(px, h - 36f, w - 24f, 30f), err, _stError);
@@ -3137,7 +3234,8 @@ public static partial class IPAMOverlay
 
     private static void DrawServerEditPopupBody(float px, ref float py, float iw)
     {
-        var popupFullW = _serverEditPopupRect.width;
+        SafeScrollTryHandleWheel();
+        var popupFullW = iw + 24f;
         var n = SelectedServersScratch.Count;
 
         GUI.Label(
@@ -3188,18 +3286,7 @@ public static partial class IPAMOverlay
 
         DrawCustomerDropdownAssign(px, ref py, popupFullW);
         py += 4f;
-        if (_inlineAssignCustomer != null)
-        {
-            DrawInlineCustomerAssignSection(px, ref py, iw);
-        }
-        else
-        {
-            GUI.Label(
-                new Rect(px, py, iw, 44f),
-                "Choose a customer above to assign contract and addressing (Contract+DHCP or IPAM prefix). Nothing applies until you press Apply.",
-                _stHint);
-            py += 48f;
-        }
+        DrawInlineCustomerAssignSection(px, ref py, iw);
 
         if (n > 1)
         {

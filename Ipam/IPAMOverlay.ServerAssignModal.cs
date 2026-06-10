@@ -26,6 +26,18 @@ public static partial class IPAMOverlay
     {
         _inlineAssignCustomer = cb;
         _inlineAssignMode = 0;
+        if (cb != null)
+        {
+            _inlineNamingAbbrevBuf = NamingConventionStore.GetCustomerAbbreviation(
+                cb.customerID,
+                GetCustomerName(cb) ?? "");
+            var convId = NamingConventionStore.TryGetCustomerDefaultConventionId(cb.customerID);
+            var conv = NamingConventionStore.TryGetConventionById(convId);
+            if (conv != null)
+            {
+                LoadInlineNamingFromConvention(conv);
+            }
+        }
         _inlineIpamPrefixPickKey = "";
         _inlineIpamPrefixSearchBuf = "";
         _inlineIpamFreeBlockAnchorCidr = "";
@@ -49,6 +61,32 @@ public static partial class IPAMOverlay
         {
             _ipamFormFieldFocus = IpamFormFocusNone;
         }
+    }
+
+    internal static void InvalidateInlineIpamPrefixPickCache()
+    {
+        _inlineIpamPrefixPickCache = null;
+        _inlineIpamPrefixPickCacheQuery = "\u0001";
+        _inlineIpamPrefixPickCacheDeviceStamp = -1;
+        _inlineIpamPrefixPickCachePrefixRevision = -1;
+    }
+
+    private static IReadOnlyList<InlinePrefixPickOption> GetInlinePrefixPickOptions(string rawQuery)
+    {
+        var query = rawQuery ?? "";
+        if (_inlineIpamPrefixPickCache != null
+            && string.Equals(_inlineIpamPrefixPickCacheQuery, query, StringComparison.Ordinal)
+            && _inlineIpamPrefixPickCacheDeviceStamp == DeviceCacheStamp
+            && _inlineIpamPrefixPickCachePrefixRevision == IpamDataStore.DataRevision)
+        {
+            return _inlineIpamPrefixPickCache;
+        }
+
+        _inlineIpamPrefixPickCache = BuildInlinePrefixPickOptionsUncached(query);
+        _inlineIpamPrefixPickCacheQuery = query;
+        _inlineIpamPrefixPickCacheDeviceStamp = DeviceCacheStamp;
+        _inlineIpamPrefixPickCachePrefixRevision = IpamDataStore.DataRevision;
+        return _inlineIpamPrefixPickCache;
     }
 
     private static bool IsInlineAvailableBlockSelected()
@@ -166,6 +204,13 @@ public static partial class IPAMOverlay
     private static void ApplyInlineCustomerAssign()
     {
         _inlineAssignError = "";
+
+        if (_inlineAssignMode == 2)
+        {
+            ApplyInlineNamingAssign();
+            return;
+        }
+
         var cb = _inlineAssignCustomer;
         if (cb == null)
         {
@@ -197,6 +242,7 @@ public static partial class IPAMOverlay
                 SelectedServersScratch.Clear();
                 SelectedServersScratch.AddRange(servers);
                 ApplyCustomerAssignToSelection(cb);
+                TryAutoApplyNamingAfterAssign(cb, servers);
                 ClearInlineCustomerAssign();
                 return;
 
@@ -253,6 +299,7 @@ public static partial class IPAMOverlay
                     LoadOctetsFromIp(DHCPManager.GetServerIP(servers[0]));
                 }
 
+                TryAutoApplyNamingAfterAssign(cb, servers);
                 ClearInlineCustomerAssign();
                 return;
 
@@ -405,12 +452,13 @@ public static partial class IPAMOverlay
         return tenant.Length > 24 ? tenant.Substring(0, 24).Trim() : tenant;
     }
 
-    private static List<InlinePrefixPickOption> BuildInlinePrefixPickOptions(string rawQuery)
+    private static List<InlinePrefixPickOption> BuildInlinePrefixPickOptionsUncached(string rawQuery)
     {
         var q = (rawQuery ?? "").Trim();
         var ql = q.ToLowerInvariant();
         var all = IpamDataStore.GetPrefixes();
         var existingCidrs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var childrenByParentId = new Dictionary<string, List<IpamPrefixEntry>>(StringComparer.Ordinal);
         foreach (var p in all)
         {
             if (p == null)
@@ -423,7 +471,26 @@ public static partial class IPAMOverlay
             {
                 existingCidrs.Add(ec);
             }
+
+            var parentId = (p.ParentId ?? "").Trim();
+            if (!string.IsNullOrEmpty(parentId))
+            {
+                if (!childrenByParentId.TryGetValue(parentId, out var kids))
+                {
+                    kids = new List<IpamPrefixEntry>();
+                    childrenByParentId[parentId] = kids;
+                }
+
+                kids.Add(p);
+            }
         }
+
+        BuildInlinePrefixServerUtilizationMaps(
+            all,
+            childrenByParentId,
+            out var exclusiveByPrefixId,
+            out var usedInFolderCidr,
+            out var serverIps);
 
         var sortable = new List<(ulong Key, InlinePrefixPickOption Opt)>();
         var seenFree = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -441,14 +508,14 @@ public static partial class IPAMOverlay
                 continue;
             }
 
-            var kids = all
-                .Where(c => c != null && string.Equals(c.ParentId, p.Id, StringComparison.Ordinal))
-                .ToList();
+            var pid = p.Id ?? "";
+            childrenByParentId.TryGetValue(pid, out var kids);
+            kids ??= new List<IpamPrefixEntry>();
             var hasChildren = kids.Count > 0;
             var cap = RouteMath.CountIpamUsableHosts(cidr);
             var used = hasChildren
-                ? CountAssignedServersWithIpInCidr(cidr)
-                : CountAssignedServersExclusiveToPrefix(p, all);
+                ? usedInFolderCidr.TryGetValue(cidr, out var folderUsed) ? folderUsed : 0
+                : exclusiveByPrefixId.TryGetValue(pid, out var leafUsed) ? leafUsed : 0;
             var free = Math.Max(0, cap - used);
             var name = (p.Name ?? "").Trim();
             var namePart = string.IsNullOrEmpty(name) ? "" : $" ({name})";
@@ -458,7 +525,7 @@ public static partial class IPAMOverlay
             var prefixLabel = $"{cidr}{namePart}  —  {status}";
             sortable.Add((
                 SortKeyForIpv4Cidr(cidr),
-                new InlinePrefixPickOption("id:" + (p.Id ?? ""), prefixLabel)));
+                new InlinePrefixPickOption("id:" + pid, prefixLabel)));
 
             // Free gaps only under folder prefixes — leaf rows already represent that CIDR.
             if (hasChildren
@@ -475,7 +542,7 @@ public static partial class IPAMOverlay
                     }
 
                     var fcCap = RouteMath.CountIpamUsableHosts(fcTrim);
-                    var fcUsed = CountAssignedServersWithIpInCidr(fcTrim);
+                    var fcUsed = CountServerIpsInCidr(serverIps, fcTrim);
                     var fcFree = Math.Max(0, fcCap - fcUsed);
                     if (fcFree <= 0)
                     {
@@ -507,6 +574,91 @@ public static partial class IPAMOverlay
         }
 
         return opts;
+    }
+
+    private static void BuildInlinePrefixServerUtilizationMaps(
+        IReadOnlyList<IpamPrefixEntry> all,
+        Dictionary<string, List<IpamPrefixEntry>> childrenByParentId,
+        out Dictionary<string, int> exclusiveByPrefixId,
+        out Dictionary<string, int> usedInFolderCidr,
+        out List<string> serverIps)
+    {
+        exclusiveByPrefixId = new Dictionary<string, int>(StringComparer.Ordinal);
+        usedInFolderCidr = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        serverIps = new List<string>();
+
+        var folderCidrs = new List<string>();
+        foreach (var p in all)
+        {
+            if (p == null)
+            {
+                continue;
+            }
+
+            var pid = p.Id ?? "";
+            if (childrenByParentId.TryGetValue(pid, out var kids) && kids.Count > 0)
+            {
+                var cidr = (p.Cidr ?? "").Trim();
+                if (!string.IsNullOrEmpty(cidr))
+                {
+                    folderCidrs.Add(cidr);
+                    usedInFolderCidr[cidr] = 0;
+                }
+            }
+        }
+
+        foreach (var s in _cachedServers)
+        {
+            if (s == null)
+            {
+                continue;
+            }
+
+            var ip = DHCPManager.GetServerIP(s);
+            if (string.IsNullOrWhiteSpace(ip) || ip == "0.0.0.0")
+            {
+                continue;
+            }
+
+            ip = ip.Trim();
+            serverIps.Add(ip);
+
+            if (TryGetMostSpecificContainingPrefix(ip, all, out var winner) && winner != null)
+            {
+                var wid = winner.Id ?? "";
+                exclusiveByPrefixId.TryGetValue(wid, out var ex);
+                exclusiveByPrefixId[wid] = ex + 1;
+            }
+
+            for (var i = 0; i < folderCidrs.Count; i++)
+            {
+                var fc = folderCidrs[i];
+                if (RouteMath.IsIpv4InCidr(ip, fc))
+                {
+                    usedInFolderCidr[fc]++;
+                }
+            }
+        }
+    }
+
+    private static int CountServerIpsInCidr(List<string> serverIps, string cidr)
+    {
+        if (serverIps == null || serverIps.Count == 0 || string.IsNullOrWhiteSpace(cidr))
+        {
+            return 0;
+        }
+
+        cidr = cidr.Trim();
+        var n = 0;
+        for (var i = 0; i < serverIps.Count; i++)
+        {
+            if (RouteMath.IsIpv4InCidr(serverIps[i], cidr))
+            {
+                n++;
+            }
+        }
+
+        return n;
     }
 
     private static ulong SortKeyForIpv4Cidr(string cidr)

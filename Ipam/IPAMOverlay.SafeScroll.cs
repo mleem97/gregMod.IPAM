@@ -11,18 +11,33 @@ namespace DHCPSwitches;
 public static partial class IPAMOverlay
 {
     private const float SafeScrollScrollbarThickness = 14f;
-    private const float SafeScrollWheelStep = 20f;
+    private const float SafeScrollWheelStep = 48f;
     private const float SafeScrollMinThumbSize = 24f;
     private const int SafeScrollThumbControlBase = unchecked((int)0xD1C0_7000);
 
     private static bool _safeScrollManualFallback;
     private static bool _safeScrollFallbackLogged;
     private static readonly Stack<SafeScrollFrame> _safeScrollStack = new Stack<SafeScrollFrame>(8);
+    private static readonly List<ManualScrollWheelHandler> _manualScrollWheelHandlers = new List<ManualScrollWheelHandler>(8);
 
     private struct SafeScrollFrame
     {
         public bool ManualMode;
         public int GroupDepth;
+        public ManualScrollAxisState ScrollYAxis;
+        public ManualScrollAxisState ScrollXAxis;
+    }
+
+    private sealed class ManualScrollWheelHandler
+    {
+        public Rect Viewport;
+        public ManualScrollAxisState Axis;
+    }
+
+    private sealed class ManualScrollAxisState
+    {
+        public float Value;
+        public float MaxValue;
     }
 
     internal static Vector2 SafeBeginScrollView(Rect position, Vector2 scrollPosition, Rect viewRect)
@@ -90,6 +105,39 @@ public static partial class IPAMOverlay
                 }
             }
         }
+
+        _manualScrollWheelHandlers.Clear();
+    }
+
+    internal static void SafeScrollTryHandleWheel()
+    {
+        TryApplyScrollWheelToDeepestHandler();
+    }
+
+    internal static Vector2 SafeConsumeManualScrollPosition(Vector2 scrollPosition)
+    {
+        if (_safeScrollStack.Count == 0)
+        {
+            return scrollPosition;
+        }
+
+        var top = _safeScrollStack.Peek();
+        if (!top.ManualMode)
+        {
+            return scrollPosition;
+        }
+
+        if (top.ScrollXAxis != null)
+        {
+            scrollPosition.x = top.ScrollXAxis.Value;
+        }
+
+        if (top.ScrollYAxis != null)
+        {
+            scrollPosition.y = top.ScrollYAxis.Value;
+        }
+
+        return scrollPosition;
     }
 
     internal static void SafeEndScrollView()
@@ -102,6 +150,11 @@ public static partial class IPAMOverlay
         var top = _safeScrollStack.Pop();
         if (top.ManualMode)
         {
+            if (_manualScrollWheelHandlers.Count > 0)
+            {
+                _manualScrollWheelHandlers.RemoveAt(_manualScrollWheelHandlers.Count - 1);
+            }
+
             for (var i = 0; i < top.GroupDepth; i++)
             {
                 try
@@ -144,17 +197,26 @@ public static partial class IPAMOverlay
         var maxScrollY = Mathf.Max(0f, view.height - viewport.height);
         var maxScrollX = Mathf.Max(0f, view.width - viewport.width);
 
-        scroll = ApplyManualScrollWheel(viewport, scroll, maxScrollX, maxScrollY, needsVertical, needsHorizontal);
+        ManualScrollAxisState scrollYState = null;
+        ManualScrollAxisState scrollXState = null;
 
         if (needsVertical)
         {
+            scrollYState = new ManualScrollAxisState { Value = scroll.y, MaxValue = maxScrollY };
+            _manualScrollWheelHandlers.Add(new ManualScrollWheelHandler
+            {
+                Viewport = viewport,
+                Axis = scrollYState,
+            });
+            TryApplyScrollWheelToDeepestHandler();
+
             var trackRect = new Rect(
                 position.xMax - scrollbarW,
                 position.y,
                 scrollbarW,
                 viewport.height);
-            scroll.y = DrawCustomScrollbar(trackRect, scroll.y, viewport.height, view.height, false, 0);
-            scroll.y = Mathf.Clamp(scroll.y, 0f, maxScrollY);
+            scrollYState.Value = DrawCustomScrollbar(trackRect, scrollYState.Value, viewport.height, view.height, false, 0);
+            scrollYState.Value = Mathf.Clamp(scrollYState.Value, 0f, maxScrollY);
         }
         else
         {
@@ -163,17 +225,28 @@ public static partial class IPAMOverlay
 
         if (needsHorizontal)
         {
+            scrollXState = new ManualScrollAxisState { Value = scroll.x, MaxValue = maxScrollX };
             var trackRect = new Rect(
                 position.x,
                 position.yMax - scrollbarH,
                 viewport.width,
                 scrollbarH);
-            scroll.x = DrawCustomScrollbar(trackRect, scroll.x, viewport.width, view.width, true, 1);
-            scroll.x = Mathf.Clamp(scroll.x, 0f, maxScrollX);
+            scrollXState.Value = DrawCustomScrollbar(trackRect, scrollXState.Value, viewport.width, view.width, true, 1);
+            scrollXState.Value = Mathf.Clamp(scrollXState.Value, 0f, maxScrollX);
         }
         else
         {
             scroll.x = 0f;
+        }
+
+        if (scrollYState != null)
+        {
+            scroll.y = scrollYState.Value;
+        }
+
+        if (scrollXState != null)
+        {
+            scroll.x = scrollXState.Value;
         }
 
         var depth = 0;
@@ -201,54 +274,51 @@ public static partial class IPAMOverlay
             depth = 0;
         }
 
-        _safeScrollStack.Push(new SafeScrollFrame { ManualMode = true, GroupDepth = depth });
+        _safeScrollStack.Push(new SafeScrollFrame
+        {
+            ManualMode = true,
+            GroupDepth = depth,
+            ScrollYAxis = scrollYState,
+            ScrollXAxis = scrollXState,
+        });
+
         return scroll;
     }
 
-    private static Vector2 ApplyManualScrollWheel(
-        Rect viewport,
-        Vector2 scroll,
-        float maxScrollX,
-        float maxScrollY,
-        bool needsVertical,
-        bool needsHorizontal)
+    private static void TryApplyScrollWheelToDeepestHandler()
     {
         if (Event.current == null || Event.current.type != EventType.ScrollWheel || !TryConsumeScrollWheelThisFrame())
         {
-            return scroll;
+            return;
         }
 
         var mouse = Event.current.mousePosition;
-        if (!viewport.Contains(mouse))
+        for (var i = _manualScrollWheelHandlers.Count - 1; i >= 0; i--)
         {
-            return scroll;
-        }
+            var handler = _manualScrollWheelHandlers[i];
+            if (!handler.Viewport.Contains(mouse))
+            {
+                continue;
+            }
 
-        var delta = Event.current.delta.y * SafeScrollWheelStep;
-        try
-        {
-            Event.current.Use();
-        }
-        catch
-        {
-            // ignore
-        }
+            var delta = Event.current.delta.y * SafeScrollWheelStep;
+            if (Mathf.Abs(delta) < 0.001f)
+            {
+                return;
+            }
 
-        if (Mathf.Abs(delta) < 0.001f)
-        {
-            return scroll;
-        }
+            handler.Axis.Value = Mathf.Clamp(handler.Axis.Value + delta, 0f, handler.Axis.MaxValue);
+            try
+            {
+                Event.current.Use();
+            }
+            catch
+            {
+                // ignore
+            }
 
-        if (needsVertical)
-        {
-            scroll.y = Mathf.Clamp(scroll.y + delta, 0f, maxScrollY);
+            return;
         }
-        else if (needsHorizontal)
-        {
-            scroll.x = Mathf.Clamp(scroll.x + delta, 0f, maxScrollX);
-        }
-
-        return scroll;
     }
 
     private static float DrawCustomScrollbar(
@@ -304,7 +374,7 @@ public static partial class IPAMOverlay
                     {
                         var clickPos = horizontal ? e.mousePosition.x : e.mousePosition.y;
                         var thumbPos = horizontal ? thumbRect.x : thumbRect.y;
-                        var step = viewportSize * 0.9f;
+                        var step = viewportSize * 0.33f;
                         value = Mathf.Clamp(value + (clickPos < thumbPos ? -step : step), 0f, maxValue);
                         e.Use();
                     }
@@ -320,6 +390,7 @@ public static partial class IPAMOverlay
                     var thumbCorner = Mathf.Clamp(current - _safeScrollDragGrabOffset, anchor, anchor + travel);
                     var t = (thumbCorner - anchor) / travel;
                     value = Mathf.Clamp(t * maxValue, 0f, maxValue);
+                    SyncThumbDragToActiveAxis(horizontal, value);
                     e.Use();
                 }
 
@@ -344,6 +415,26 @@ public static partial class IPAMOverlay
         }
 
         return value;
+    }
+
+    private static void SyncThumbDragToActiveAxis(bool horizontal, float value)
+    {
+        if (_safeScrollStack.Count == 0)
+        {
+            return;
+        }
+
+        var top = _safeScrollStack.Peek();
+        if (!top.ManualMode)
+        {
+            return;
+        }
+
+        var axis = horizontal ? top.ScrollXAxis : top.ScrollYAxis;
+        if (axis != null)
+        {
+            axis.Value = value;
+        }
     }
 
     private static float _safeScrollDragGrabOffset;

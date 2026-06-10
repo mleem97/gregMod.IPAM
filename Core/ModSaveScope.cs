@@ -106,6 +106,7 @@ internal static class ModSaveScope
             WipeModUserDataFiles();
             IpamDataStore.ResetForNewSaveSession();
             RackDataStore.ResetForNewSaveSession();
+            NamingConventionStore.ResetForNewSaveSession();
         }
 
         SaveBinding(_currentScopeId);
@@ -116,6 +117,7 @@ internal static class ModSaveScope
     {
         TryDelete(GetModFilePath("ipam_data.json"));
         TryDelete(GetModFilePath("rack_data.json"));
+        TryDelete(GetModFilePath("naming_data.json"));
     }
 
     private static void TryDelete(string path)

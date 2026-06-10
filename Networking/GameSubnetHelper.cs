@@ -46,10 +46,17 @@ public static class GameSubnetHelper
 
     private static readonly string[] AssetMgmtDeviceLineNameHints =
     {
+        "serverName", "ServerName", "txtName", "TxtName", "pendingDisplayName", "PendingDisplayName",
         "configuredServerName", "ConfiguredServerName", "serverDisplayName", "ServerDisplayName",
         "deviceDisplayName", "DeviceDisplayName", "lineCaption", "LineCaption", "captionText", "CaptionText",
         "customName", "CustomName", "userLabel", "UserLabel", "editedName", "EditedName",
         "serverNickname", "ServerNickname", "displayLabel", "DisplayLabel", "rackName", "RackName",
+        "deviceName", "DeviceName", "displayName", "DisplayName", "labelText", "LabelText",
+    };
+
+    private static readonly string[] AssetMgmtDeviceLineUiTextHints =
+    {
+        "deviceNameText", "DeviceNameText", "labelText", "LabelText", "txtName", "TxtName", "lineText", "LineText",
     };
 
     /// <summary>
@@ -1449,6 +1456,63 @@ public static class GameSubnetHelper
         }
     }
 
+    private static readonly string[] AssetMgmtDeviceLineRefreshMethodNames =
+    {
+        "UpdateText", "UpdateDisplay", "RefreshBidirectionalLabel", "RefreshProtocolLabel", "ChangeText",
+    };
+
+    /// <summary>One scene scan mapping rack rows to their <see cref="Server"/> instance IDs (for batch naming).</summary>
+    public static Dictionary<int, AssetManagementDeviceLine> BuildAssetManagementDeviceLineByServerInstanceId()
+    {
+        var map = new Dictionary<int, AssetManagementDeviceLine>();
+        try
+        {
+            var lines = UnityEngine.Object.FindObjectsOfType<AssetManagementDeviceLine>(true);
+            if (lines == null)
+            {
+                return map;
+            }
+
+            foreach (var line in lines)
+            {
+                if (line == null)
+                {
+                    continue;
+                }
+
+                Server lineServer = null;
+                try
+                {
+                    lineServer = line.server;
+                }
+                catch
+                {
+                    lineServer = null;
+                }
+
+                if (lineServer == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    map[lineServer.GetInstanceID()] = line;
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
+            }
+        }
+        catch
+        {
+            // type or field mismatch across game versions
+        }
+
+        return map;
+    }
+
     /// <summary>Rebuilds the set of servers currently tied to an asset-management row (O(n) scene scan).</summary>
     public static void RebuildAssetManagementDeviceLineServerCache()
     {
@@ -1531,6 +1595,303 @@ public static class GameSubnetHelper
         {
             return false;
         }
+    }
+
+    /// <summary>Writes the rack/contract row display name when the game exposes writable fields on <see cref="AssetManagementDeviceLine"/>.</summary>
+    public static bool TrySetServerAssetLineDisplayName(Server server, string displayName)
+    {
+        return TrySetServerAssetLineDisplayName(server, displayName, null);
+    }
+
+    /// <summary>
+    /// Writes the rack row display name. Pass a map from <see cref="BuildAssetManagementDeviceLineByServerInstanceId"/>
+    /// when renaming many devices to avoid repeated scene scans.
+    /// </summary>
+    public static bool TrySetServerAssetLineDisplayName(
+        Server server,
+        string displayName,
+        IReadOnlyDictionary<int, AssetManagementDeviceLine> lineByServerInstanceId)
+    {
+        if (server == null || string.IsNullOrWhiteSpace(displayName))
+        {
+            return false;
+        }
+
+        displayName = displayName.Trim();
+        try
+        {
+            if (lineByServerInstanceId != null
+                && lineByServerInstanceId.TryGetValue(server.GetInstanceID(), out var mappedLine)
+                && mappedLine != null)
+            {
+                return TrySetAssetManagementDeviceLineDisplayName(mappedLine, server, displayName);
+            }
+
+            var lines = UnityEngine.Object.FindObjectsOfType<AssetManagementDeviceLine>(true);
+            if (lines == null)
+            {
+                return false;
+            }
+
+            var wrote = false;
+            foreach (var line in lines)
+            {
+                if (line == null)
+                {
+                    continue;
+                }
+
+                Server lineServer = null;
+                try
+                {
+                    lineServer = line.server;
+                }
+                catch
+                {
+                    lineServer = null;
+                }
+
+                if (lineServer == null || lineServer.GetInstanceID() != server.GetInstanceID())
+                {
+                    continue;
+                }
+
+                wrote |= TrySetAssetManagementDeviceLineDisplayName(line, lineServer, displayName);
+            }
+
+            return wrote;
+        }
+        catch
+        {
+            // type or field mismatch across game versions
+        }
+
+        return false;
+    }
+
+    private static bool TrySetAssetManagementDeviceLineDisplayName(
+        AssetManagementDeviceLine line,
+        Server lineServer,
+        string displayName)
+    {
+        if (line == null || lineServer == null || string.IsNullOrWhiteSpace(displayName))
+        {
+            return false;
+        }
+
+        displayName = displayName.Trim();
+        if (!TryWriteConfiguredNameToAssetManagementDeviceLine(line, displayName))
+        {
+            return false;
+        }
+
+        RefreshAssetManagementDeviceLineUi(line);
+        try
+        {
+            ServerAssetLineConfiguredDisplayNameByInstanceId[lineServer.GetInstanceID()] = displayName;
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        return true;
+    }
+
+    private static void RefreshAssetManagementDeviceLineUi(AssetManagementDeviceLine line)
+    {
+        if (line == null)
+        {
+            return;
+        }
+
+        foreach (var methodName in AssetMgmtDeviceLineRefreshMethodNames)
+        {
+            TryInvokeParameterlessOnObject(line, methodName);
+        }
+    }
+
+    /// <summary>
+    /// After <see cref="RebuildAssetManagementDeviceLineServerCache"/> reloads rack strings from the scene, re-stamp
+    /// IPAM naming overrides so list UI stays consistent until the game persists the new label.
+    /// </summary>
+    public static void ReapplyNamingOverridesToAssetLineCache(System.Collections.Generic.IEnumerable<Server> servers)
+    {
+        if (servers == null)
+        {
+            return;
+        }
+
+        foreach (var server in servers)
+        {
+            if (server == null)
+            {
+                continue;
+            }
+
+            var name = NamingConventionStore.TryGetOverrideName(server);
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            try
+            {
+                ServerAssetLineConfiguredDisplayNameByInstanceId[server.GetInstanceID()] = name.Trim();
+            }
+            catch
+            {
+                // Il2Cpp
+            }
+        }
+    }
+
+    private static bool TryWriteConfiguredNameToAssetManagementDeviceLine(AssetManagementDeviceLine line, string value)
+    {
+        if (line == null || string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        value = value.Trim();
+        var wrote = TryWriteStringMembersOnObject(line, AssetMgmtDeviceLineNameHints, value);
+        wrote |= TryWriteUiTextMembersOnObject(line, AssetMgmtDeviceLineUiTextHints, value);
+        return wrote;
+    }
+
+    private static bool TryWriteStringMembersOnObject(object o, string[] names, string value)
+    {
+        if (o == null || names == null)
+        {
+            return false;
+        }
+
+        var wrote = false;
+        for (var bt = o.GetType(); bt != null && bt != typeof(object); bt = bt.BaseType)
+        {
+            foreach (var name in names)
+            {
+                try
+                {
+                    var p = bt.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (p != null && p.CanWrite && p.PropertyType == typeof(string))
+                    {
+                        p.SetValue(o, value);
+                        wrote = true;
+                    }
+
+                    var f = bt.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (f != null && f.FieldType == typeof(string))
+                    {
+                        f.SetValue(o, value);
+                        wrote = true;
+                    }
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
+            }
+        }
+
+        return wrote;
+    }
+
+    private static bool TryWriteUiTextMembersOnObject(object o, string[] memberNames, string value)
+    {
+        if (o == null || memberNames == null)
+        {
+            return false;
+        }
+
+        var wrote = false;
+        for (var bt = o.GetType(); bt != null && bt != typeof(object); bt = bt.BaseType)
+        {
+            foreach (var memberName in memberNames)
+            {
+                try
+                {
+                    var p = bt.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (p != null && p.CanRead)
+                    {
+                        wrote |= TrySetTextPropertyOnUiComponent(p.GetValue(o), value);
+                    }
+
+                    var f = bt.GetField(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (f != null)
+                    {
+                        wrote |= TrySetTextPropertyOnUiComponent(f.GetValue(o), value);
+                    }
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
+            }
+        }
+
+        return wrote;
+    }
+
+    private static bool TryInvokeParameterlessOnObject(object o, string methodName)
+    {
+        if (o == null || string.IsNullOrEmpty(methodName))
+        {
+            return false;
+        }
+
+        for (var bt = o.GetType(); bt != null && bt != typeof(object); bt = bt.BaseType)
+        {
+            try
+            {
+                var m = bt.GetMethod(
+                    methodName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly,
+                    null,
+                    Type.EmptyTypes,
+                    null);
+                if (m != null && m.ReturnType == typeof(void) && !m.IsAbstract)
+                {
+                    m.Invoke(o, null);
+                    return true;
+                }
+            }
+            catch
+            {
+                // Il2Cpp
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TrySetTextPropertyOnUiComponent(object textComponent, string value)
+    {
+        if (textComponent == null || string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        for (var bt = textComponent.GetType(); bt != null && bt != typeof(object); bt = bt.BaseType)
+        {
+            var textProp = bt.GetProperty(
+                "text",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            if (textProp != null && textProp.CanWrite && textProp.PropertyType == typeof(string))
+            {
+                try
+                {
+                    textProp.SetValue(textComponent, value);
+                    return true;
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
+            }
+        }
+
+        return false;
     }
 
     private static bool TryReadConfiguredNameFromAssetManagementDeviceLine(AssetManagementDeviceLine line, out string value)

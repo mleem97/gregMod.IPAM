@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
@@ -764,6 +765,12 @@ internal static class DeviceInventoryReflection
             return StripCloneSuffix(s.Trim());
         }
 
+        var overrideName = NamingConventionStore.TryGetOverrideName(o);
+        if (!string.IsNullOrWhiteSpace(overrideName))
+        {
+            return StripCloneSuffix(overrideName.Trim());
+        }
+
         var baseName = StripCloneSuffix(o.name ?? "");
         if (o is Server srv)
         {
@@ -771,6 +778,52 @@ internal static class DeviceInventoryReflection
         }
 
         return baseName;
+    }
+
+    internal static bool InventorySearchQueryMatches(string query, string text)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var trimmed = query.Trim();
+        if (text.IndexOf(trimmed, StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return true;
+        }
+
+        var normalizedQuery = NormalizeInventorySearchText(trimmed);
+        if (normalizedQuery.Length == 0)
+        {
+            return true;
+        }
+
+        return NormalizeInventorySearchText(text).IndexOf(normalizedQuery, StringComparison.Ordinal) >= 0;
+    }
+
+    internal static string NormalizeInventorySearchText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return "";
+        }
+
+        var sb = new StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            if (char.IsLetterOrDigit(c))
+            {
+                sb.Append(char.ToLowerInvariant(c));
+            }
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>Prefab name is shared by every clone (e.g. Server.Yellow1); append Unity instance id like switch names in-scene.</summary>

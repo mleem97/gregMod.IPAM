@@ -952,7 +952,7 @@ public static partial class IPAMOverlay
             return true;
         }
 
-        return (displayName ?? "").IndexOf(query.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
+        return DeviceInventoryReflection.InventorySearchQueryMatches(query, displayName);
     }
 
     private static List<int> BuildFilteredServerIndices(string query)

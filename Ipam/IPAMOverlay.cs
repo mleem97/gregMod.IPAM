@@ -354,6 +354,13 @@ public static partial class IPAMOverlay
     private const int IpamFormFocusDevicesRouterSearch = 31;
     private const int IpamFormFocusDevicesFirewallSearch = 32;
     private const int IpamFormFocusDevicesServerSearch = 33;
+    private const int IpamFormFocusInlineNamingPattern = 40;
+    private const int IpamFormFocusInlineNamingAbbrev = 41;
+    private const int IpamFormFocusInlineNamingSeqStart = 42;
+    private const int IpamFormFocusInlineNamingSaveName = 43;
+    private const int IpamFormFocusInlineNamingConvName = 44;
+    private const int IpamFormFocusInlineNamingManualRow = 45;
+    private const int IpamFormFocusInlineNamingManualCol = 46;
     private static int _ipamFormFieldFocus = IpamFormFocusNone;
 
     private static string _devicesTabSwitchSearchBuf = "";
@@ -365,10 +372,12 @@ public static partial class IPAMOverlay
 
     /// <summary>After clicking the rack &quot;Start U&quot; box, full replace on first key (highlight drawn by IPAM form text field).</summary>
     private static bool _ipamFormRackMountStartUSelectAll;
+    /// <summary>After clicking the naming pattern box, backspace or first key replaces the whole pattern.</summary>
+    private static bool _ipamFormNamingPatternSelectAll;
 
     /// <summary>When non-null, the "Assign + address" block is shown below the customer dropdown in the server edit popup.</summary>
     private static CustomerBase _inlineAssignCustomer;
-    /// <summary>0 = Contract+DHCP batch; 1 = pick IPAM prefix and allocate first free IP.</summary>
+    /// <summary>0 = Contract+DHCP batch; 1 = pick IPAM prefix; 2 = naming convention.</summary>
     private static int _inlineAssignMode;
     private static string _inlineIpamPrefixPickKey = "";
     private static string _inlineIpamPrefixSearchBuf = "";
@@ -379,11 +388,18 @@ public static partial class IPAMOverlay
     private static Vector2 _inlineIpamPrefixListScroll;
     private static string _inlineAssignError = "";
 
+    private static List<InlinePrefixPickOption> _inlineIpamPrefixPickCache;
+    private static string _inlineIpamPrefixPickCacheQuery = "\u0001";
+    private static int _inlineIpamPrefixPickCacheDeviceStamp = -1;
+    private static int _inlineIpamPrefixPickCachePrefixRevision = -1;
+
     /// <summary>User closed the floating server editor; cleared when the server selection set changes.</summary>
     private static bool _serverEditPopupDismissed = true;
 
     private static int _serverEditPopupSelectionSig = int.MinValue;
-    private static Rect _serverEditPopupRect = new(120f, 80f, 580f, 680f);
+    private static Rect _serverEditPopupRect = new(120f, 48f, 580f, 820f);
+    private static Vector2 _serverEditPopupScroll;
+    private static float _serverEditPopupContentH;
 
     /// <summary>When set, IP addresses tab lists only servers whose IP lies in this CIDR.</summary>
     private static string _ipamIpAddressFilterCidr;
@@ -682,7 +698,27 @@ public static partial class IPAMOverlay
         }
 
         _serverEditPopupDismissed = false;
+        EnsureServerEditPopupFitsScreen();
+        _serverEditPopupScroll = Vector2.zero;
+        _serverEditPopupContentH = EstimateServerEditPopupContentHeight();
         RecomputeContentHeight();
+    }
+
+    private static void EnsureServerEditPopupFitsScreen()
+    {
+        var targetH = Mathf.Clamp(Screen.height * 0.88f, 560f, 980f);
+        var targetW = Mathf.Clamp(580f, 480f, Screen.width - 24f);
+        _serverEditPopupRect.width = targetW;
+        _serverEditPopupRect.height = targetH;
+        if (_serverEditPopupRect.x + _serverEditPopupRect.width > Screen.width - 8f
+            || _serverEditPopupRect.y + _serverEditPopupRect.height > Screen.height - 8f
+            || _serverEditPopupRect.height < targetH * 0.85f)
+        {
+            _serverEditPopupRect.x = (Screen.width - _serverEditPopupRect.width) * 0.5f;
+            _serverEditPopupRect.y = Mathf.Max(8f, (Screen.height - _serverEditPopupRect.height) * 0.5f);
+        }
+
+        ClampServerEditPopupRectIntoView();
     }
 
     /// <summary>IPAM → IP addresses tab, filtered to a host (/32) or prefix CIDR.</summary>

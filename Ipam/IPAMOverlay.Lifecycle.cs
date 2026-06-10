@@ -118,6 +118,7 @@ public static partial class IPAMOverlay
         _iopsCalculatorOpen = false;
         _customersTabAddServerWizardOpen = false;
         _serverEditPopupDismissed = true;
+        _serverEditPopupScroll = Vector2.zero;
         _customerDropdownOpen = false;
         _ipamDevicesSwitchPageMenuOpen = false;
         _ipamDevicesServerPageMenuOpen = false;
@@ -148,6 +149,7 @@ public static partial class IPAMOverlay
             _nextListRefreshTime = t + ListRefreshInterval;
             _cachedSwitches = FilterAlive(UnityEngine.Object.FindObjectsOfType<NetworkSwitch>());
             _cachedServers = FilterAlive(UnityEngine.Object.FindObjectsOfType<Server>());
+            _deviceCacheStamp++;
             GameSubnetHelper.RebuildAssetManagementDeviceLineServerCache();
             var sc = _cachedServers.Length;
             var swc = _cachedSwitches.Length;
@@ -440,8 +442,14 @@ public static partial class IPAMOverlay
         }
     }
 
+    private static int _deviceCacheStamp;
+
+    internal static int DeviceCacheStamp => _deviceCacheStamp;
+
     public static void InvalidateDeviceCache()
     {
+        _deviceCacheStamp++;
+        InvalidateInlineIpamPrefixPickCache();
         _nextListRefreshTime = 0f;
         _nextEolSnapshotRefreshTime = 0f;
         _nextSubnetSceneRefreshTime = 0f;
