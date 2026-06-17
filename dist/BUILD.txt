@@ -1,1 +1,1 @@
-DHCP and IPAM.dll — Release 0.3.7 (MelonLoader). Copy into the game Mods folder.
+DHCP and IPAM.dll — Release 0.3.8 (MelonLoader). Copy into the game Mods folder.

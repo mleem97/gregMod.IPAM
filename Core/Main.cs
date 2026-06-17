@@ -25,6 +25,8 @@ public class DHCPSwitchesMod : MelonMod
     private static MelonPreferences_Category _prefs;
     private static MelonPreferences_Entry<float> _prefUiFontScale;
 
+    private static int _modSaveScopeSceneHandle = -1;
+
     public override void OnInitializeMelon()
     {
         try
@@ -55,7 +57,7 @@ public class DHCPSwitchesMod : MelonMod
             InputSystemMouseBlockPatches.TryApply(harmony);
 
             LoggerInstance.Msg(
-                "DHCP Switches & IPAM loaded. F1 = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles or Ctrl+D = lock (debug). Rack switch/router red menu = CLI, or IPAM → device → Open CLI.");
+                "DHCP Switches & IPAM loaded. F1 = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles. Rack switch/router red menu = CLI, or IPAM → device → Open CLI.");
             if (!string.IsNullOrEmpty(ModDebugLog.DiagnosticLogPath))
             {
                 LoggerInstance.Msg(
@@ -116,8 +118,6 @@ public class DHCPSwitchesMod : MelonMod
             {
                 DHCPManager.AssignAllServers();
             }
-
-            LicenseManager.HandleDebugUnlock();
         }
 
         if (!IPAMOverlay.IsVisible)
@@ -126,6 +126,36 @@ public class DHCPSwitchesMod : MelonMod
         }
 
         IPAMOverlay.TickIpamGameInputSuppression();
+    }
+
+    public override void OnSceneWasLoaded(int buildIndex, string sceneName)
+    {
+        TryNotifyModSaveScopeSceneChange();
+    }
+
+    internal static void TryNotifyModSaveScopeSceneChange()
+    {
+        try
+        {
+            var scene = SceneManager.GetActiveScene();
+            if (!scene.IsValid())
+            {
+                return;
+            }
+
+            var handle = scene.handle;
+            if (handle == _modSaveScopeSceneHandle)
+            {
+                return;
+            }
+
+            _modSaveScopeSceneHandle = handle;
+            ModSaveScope.NotifySceneLoaded();
+        }
+        catch
+        {
+            // Il2Cpp: scene handle can be invalid during boot or unload transitions.
+        }
     }
 }
 
@@ -141,7 +171,7 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
     {
     }
 
-    private int _modSaveScopeSceneHandle = -1;
+    private int _deferredInitialSceneSyncFrames = 1;
 
     private void Awake()
     {
@@ -160,11 +190,13 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
 
     private void Update()
     {
-        var scene = SceneManager.GetActiveScene();
-        if (scene.handle != _modSaveScopeSceneHandle)
+        if (_deferredInitialSceneSyncFrames > 0)
         {
-            _modSaveScopeSceneHandle = scene.handle;
-            ModSaveScope.NotifySceneLoaded();
+            _deferredInitialSceneSyncFrames--;
+            if (_deferredInitialSceneSyncFrames == 0)
+            {
+                DHCPSwitchesMod.TryNotifyModSaveScopeSceneChange();
+            }
         }
 
         ModSaveScope.TickCapture();

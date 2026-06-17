@@ -77,7 +77,7 @@ public static class DHCPManager
     {
         if (!LicenseManager.IsDHCPUnlocked)
         {
-            ModLogging.Warning("DHCP locked (toggle with Ctrl+D debug).");
+            ModLogging.Warning("DHCP locked (use the DHCP toggle in the IPAM title bar).");
             return;
         }
 
@@ -150,8 +150,8 @@ public static class DHCPManager
 
         if (!LicenseManager.IsDHCPUnlocked)
         {
-            ModDebugLog.WriteDhcpAssign("aborted: DHCP feature locked (LicenseManager.IsDHCPUnlocked=false; use mod unlock / Ctrl+D per docs)");
-            ModLogging.Warning("DHCP locked (toggle with Ctrl+D debug).");
+            ModDebugLog.WriteDhcpAssign("aborted: DHCP feature locked (LicenseManager.IsDHCPUnlocked=false; use IPAM title bar DHCP toggle)");
+            ModLogging.Warning("DHCP locked (use the DHCP toggle in the IPAM title bar).");
             return 0;
         }
 
@@ -218,7 +218,7 @@ public static class DHCPManager
     {
         if (!LicenseManager.IsDHCPUnlocked)
         {
-            ModLogging.Warning("DHCP locked (toggle with Ctrl+D debug).");
+            ModLogging.Warning("DHCP locked (use the DHCP toggle in the IPAM title bar).");
             return false;
         }
 

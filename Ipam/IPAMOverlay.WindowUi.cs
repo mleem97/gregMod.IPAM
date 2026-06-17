@@ -145,7 +145,7 @@ public static partial class IPAMOverlay
                 new Rect(licIpamX, licY, licBtnW, licBtnH),
                 new GUIContent(
                     ipamLabel,
-                    "Toggle IPAM (inventory tables, IP editor, navigation). Ctrl+D toggles DHCP+IPAM together."),
+                    "Toggle IPAM (inventory tables, IP editor, navigation)."),
                 8801,
                 ipamUnlocked ? _stPrimaryBtn : _stMutedBtn))
         {
@@ -157,7 +157,7 @@ public static partial class IPAMOverlay
                 new Rect(licDhcpX, licY, licBtnW, licBtnH),
                 new GUIContent(
                     dhcpLabel,
-                    "Toggle DHCP (per-server DHCP, detail panel). Ctrl+D toggles DHCP+IPAM together."),
+                    "Toggle DHCP (per-server DHCP, detail panel)."),
                 8802,
                 dhcpUnlocked ? _stPrimaryBtn : _stMutedBtn))
         {
@@ -389,7 +389,7 @@ public static partial class IPAMOverlay
             GUI.Label(new Rect(contentX + CardPad, bodyTop + 24, contentW - CardPad * 2, 40), "Organization  /  Devices", _stBreadcrumb);
             GUI.Label(
                 new Rect(contentX + CardPad, bodyTop + 56, contentW - CardPad * 2, 60),
-                "IPAM license not unlocked.\nUse the IPAM: locked button in the title bar (or Ctrl+D) to unlock.",
+                "IPAM license not unlocked.\nUse the IPAM: locked button in the title bar to unlock.",
                 _stMuted);
             GUI.DragWindow(new Rect(0, 0, w, TitleBarH + ToolbarH));
             return;
