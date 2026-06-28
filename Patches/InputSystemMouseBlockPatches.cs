@@ -1,13 +1,15 @@
 using System;
 using System.Reflection;
 using HarmonyLib;
+using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 
 namespace GregModIPAM;
 
 /// <summary>
-/// While IPAM is open, suppress mouse button reads on the Input System path so world / menu clicks do not fire
-/// behind the overlay. Mod code that still needs hardware mouse wraps reads in <see cref="IpamGameInputGate.BeginHardwareMouseBypass"/>.
+/// While IPAM is open, suppress mouse button and delta reads on the Input System path so camera rotation
+/// and world / menu clicks do not fire behind the overlay.
 /// </summary>
 internal static class InputSystemMouseBlockPatches
 {
@@ -46,6 +48,31 @@ internal static class InputSystemMouseBlockPatches
                || path.IndexOf("/mouse/backButton", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
+    private static bool ShouldStripMouseDelta(InputControl control)
+    {
+        if (!IPAMOverlay.IsVisible || control == null)
+        {
+            return false;
+        }
+
+        var path = control.path;
+        return !string.IsNullOrEmpty(path)
+            && path.IndexOf("/mouse/delta", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool ShouldStripMousePosition(InputControl control)
+    {
+        if (!IPAMOverlay.IsVisible || control == null)
+        {
+            return false;
+        }
+
+        var path = control.path;
+        return !string.IsNullOrEmpty(path)
+            && path.IndexOf("/mouse/position", StringComparison.OrdinalIgnoreCase) >= 0
+            && !IpamGameInputGate.ShouldStripGameMouse; // position only if not already in bypass
+    }
+
     [HarmonyPatch(typeof(ButtonControl), nameof(ButtonControl.wasPressedThisFrame), MethodType.Getter)]
     private static class MouseWasPressedPatch
     {
@@ -78,6 +105,18 @@ internal static class InputSystemMouseBlockPatches
             if (__result && ShouldStripMouseButton(__instance))
             {
                 __result = false;
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(Vector2Control), nameof(Vector2Control.ReadValue), MethodType.Normal)]
+    private static class MouseDeltaStripPatch
+    {
+        private static void Postfix(InputControl __instance, ref Vector2 __result)
+        {
+            if (ShouldStripMouseDelta(__instance))
+            {
+                __result = Vector2.zero;
             }
         }
     }

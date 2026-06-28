@@ -6,15 +6,16 @@ using UnityEngine.InputSystem;
 namespace GregModIPAM;
 
 /// <summary>
-/// While IPAM is open, disables <see cref="PlayerInput"/> devices so letter keys do not trigger in-game actions.
-/// Also forces cursor visible/unlocked and clears EventSystem selection.
-/// Falls back silently if the game does not use <see cref="PlayerInput"/>.
+/// While IPAM is open, disables <see cref="PlayerInput"/> devices and Mouse delta so camera rotation
+/// and game input do not fire behind the overlay. Cursor is forced visible/unlocked.
 /// </summary>
 internal static class GameInputSuppression
 {
     private static readonly List<PlayerInput> Suspended = new();
     private static readonly HashSet<InputActionAsset> DisabledAssets = new();
     private static bool _active;
+
+    internal static bool IsActive => _active;
 
     internal static void SetSuppressed(bool suppress)
     {
@@ -42,9 +43,11 @@ internal static class GameInputSuppression
             var all = Resources.FindObjectsOfTypeAll<PlayerInput>();
             if (all == null)
             {
+                ModReleaseLog.Info("GameInputSuppression: No PlayerInput instances found");
                 return;
             }
 
+            var count = 0;
             foreach (var pi in all)
             {
                 if (pi == null)
@@ -63,12 +66,15 @@ internal static class GameInputSuppression
                     TryDisableActions(pi);
                     pi.DeactivateInput();
                     Suspended.Add(pi);
+                    count++;
                 }
                 catch (System.Exception ex)
                 {
                     ModLogging.Warning($"IPAM input lock: could not deactivate PlayerInput: {ex.Message}");
                 }
             }
+
+            ModReleaseLog.Info($"GameInputSuppression: deactivated {count} PlayerInput instances, cursor unlocked");
         }
         else
         {
@@ -106,8 +112,11 @@ internal static class GameInputSuppression
                 }
             }
 
+            var count = Suspended.Count;
             Suspended.Clear();
             DisabledAssets.Clear();
+
+            ModReleaseLog.Info($"GameInputSuppression: reactivated {count} PlayerInput instances, cursor restored");
         }
     }
 
