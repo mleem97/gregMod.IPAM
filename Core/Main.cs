@@ -33,42 +33,61 @@ public class GregModIPAMMod : MelonMod
         {
             ModLogging.Instance = LoggerInstance;
             ModDebugLog.Bootstrap();
+            ModReleaseLog.Bootstrap();
+
+            ModReleaseLog.Info("gregMod.IPAM initializing...");
+            ModReleaseLog.Config("ModGuid", ModGuid);
+            ModReleaseLog.Config("PrefCategoryId", PrefCategoryId);
+            ModReleaseLog.Config("PrefCategoryName", PrefCategoryName);
+
             DeviceConfigRegistry.BootstrapLoadDisk();
 
             _prefs = MelonPreferences.CreateCategory(PrefCategoryId, PrefCategoryName);
             _prefUiFontScale = _prefs.CreateEntry(PrefUiFontScaleKey, 1f, "IPAM UI font scale");
             IPAMOverlay.UiFontScale = _prefUiFontScale.Value;
             IPAMOverlay.UiFontScaleChanged += OnUiFontScaleChanged;
+            ModReleaseLog.Pref("UiFontScale", _prefUiFontScale.Value.ToString("F2"));
 
+            ModReleaseLog.Info("Registering IL2CPP types...");
             ClassInjector.RegisterTypeInIl2Cpp<DHCPController>();
             ClassInjector.RegisterTypeInIl2Cpp<GregModIPAMBehaviour>();
+            ModReleaseLog.Feature("IL2CPP Type Registration", "OK");
 
             var host = new GameObject("gregModIPAM_Host");
             UnityEngine.Object.DontDestroyOnLoad(host);
             host.hideFlags = HideFlags.HideAndDontSave;
             host.AddComponent<GregModIPAMBehaviour>();
+            ModReleaseLog.Info("GameObject 'gregModIPAM_Host' created");
 
+            ModReleaseLog.Info("Applying Harmony patches...");
             var harmony = new HarmonyLib.Harmony(ModGuid);
             harmony.CreateClassProcessor(typeof(DHCPManager.ServerSetIpPatch)).Patch();
+            ModReleaseLog.HarmonyPatch("DHCPManager.ServerSetIpPatch", true);
             harmony.CreateClassProcessor(typeof(DHCPManager.FlowPausePatch)).Patch();
+            ModReleaseLog.HarmonyPatch("DHCPManager.FlowPausePatch", true);
             LegacyInputBlockPatches.TryApply(harmony);
             InputSystemUiCancelPatches.TryApply(harmony);
             InputSystemEscapeBlockPatches.TryApply(harmony);
             InputSystemMouseBlockPatches.TryApply(harmony);
 
+            ModReleaseLog.Feature("DHCP Auto-Assign", LicenseManager.IsDHCPUnlocked ? "Unlocked" : "Locked");
+            ModReleaseLog.Feature("IPAM Overlay", LicenseManager.IsIPAMUnlocked ? "Unlocked" : "Locked");
+            ModReleaseLog.Feature("Shared Server Mode", "Available");
+            ModReleaseLog.Feature("Network Health Score", "Available");
+
             LoggerInstance.Msg(
-                "gregMod.IPAM loaded. F1 = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles. Rack switch/router red menu = CLI, or IPAM → device → Open CLI.");
+                "gregMod.IPAM loaded. F1 = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles.");
+            ModReleaseLog.Info("gregMod.IPAM loaded successfully");
+
             if (!string.IsNullOrEmpty(ModDebugLog.DiagnosticLogPath))
             {
                 LoggerInstance.Msg(
-                    "gregMod.IPAM debug log (replaced each game launch): " + ModDebugLog.DiagnosticLogPath);
+                    "gregMod.IPAM debug log: " + ModDebugLog.DiagnosticLogPath);
+                ModReleaseLog.Info($"Debug log: {ModDebugLog.DiagnosticLogPath}");
             }
 
-            if (ModDebugLog.IsIpamFileLogEnabled && !string.IsNullOrEmpty(ModDebugLog.IpamDiagnosticLogPath))
-            {
-                ModDebugLog.WriteIpam("Mod loaded (gregModIPAM-ipam.flag is present).");
-                LoggerInstance.Msg("gregMod.IPAM IPAM diagnostic file: " + ModDebugLog.IpamDiagnosticLogPath);
-            }
+            ModReleaseLog.Info($"Release log: {ModReleaseLog.LogPath}");
+            ModReleaseLog.Info("");
         }
         catch (System.Exception ex)
         {
@@ -77,6 +96,7 @@ public class GregModIPAMMod : MelonMod
                 ModLogging.Instance = LoggerInstance;
                 ModDebugLog.Bootstrap();
                 ModDebugLog.WriteLine("OnInitializeMelon failed: " + ex);
+                ModReleaseLog.Error("OnInitializeMelon failed", ex);
             }
             catch
             {
@@ -143,6 +163,7 @@ public class GregModIPAMMod : MelonMod
 
     public override void OnSceneWasLoaded(int buildIndex, string sceneName)
     {
+        ModReleaseLog.SceneLoaded(sceneName, buildIndex);
         TryNotifyModSaveScopeSceneChange();
     }
 

@@ -219,6 +219,7 @@ public static class DHCPManager
         if (!LicenseManager.IsDHCPUnlocked)
         {
             ModLogging.Warning("DHCP locked (use the DHCP toggle in the IPAM title bar).");
+            ModReleaseLog.Warning("DHCP locked — cannot assign");
             return false;
         }
 
@@ -227,6 +228,8 @@ public static class DHCPManager
             return false;
         }
 
+        var serverLabel = FormatServerLogLabel(server);
+        ModReleaseLog.DhcpEvent($"AssignDhcpToSingleServer: {serverLabel}");
         ModDebugLog.EnterDhcpResolutionBatch();
         try
         {
@@ -245,15 +248,18 @@ public static class DHCPManager
             }
 
             ModLogging.Warning("DHCP: AssignDhcpToSingleServer found no free IP.");
+            ModReleaseLog.DhcpNoFree(serverLabel, "");
             return false;
         }
 
         LastSetIpError = null;
         if (!SetServerIP(server, newIp, skipUsableListCheck: true))
         {
+            ModReleaseLog.DhcpAssign(serverLabel, newIp, "", false, "SetServerIP failed");
             return false;
         }
 
+        ModReleaseLog.DhcpAssign(serverLabel, newIp, "", true);
         IPAMOverlay.InvalidateDeviceCache();
         return true;
         }

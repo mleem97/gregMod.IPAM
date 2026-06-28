@@ -54,6 +54,7 @@ public static partial class IPAMOverlay
                 }
 
                 ModDebugLog.WriteIpam($"IPAM open frame={Time.frameCount}");
+                ModReleaseLog.IpamOpen();
                 _ipamWindowBaseHeight = Mathf.Max(WindowMinH, _windowRect.height);
                 _ipamHadDetailSelectionLastFrame = false;
                 _iopsToolbarRectWindowLocal = default;
@@ -111,6 +112,7 @@ public static partial class IPAMOverlay
                 _ipamNextPlayerInputRescanTime = 0f;
                 IpamMenuOcclusion.Tick(false);
                 ModDebugLog.WriteIpam($"IPAM close frame={Time.frameCount} recoverUntil={_imguiRecoverUntilExclusive}");
+                ModReleaseLog.IpamClose();
             }
 
             _visible = value;
