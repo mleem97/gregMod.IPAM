@@ -771,6 +771,62 @@ public static partial class IPAMOverlay
         _serverEditPopupRect = r;
     }
 
+    /// <summary>
+    /// Draws a modal panel inline within the main IPAM window instead of as a separate GUI.Window.
+    /// The panel is centered within the window with a dimmed background overlay.
+    /// </summary>
+    private static void DrawInlineModalPanel(float winX, float winY, float winW, float winH, string title, GUI.WindowFunction drawContent)
+    {
+        // Dim overlay within the main window
+        if (Event.current.type == EventType.Repaint)
+        {
+            DrawTintedRect(new Rect(winX, winY, winW, winH), new Color(0f, 0f, 0f, 0.5f));
+        }
+
+        // Panel dimensions (centered within window, 70% of window size)
+        var panelW = Mathf.Min(winW * 0.85f, 900f);
+        var panelH = Mathf.Min(winH * 0.85f, 700f);
+        var panelX = winX + (winW - panelW) * 0.5f;
+        var panelY = winY + (winH - panelH) * 0.5f;
+
+        // Panel background
+        DrawTintedRect(new Rect(panelX, panelY, panelW, panelH), new Color(0.08f, 0.10f, 0.13f, 0.98f));
+        // Panel border
+        DrawTintedRect(new Rect(panelX, panelY, panelW, 2f), new Color(0.14f, 0.17f, 0.22f, 0.8f));
+        DrawTintedRect(new Rect(panelX, panelY + panelH - 2f, panelW, 2f), new Color(0.14f, 0.17f, 0.22f, 0.8f));
+        DrawTintedRect(new Rect(panelX, panelY, 2f, panelH), new Color(0.14f, 0.17f, 0.22f, 0.8f));
+        DrawTintedRect(new Rect(panelX + panelW - 2f, panelY, 2f, panelH), new Color(0.14f, 0.17f, 0.22f, 0.8f));
+
+        // Title bar
+        var titleH = 28f;
+        DrawTintedRect(new Rect(panelX, panelY, panelW, titleH), new Color(0.06f, 0.08f, 0.11f, 0.9f));
+        GUI.Label(new Rect(panelX + 12f, panelY + 4f, panelW - 24f, 20f), title, _stSectionTitle);
+
+        // Close button
+        var closeBtnW = 60f;
+        if (ImguiButtonOnce(new Rect(panelX + panelW - closeBtnW - 8f, panelY + 3f, closeBtnW, 22f), "Close", 99999, _stMutedBtn))
+        {
+            // Close the appropriate popup
+            if (_iopsCalculatorOpen) { CloseIopsCalculatorModal("inline close"); }
+            else if (_customersTabAddServerWizardOpen) { _customersTabAddServerWizardOpen = false; }
+            else if (_ipamChildPrefixWizardOpen) { CloseIpamChildPrefixWizard(); }
+            else if (_ipamPrefixDeleteConfirmOpen) { CloseIpamPrefixDeleteConfirm(); }
+            else { _serverEditPopupDismissed = true; }
+        }
+
+        // Content area — set GUI.matrix to offset into the panel
+        var contentX = panelX + 4f;
+        var contentY = panelY + titleH + 4f;
+        var contentW = panelW - 8f;
+        var contentH = panelH - titleH - 8f;
+
+        // Use BeginGroup to create an isolated coordinate space
+        GUI.BeginGroup(new Rect(contentX, contentY, contentW, contentH));
+        // Invoke the original window function — pass 0 as window ID (unused in inline mode)
+        drawContent.Invoke(0);
+        GUI.EndGroup();
+    }
+
     public static void Draw()
     {
         if (!IsVisible)
@@ -840,164 +896,38 @@ public static partial class IPAMOverlay
             RecordIpamPerfDrawMs((tWindow0 - tBackdrop0) * 1000.0, (tEnd - tWindow0) * 1000.0);
         }
 
-        // IOPS modal must be drawn *after* GUI.Window returns: controls nested inside the window callback
-        // can fail hit-testing (clicks/keys) on IL2CPP; top-level rects use screen space matching Event.mousePosition.
-        // Keyboard pump runs here too so KeyDown is handled outside the window's GUI group.
+        // ── Inline modals inside the main IPAM window ──
+        // All popups are now drawn as panels within _windowRect instead of separate GUI.Windows.
+        var winX = _windowRect.x;
+        var winY = _windowRect.y;
+        var winW = _windowRect.width;
+        var winH = _windowRect.height;
+
         if (LicenseManager.IsIPAMUnlocked && _iopsCalculatorOpen)
         {
             PumpIopsCalculatorKeyboard();
-            // Standalone screen-space window (not nested in IPAM) so it always paints and receives input.
-            GUI.depth = 0;
-            var dimCol = GUI.color;
-            GUI.color = new Color(1f, 1f, 1f, 0.5f);
-            if (Event.current.type == EventType.Repaint)
-            {
-                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _texModalDim, ScaleMode.StretchToFill);
-            }
-
-            GUI.color = dimCol;
-            // Match IPAM shell: default GUI.Window skin paints a light client area; swap window chrome to _texBackdrop.
-            var winSt = GUI.skin.window;
-            var oldWinBg = winSt.normal.background;
-            var oldWinOnBg = winSt.onNormal.background;
-            var oldWinTxt = winSt.normal.textColor;
-            var oldWinOnTxt = winSt.onNormal.textColor;
-            winSt.normal.background = _texBackdrop;
-            winSt.onNormal.background = _texBackdrop;
-            winSt.normal.textColor = new Color32(248, 250, 252, 255);
-            winSt.onNormal.textColor = new Color32(248, 250, 252, 255);
-            _iopsStandaloneWindowRect = GUI.Window(9002, _iopsStandaloneWindowRect, (GUI.WindowFunction)DrawIopsStandaloneWindow, "IOPS sizing");
-            winSt.normal.background = oldWinBg;
-            winSt.onNormal.background = oldWinOnBg;
-            winSt.normal.textColor = oldWinTxt;
-            winSt.onNormal.textColor = oldWinOnTxt;
+            DrawInlineModalPanel(winX, winY, winW, winH, "IOPS sizing", (GUI.WindowFunction)DrawIopsStandaloneWindow);
         }
 
         if (LicenseManager.IsIPAMUnlocked && _customersTabAddServerWizardOpen)
         {
-            GUI.depth = 0;
-            var dimCol2 = GUI.color;
-            GUI.color = new Color(1f, 1f, 1f, 0.5f);
-            if (Event.current.type == EventType.Repaint)
-            {
-                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _texModalDim, ScaleMode.StretchToFill);
-            }
-
-            GUI.color = dimCol2;
-            var winSt2 = GUI.skin.window;
-            var oldWinBg2 = winSt2.normal.background;
-            var oldWinOnBg2 = winSt2.onNormal.background;
-            var oldWinTxt2 = winSt2.normal.textColor;
-            var oldWinOnTxt2 = winSt2.onNormal.textColor;
-            winSt2.normal.background = _texBackdrop;
-            winSt2.onNormal.background = _texBackdrop;
-            winSt2.normal.textColor = new Color32(248, 250, 252, 255);
-            winSt2.onNormal.textColor = new Color32(248, 250, 252, 255);
-            _customersTabAddServerWindowRect = GUI.Window(9003, _customersTabAddServerWindowRect, (GUI.WindowFunction)DrawCustomersAddServerWindow, "Add server");
-            winSt2.normal.background = oldWinBg2;
-            winSt2.onNormal.background = oldWinOnBg2;
-            winSt2.normal.textColor = oldWinTxt2;
-            winSt2.onNormal.textColor = oldWinOnTxt2;
+            DrawInlineModalPanel(winX, winY, winW, winH, "Add server", (GUI.WindowFunction)DrawCustomersAddServerWindow);
         }
 
         if (LicenseManager.IsIPAMUnlocked && _ipamChildPrefixWizardOpen)
         {
-            GUI.depth = 0;
-            var dimW = GUI.color;
-            GUI.color = new Color(1f, 1f, 1f, 0.5f);
-            if (Event.current.type == EventType.Repaint)
-            {
-                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _texModalDim, ScaleMode.StretchToFill);
-            }
-
-            GUI.color = dimW;
-            var winStW = GUI.skin.window;
-            var oldWBg = winStW.normal.background;
-            var oldWOnBg = winStW.onNormal.background;
-            var oldWTxt = winStW.normal.textColor;
-            var oldWOnTxt = winStW.onNormal.textColor;
-            winStW.normal.background = _texBackdrop;
-            winStW.onNormal.background = _texBackdrop;
-            winStW.normal.textColor = new Color32(248, 250, 252, 255);
-            winStW.onNormal.textColor = new Color32(248, 250, 252, 255);
-            _ipamChildPrefixWizardRect = GUI.Window(
-                9006,
-                _ipamChildPrefixWizardRect,
-                (GUI.WindowFunction)DrawIpamChildPrefixWizardWindow,
-                "Prefix");
-            winStW.normal.background = oldWBg;
-            winStW.onNormal.background = oldWOnBg;
-            winStW.normal.textColor = oldWTxt;
-            winStW.onNormal.textColor = oldWOnTxt;
+            DrawInlineModalPanel(winX, winY, winW, winH, "Prefix", (GUI.WindowFunction)DrawIpamChildPrefixWizardWindow);
         }
 
         if (LicenseManager.IsIPAMUnlocked && _ipamPrefixDeleteConfirmOpen)
         {
-            GUI.depth = 0;
-            var dimDel = GUI.color;
-            GUI.color = new Color(1f, 1f, 1f, 0.5f);
-            if (Event.current.type == EventType.Repaint)
-            {
-                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _texModalDim, ScaleMode.StretchToFill);
-            }
-
-            GUI.color = dimDel;
-            var winStDel = GUI.skin.window;
-            var oldDelBg = winStDel.normal.background;
-            var oldDelOnBg = winStDel.onNormal.background;
-            var oldDelTxt = winStDel.normal.textColor;
-            var oldDelOnTxt = winStDel.onNormal.textColor;
-            winStDel.normal.background = _texBackdrop;
-            winStDel.onNormal.background = _texBackdrop;
-            winStDel.normal.textColor = new Color32(248, 250, 252, 255);
-            winStDel.onNormal.textColor = new Color32(248, 250, 252, 255);
-            _ipamPrefixDeleteConfirmRect = GUI.Window(
-                9007,
-                _ipamPrefixDeleteConfirmRect,
-                (GUI.WindowFunction)DrawIpamPrefixDeleteConfirmWindow,
-                "Confirm delete");
-            winStDel.normal.background = oldDelBg;
-            winStDel.onNormal.background = oldDelOnBg;
-            winStDel.normal.textColor = oldDelTxt;
-            winStDel.onNormal.textColor = oldDelOnTxt;
+            DrawInlineModalPanel(winX, winY, winW, winH, "Confirm delete", (GUI.WindowFunction)DrawIpamPrefixDeleteConfirmWindow);
         }
 
         var serverEditPopupDraw = ShouldDrawServerEditPopup();
         if (serverEditPopupDraw)
         {
-            GUI.depth = 0;
-            var dimCol3 = GUI.color;
-            GUI.color = new Color(1f, 1f, 1f, 0.5f);
-            if (Event.current.type == EventType.Repaint)
-            {
-                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _texModalDim, ScaleMode.StretchToFill);
-            }
-
-            GUI.color = dimCol3;
-            var winSt3 = GUI.skin.window;
-            var oldWinBg3 = winSt3.normal.background;
-            var oldWinOnBg3 = winSt3.onNormal.background;
-            var oldWinTxt3 = winSt3.normal.textColor;
-            var oldWinOnTxt3 = winSt3.onNormal.textColor;
-            winSt3.normal.background = _texBackdrop;
-            winSt3.onNormal.background = _texBackdrop;
-            winSt3.normal.textColor = new Color32(248, 250, 252, 255);
-            winSt3.onNormal.textColor = new Color32(248, 250, 252, 255);
-
-            if (serverEditPopupDraw)
-            {
-                ClampServerEditPopupRectIntoView();
-                _serverEditPopupRect = GUI.Window(
-                    9005,
-                    _serverEditPopupRect,
-                    (GUI.WindowFunction)DrawServerEditPopupWindow,
-                    "Edit object · Server");
-            }
-
-            winSt3.normal.background = oldWinBg3;
-            winSt3.onNormal.background = oldWinOnBg3;
-            winSt3.normal.textColor = oldWinTxt3;
-            winSt3.onNormal.textColor = oldWinOnTxt3;
+            DrawInlineModalPanel(winX, winY, winW, winH, "Edit object · Server", (GUI.WindowFunction)DrawServerEditPopupWindow);
         }
 
         GUI.backgroundColor = oldBg;
