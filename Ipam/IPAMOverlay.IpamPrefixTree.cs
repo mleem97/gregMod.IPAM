@@ -19,11 +19,13 @@ public static partial class IPAMOverlay
         public bool IsFreeGap;
         public IpamPrefixEntry Prefix;
         public string ParentFolderId;
-        /// <summary>Set with <see cref="IpamFreeSpace"/> maximal cover; slot fields below unused.</summary>
+        /// <summary>Set with <see cref="IpamFreeSpace"/> maximal cover.</summary>
         public string FreeExplicitCidr;
+#pragma warning disable CS0649 // assigned by future template-slot feature
         public ulong FreeFirstSlot;
         public ulong FreeSlotCount;
         public int TemplateLen;
+#pragma warning restore CS0649
     }
 
     /// <summary>
