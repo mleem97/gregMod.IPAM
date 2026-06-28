@@ -76,7 +76,7 @@ public class GregModIPAMMod : MelonMod
             ModReleaseLog.Feature("Network Health Score", "Available");
 
             LoggerInstance.Msg(
-                "gregMod.IPAM loaded. F1 = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles.");
+                "gregMod.IPAM loaded. P = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles.");
             ModReleaseLog.Info("gregMod.IPAM loaded successfully");
 
             if (!string.IsNullOrEmpty(ModDebugLog.DiagnosticLogPath))
