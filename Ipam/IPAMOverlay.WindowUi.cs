@@ -280,101 +280,70 @@ public static partial class IPAMOverlay
 
         // Sidebar
         GUI.DrawTexture(new Rect(0, bodyTop, SidebarW, bodyH), _texSidebar);
+        NavIcons.EnsureInit();
         var navX = 8f;
         var navW = SidebarW - navX;
-        var navHeaderY = bodyTop + Sp(10f);
-        var navHeaderH = Mathf.Max(16f, _stNavHint != null ? _stNavHint.CalcHeight(new GUIContent("NAVIGATION"), SidebarW - 16f) : 16f);
-        GUI.Label(new Rect(12, navHeaderY, SidebarW - 16, navHeaderH), "NAVIGATION", _stNavHint);
         var navRowH = Mathf.Max(28f, Sp(32f));
-        var navStartY = navHeaderY + navHeaderH + Sp(6f);
-        DrawNavEntry(new Rect(navX, navStartY + navRowH * 0, navW, navRowH), NavSection.Dashboard, "Dashboard");
+        var navStartY = bodyTop + Sp(10f);
+        var iconSize = 18f;
+        var iconPad = 6f;
 
-        var devicesToggleRect = new Rect(navX, navStartY + navRowH * 1, navW, navRowH);
-        var devicesChevron = _devicesSidebarExpanded ? "\u25BC" : "\u25B6";
-        var devicesToggleLabel = $"Devices  {devicesChevron}";
-        var devicesNavActive = _navSection == NavSection.Devices;
-        if (devicesNavActive)
-        {
-            GUI.DrawTexture(devicesToggleRect, _texNavActive);
-        }
+        // ── Dashboard ──
+        DrawNavEntryWithIcon(new Rect(navX, navStartY, navW, navRowH), NavSection.Dashboard, "Dashboard", "dashboard", iconSize, iconPad);
 
-        var devicesToggleStyle = devicesNavActive ? _stNavItemActive : _stNavBtn;
-        if (ImguiButtonOnce(devicesToggleRect, devicesToggleLabel, 9047, devicesToggleStyle))
-        {
-            _devicesSidebarExpanded = !_devicesSidebarExpanded;
-            _ipamFormFieldFocus = IpamFormFocusNone;
-        }
+        // ── Devices (category header) ──
+        var devicesY = navStartY + navRowH;
+        var devicesChevronTex = NavIcons.Get(_devicesSidebarExpanded ? "chevron_d" : "chevron_r");
+        DrawCategoryHeader(new Rect(navX, devicesY, navW, navRowH), "DEVICES", devicesChevronTex, iconSize, iconPad,
+            _navSection == NavSection.Devices, ref _devicesSidebarExpanded);
 
         float navAfterDevices;
         if (_devicesSidebarExpanded)
         {
-            var devicesSubIndent = Sp(10f);
-            var devicesSubNavW = navW - devicesSubIndent;
-            var devicesSubBaseY = navStartY + navRowH * 2;
-            DrawDevicesSubNav(
-                new Rect(navX + devicesSubIndent, devicesSubBaseY + navRowH * 0, devicesSubNavW, navRowH),
-                DevicesSubSection.Switches,
-                "Switches",
-                9060);
-            DrawDevicesSubNav(
-                new Rect(navX + devicesSubIndent, devicesSubBaseY + navRowH * 1, devicesSubNavW, navRowH),
-                DevicesSubSection.Routers,
-                "Routers",
-                9061);
-            DrawDevicesSubNav(
-                new Rect(navX + devicesSubIndent, devicesSubBaseY + navRowH * 2, devicesSubNavW, navRowH),
-                DevicesSubSection.Firewall,
-                "Firewall",
-                9062);
-            DrawDevicesSubNav(
-                new Rect(navX + devicesSubIndent, devicesSubBaseY + navRowH * 3, devicesSubNavW, navRowH),
-                DevicesSubSection.Servers,
-                "Servers",
-                9063);
-            navAfterDevices = devicesSubBaseY + navRowH * 4 + Sp(8f);
+            var subIndent = Sp(14f);
+            var subNavW = navW - subIndent;
+            var subBaseY = devicesY + navRowH;
+            DrawSubNavWithIcon(new Rect(navX + subIndent, subBaseY, subNavW, navRowH), DevicesSubSection.Switches, "Switches", "switch", 9060, iconSize, iconPad);
+            DrawSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH, subNavW, navRowH), DevicesSubSection.Routers, "Routers", "router", 9061, iconSize, iconPad);
+            DrawSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 2, subNavW, navRowH), DevicesSubSection.Firewall, "Firewall", "firewall", 9062, iconSize, iconPad);
+            DrawSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 3, subNavW, navRowH), DevicesSubSection.Servers, "Servers", "server", 9063, iconSize, iconPad);
+            navAfterDevices = subBaseY + navRowH * 4;
         }
         else
         {
-            navAfterDevices = navStartY + navRowH * 2 + Sp(8f);
+            navAfterDevices = devicesY + navRowH;
         }
 
-        DrawNavEntry(new Rect(navX, navAfterDevices, navW, navRowH), NavSection.Racks, "Racks");
+        // ── Racks ──
+        DrawNavEntryWithIcon(new Rect(navX, navAfterDevices, navW, navRowH), NavSection.Racks, "Racks", "rack", iconSize, iconPad);
         var racksEndY = navAfterDevices + navRowH;
-        var ipamToggleRect = new Rect(navX, racksEndY, navW, navRowH);
-        var ipamChevron = _ipamSidebarExpanded ? "\u25BC" : "\u25B6";
-        var ipamToggleLabel = $"IPAM  {ipamChevron}";
-        var ipamNavActive = _navSection == NavSection.Ipam;
-        if (ipamNavActive)
-        {
-            GUI.DrawTexture(ipamToggleRect, _texNavActive);
-        }
 
-        var ipamToggleStyle = ipamNavActive ? _stNavItemActive : _stNavBtn;
-        if (ImguiButtonOnce(ipamToggleRect, ipamToggleLabel, 9048, ipamToggleStyle))
-        {
-            _ipamSidebarExpanded = !_ipamSidebarExpanded;
-            _ipamFormFieldFocus = IpamFormFocusNone;
-        }
+        // ── IPAM (category header) ──
+        var ipamChevronTex = NavIcons.Get(_ipamSidebarExpanded ? "chevron_d" : "chevron_r");
+        DrawCategoryHeader(new Rect(navX, racksEndY, navW, navRowH), "IPAM", ipamChevronTex, iconSize, iconPad,
+            _navSection == NavSection.Ipam, ref _ipamSidebarExpanded);
 
         float navAfterIpam;
         if (_ipamSidebarExpanded)
         {
-            var ipamSubIndent = Sp(10f);
-            var subNavW = navW - ipamSubIndent;
-            var ipamSubBaseY = racksEndY + navRowH;
-            DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 0, subNavW, navRowH), IpamSubSection.IpAddresses, "IP addresses", 9050);
-            DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 1, subNavW, navRowH), IpamSubSection.Prefixes, "Prefixes", 9051);
-            DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 2, subNavW, navRowH), IpamSubSection.Vlans, "VLANs", 9052);
-            DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 3, subNavW, navRowH), IpamSubSection.DhcpScopes, "DHCP Scopes", 9053);
-            DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 4, subNavW, navRowH), IpamSubSection.Tutorial, "Tutorial", 9054);
-            navAfterIpam = ipamSubBaseY + navRowH * 5 + Sp(8f);
+            var subIndent = Sp(14f);
+            var subNavW = navW - subIndent;
+            var subBaseY = racksEndY + navRowH;
+            DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY, subNavW, navRowH), IpamSubSection.IpAddresses, "IP addresses", "ip", 9050, iconSize, iconPad);
+            DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH, subNavW, navRowH), IpamSubSection.Prefixes, "Prefixes", "prefix", 9051, iconSize, iconPad);
+            DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 2, subNavW, navRowH), IpamSubSection.Vlans, "VLANs", "vlan", 9052, iconSize, iconPad);
+            DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 3, subNavW, navRowH), IpamSubSection.DhcpScopes, "DHCP Scopes", "dhcp", 9053, iconSize, iconPad);
+            DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 4, subNavW, navRowH), IpamSubSection.Tutorial, "Tutorial", "tutorial", 9054, iconSize, iconPad);
+            navAfterIpam = subBaseY + navRowH * 5;
         }
         else
         {
-            navAfterIpam = racksEndY + navRowH + Sp(8f);
+            navAfterIpam = racksEndY + navRowH;
         }
-        DrawNavEntry(new Rect(navX, navAfterIpam, navW, navRowH), NavSection.Customers, "Customers");
-        DrawNavEntry(new Rect(navX, navAfterIpam + navRowH, navW, navRowH), NavSection.Settings, "Settings");
+
+        // ── Customers + Settings ──
+        DrawNavEntryWithIcon(new Rect(navX, navAfterIpam, navW, navRowH), NavSection.Customers, "Customers", "customers", iconSize, iconPad);
+        DrawNavEntryWithIcon(new Rect(navX, navAfterIpam + navRowH, navW, navRowH), NavSection.Settings, "Settings", "settings", iconSize, iconPad);
         var tipY = navAfterIpam + navRowH * 2 + Sp(6f);
         var tipH = Mathf.Max(36f, bodyTop + bodyH - tipY - 8f);
         GUI.Label(
@@ -969,6 +938,121 @@ public static partial class IPAMOverlay
 
             RecomputeContentHeight();
         }
+    }
+
+    private static void DrawIcon(Rect r, string iconKey, float size, float pad)
+    {
+        var tex = NavIcons.Get(iconKey);
+        if (tex != null)
+        {
+            GUI.DrawTexture(new Rect(r.x + pad, r.y + (r.height - size) * 0.5f, size, size), tex, ScaleMode.ScaleToFit, true, 0f,
+                new Color(1f, 1f, 1f, GUI.color.a), 0f, 0f);
+        }
+    }
+
+    private static void DrawCategoryHeader(Rect r, string label, Texture2D chevron, float iconSize, float pad, bool anyChildActive, ref bool expanded)
+    {
+        var bgTint = anyChildActive ? new Color(0.08f, 0.12f, 0.18f, 0.6f) : new Color(0.05f, 0.07f, 0.10f, 0.3f);
+        if (Event.current.type == EventType.Repaint)
+        {
+            DrawTintedRect(r, bgTint);
+        }
+
+        GUI.Label(r, label, _stNavCategory);
+        if (chevron != null)
+        {
+            var chevSize = 12f;
+            GUI.DrawTexture(new Rect(r.x + r.width - pad - chevSize, r.y + (r.height - chevSize) * 0.5f, chevSize, chevSize), chevron,
+                ScaleMode.ScaleToFit, true, 0f, new Color(0.5f, 0.55f, 0.65f, 0.9f), 0f, 0f);
+        }
+
+        if (ImguiButtonOnce(r, "", 9047, GUIStyle.none))
+        {
+            expanded = !expanded;
+            _ipamFormFieldFocus = IpamFormFocusNone;
+        }
+    }
+
+    private static void DrawNavEntryWithIcon(Rect r, NavSection target, string text, string iconKey, float iconSize, float pad)
+    {
+        var active = _navSection == target;
+        if (active)
+        {
+            GUI.DrawTexture(r, _texNavActive);
+            DrawIcon(r, iconKey, iconSize, pad);
+            GUI.Label(new Rect(r.x + 28, r.y, r.width - 30, r.height), text, _stNavItemActive);
+            return;
+        }
+
+        if (ImguiButtonOnce(r, "", 300 + (int)target, _stNavBtn))
+        {
+            if (target == NavSection.Customers)
+            {
+                MarkCustomersTabServerBufferDirty();
+            }
+
+            if (target != NavSection.Customers)
+            {
+                _customersTabAddServerWizardOpen = false;
+                _customersTabScreen = CustomersTabScreen.CustomerList;
+            }
+
+            _ipamFormFieldFocus = IpamFormFocusNone;
+            if (target != NavSection.Ipam)
+            {
+                _ipamPrefixesDrillParentId = null;
+                _ipamPrefixAddAsRoot = false;
+                _ipamIpAddressFilterCidr = null;
+                _ipamIpAddressPageIndex = 0;
+                _ipamIpAddrPageMenuOpen = false;
+                IpamIpAddressViewBuffer.Clear();
+            }
+
+            _navSection = target;
+            _scroll = Vector2.zero;
+            if (target != NavSection.Devices)
+            {
+                _ipamDevicesSwitchPageMenuOpen = false;
+                _ipamDevicesFirewallPageMenuOpen = false;
+                _ipamDevicesServerPageMenuOpen = false;
+            }
+
+            RecomputeContentHeight();
+        }
+
+        DrawIcon(r, iconKey, iconSize, pad);
+        GUI.Label(new Rect(r.x + 28, r.y, r.width - 30, r.height), text, _stNavBtn);
+    }
+
+    private static void DrawSubNavWithIcon(Rect r, DevicesSubSection sub, string text, string iconKey, int dedupeKey, float iconSize, float pad)
+    {
+        var active = _navSection == NavSection.Devices && _devicesSub == sub;
+        if (active)
+        {
+            GUI.DrawTexture(r, _texNavActive);
+            DrawIcon(r, iconKey, iconSize, pad);
+            GUI.Label(new Rect(r.x + 28, r.y, r.width - 30, r.height), text, _stNavSubActive);
+            return;
+        }
+
+        if (ImguiButtonOnce(r, "", dedupeKey, _stNavSubBtn))
+        {
+            _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamIpAddrPageMenuOpen = false;
+            _ipamPrefixPageMenuOpen = false;
+            _ipamDevicesSwitchPageMenuOpen = false;
+            _ipamDevicesFirewallPageMenuOpen = false;
+            _ipamDevicesServerPageMenuOpen = false;
+            _customersTabAddServerWizardOpen = false;
+            _ipamFormFieldFocus = IpamFormFocusNone;
+            _navSection = NavSection.Devices;
+            _devicesSub = sub;
+            _scroll = Vector2.zero;
+            RecomputeContentHeight();
+        }
+
+        DrawIcon(r, iconKey, iconSize, pad);
+        GUI.Label(new Rect(r.x + 28, r.y, r.width - 30, r.height), text, _stNavSubBtn);
     }
 
     private static void DrawDevicesSubNav(Rect r, DevicesSubSection sub, string text, int dedupeKey)

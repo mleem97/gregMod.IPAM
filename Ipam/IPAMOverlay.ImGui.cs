@@ -432,9 +432,10 @@ public static partial class IPAMOverlay
         _stNavItemActive = new GUIStyle();
         _stNavItemActive.font = lf;
         _stNavItemActive.fontSize = Fs(12);
+        _stNavItemActive.fontStyle = FontStyle.Bold;
         _stNavItemActive.alignment = TextAnchor.MiddleLeft;
-        _stNavItemActive.padding = Ro(16, 8, 0, 0);
-        _stNavItemActive.normal.textColor = Color.white;
+        _stNavItemActive.padding = Ro(28, 8, 0, 0);
+        _stNavItemActive.normal.textColor = new Color32(80, 220, 210, 255);
 
         _stNavHint = new GUIStyle();
         _stNavHint.font = lf;
@@ -489,7 +490,7 @@ public static partial class IPAMOverlay
         _stNavBtn.font = lf;
         _stNavBtn.fontSize = Fs(12);
         _stNavBtn.alignment = TextAnchor.MiddleLeft;
-        _stNavBtn.padding = Ro(16, 8, 0, 0);
+        _stNavBtn.padding = Ro(28, 8, 0, 0);
         _stNavBtn.normal.background = _texSidebar;
         _stNavBtn.hover.background = _texNavBtnHover;
         _stNavBtn.active.background = _texNavBtnHover;
@@ -497,6 +498,36 @@ public static partial class IPAMOverlay
         _stNavBtn.hover.textColor = new Color32(240, 244, 250, 255);
         _stNavBtn.active.textColor = Color.white;
         _stNavBtn.border = Ro(0, 0, 0, 0);
+
+        _stNavCategory = new GUIStyle();
+        _stNavCategory.font = lf;
+        _stNavCategory.fontSize = Fs(10);
+        _stNavCategory.fontStyle = FontStyle.Bold;
+        _stNavCategory.alignment = TextAnchor.MiddleLeft;
+        _stNavCategory.padding = Ro(8, 8, 0, 0);
+        _stNavCategory.normal.background = _texSidebar;
+        _stNavCategory.normal.textColor = new Color32(120, 140, 165, 255);
+
+        _stNavSubBtn = new GUIStyle();
+        _stNavSubBtn.font = lf;
+        _stNavSubBtn.fontSize = Fs(11);
+        _stNavSubBtn.alignment = TextAnchor.MiddleLeft;
+        _stNavSubBtn.padding = Ro(38, 8, 0, 0);
+        _stNavSubBtn.normal.background = _texSidebar;
+        _stNavSubBtn.hover.background = _texNavBtnHover;
+        _stNavSubBtn.active.background = _texNavBtnHover;
+        _stNavSubBtn.normal.textColor = new Color32(170, 180, 195, 255);
+        _stNavSubBtn.hover.textColor = new Color32(220, 228, 240, 255);
+        _stNavSubBtn.active.textColor = Color.white;
+        _stNavSubBtn.border = Ro(0, 0, 0, 0);
+
+        _stNavSubActive = new GUIStyle();
+        _stNavSubActive.font = lf;
+        _stNavSubActive.fontSize = Fs(11);
+        _stNavSubActive.fontStyle = FontStyle.Bold;
+        _stNavSubActive.alignment = TextAnchor.MiddleLeft;
+        _stNavSubActive.padding = Ro(38, 8, 0, 0);
+        _stNavSubActive.normal.textColor = new Color32(80, 220, 210, 255);
 
         _stMuted = new GUIStyle();
         _stMuted.font = lf;

@@ -25,6 +25,48 @@ public static partial class IPAMOverlay
     private static string _ipamVlanFormName = "";
     private static string _ipamVlanFormError = "";
 
+    private static void DrawIpamSubNavWithIcon(Rect r, IpamSubSection sub, string text, string iconKey, int dedupeKey, float iconSize, float pad)
+    {
+        var active = _navSection == NavSection.Ipam && _ipamSub == sub;
+        if (active)
+        {
+            GUI.DrawTexture(r, _texNavActive);
+            DrawIcon(r, iconKey, iconSize, pad);
+            GUI.Label(new Rect(r.x + 28, r.y, r.width - 30, r.height), text, _stNavSubActive);
+            return;
+        }
+
+        if (ImguiButtonOnce(r, "", dedupeKey, _stNavSubBtn))
+        {
+            _ipamFormFieldFocus = IpamFormFocusNone;
+            _ipamIpAddrPageMenuOpen = false;
+            _ipamPrefixPageMenuOpen = false;
+            _ipamDevicesSwitchPageMenuOpen = false;
+            _ipamDevicesFirewallPageMenuOpen = false;
+            _ipamDevicesServerPageMenuOpen = false;
+            _customersTabAddServerWizardOpen = false;
+            if (sub != IpamSubSection.Prefixes)
+            {
+                _ipamPrefixesDrillParentId = null;
+                _ipamPrefixAddAsRoot = false;
+                CloseIpamChildPrefixWizard();
+            }
+
+            if (sub == IpamSubSection.Prefixes)
+            {
+                _ipamIpAddressFilterCidr = null;
+            }
+
+            _navSection = NavSection.Ipam;
+            _ipamSub = sub;
+            _scroll = Vector2.zero;
+            RecomputeContentHeight();
+        }
+
+        DrawIcon(r, iconKey, iconSize, pad);
+        GUI.Label(new Rect(r.x + 28, r.y, r.width - 30, r.height), text, _stNavSubBtn);
+    }
+
     private static void DrawIpamSubNav(Rect r, IpamSubSection sub, string text, int dedupeKey)
     {
         var active = _navSection == NavSection.Ipam && _ipamSub == sub;

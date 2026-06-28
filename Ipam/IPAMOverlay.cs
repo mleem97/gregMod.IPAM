@@ -632,6 +632,9 @@ public static partial class IPAMOverlay
     private static GUIStyle _stNavItemActive;
     private static GUIStyle _stNavHint;
     private static GUIStyle _stBreadcrumb;
+    private static GUIStyle _stNavCategory;
+    private static GUIStyle _stNavSubBtn;
+    private static GUIStyle _stNavSubActive;
     private static GUIStyle _stSectionTitle;
     private static GUIStyle _stTableHeaderText;
     private static GUIStyle _stHeaderSortBtn;
@@ -797,13 +800,13 @@ public static partial class IPAMOverlay
         var tBackdrop0 = perf ? Time.realtimeSinceStartupAsDouble : 0d;
         GUI.Box(fullScreen, string.Empty, _stModalBlocker);
 
-        // Center window on first open
+        // Center window on first open — use 82% of screen
         if (!_windowRectCentered && _windowRect.x < 0)
         {
             _windowRectCentered = true;
-            var w = Mathf.Min(_windowRect.width, Screen.width - 40f);
-            var h = Mathf.Min(_windowRect.height, Screen.height - 40f);
-            _windowRect = new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h);
+            var w = Mathf.Min(_windowRect.width, Mathf.Round(Screen.width * 0.82f));
+            var h = Mathf.Min(_windowRect.height, Mathf.Round(Screen.height * 0.82f));
+            _windowRect = new Rect(Mathf.Round((Screen.width - w) * 0.5f), Mathf.Round((Screen.height - h) * 0.5f), w, h);
             _windowRectRestored = _windowRect;
         }
 
