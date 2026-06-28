@@ -124,12 +124,25 @@ public class GregModIPAMMod : MelonMod
         // Melon OnUpdate runs before most Unity behaviours — sync uGUI blocker early so pause menus do not eat the first click under IPAM.
         UiRaycastBlocker.SetBlocking(IPAMOverlay.IsVisible);
 
+        // Keep input suppression active for a short window after overlay closes via Escape
+        // so the game does not see the same Escape press and open the pause menu.
+        if (!IPAMOverlay.IsVisible && IPAMOverlay.IsInEscapeCooldown())
+        {
+            GameInputSuppression.SetSuppressed(true);
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+        else if (!IPAMOverlay.IsVisible && GameInputSuppression.IsActive)
+        {
+            GameInputSuppression.SetSuppressed(false);
+        }
+
         // Run before default Unity script order so keys are handled before many game scripts read the same keys.
         var kb = Keyboard.current;
         if (kb != null)
         {
-            // P toggles IPAM
-            if (kb.pKey.wasPressedThisFrame && !IPAMOverlay.IsVisible)
+            // P toggles IPAM — but NOT while pause menu is active
+            if (kb.pKey.wasPressedThisFrame && !IPAMOverlay.IsVisible && !IPAMOverlay.IsPauseMenuActive())
             {
                 IPAMOverlay.IsVisible = true;
                 Cursor.lockState = CursorLockMode.None;

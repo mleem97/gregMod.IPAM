@@ -25,6 +25,76 @@ public static partial class IPAMOverlay
 
     private static bool _ipamPrevEscapeIsPressed;
 
+    /// <summary>
+    /// Timestamp (unscaled) when the overlay was last closed via Escape.
+    /// Used to suppress the game's own Escape handler for one frame so the
+    /// pause menu does not open simultaneously with the overlay closing.
+    /// </summary>
+    internal static float OverlayEscapeCloseTime { get; private set; }
+
+    /// <summary>Duration in seconds within which a second Escape press is required to open the pause menu.</summary>
+    private const float EscapeDoublePressWindow = 0.6f;
+
+    /// <summary>
+    /// Returns true if an Escape press should be consumed (suppressed from the game)
+    /// because an overlay just closed within the double-press window.
+    /// Call this from the game's Escape handler (Harmony prefix) to decide whether to skip.
+    /// </summary>
+    internal static bool ShouldConsumeEscape()
+    {
+        if (Time.unscaledTime - OverlayEscapeCloseTime < EscapeDoublePressWindow)
+        {
+            // First Escape after overlay close — consume it (do not open pause menu).
+            // Reset timestamp so the next Escape goes through.
+            OverlayEscapeCloseTime = 0f;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Returns true if the escape cooldown is still active (overlay just closed via Escape).</summary>
+    internal static bool IsInEscapeCooldown()
+    {
+        return OverlayEscapeCloseTime > 0f && Time.unscaledTime - OverlayEscapeCloseTime < EscapeDoublePressWindow;
+    }
+
+    /// <summary>
+    /// Returns true if a game pause/settings menu canvas is currently active.
+    /// Used to prevent IPAM from opening on top of the pause menu.
+    /// </summary>
+    internal static bool IsPauseMenuActive()
+    {
+        try
+        {
+            var all = Resources.FindObjectsOfTypeAll<Canvas>();
+            if (all == null) return false;
+            foreach (var c in all)
+            {
+                if (c == null || !c.isActiveAndEnabled) continue;
+                var go = c.gameObject;
+                if (go == null) continue;
+                if (!go.scene.IsValid() || !go.scene.isLoaded) continue;
+                if (c.renderMode != RenderMode.ScreenSpaceOverlay && c.renderMode != RenderMode.ScreenSpaceCamera) continue;
+
+                var n = go.name ?? "";
+                var root = c.transform?.root?.gameObject?.name ?? "";
+
+                if (n.IndexOf("Pause", StringComparison.OrdinalIgnoreCase) >= 0
+                    || root.IndexOf("Pause", StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("EscapeMenu", StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("InGameMenu", StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("SystemMenu", StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("OptionsMenu", StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("SettingsMenu", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
     internal static void TickIpamEscapeEdgeDetection()
     {
         if (!IsVisible)
@@ -47,8 +117,9 @@ public static partial class IPAMOverlay
             }
             else
             {
-                // Close IPAM — game will open pause menu via its own Escape handler.
+                // Close IPAM — mark Escape as consumed so game does not open pause menu.
                 IsVisible = false;
+                OverlayEscapeCloseTime = Time.unscaledTime;
             }
 
             IpamMenuOcclusion.BumpScanPriority();

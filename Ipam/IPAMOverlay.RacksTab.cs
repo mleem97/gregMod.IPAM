@@ -1254,7 +1254,7 @@ public static partial class IPAMOverlay
 
         var devices = BuildDiagramDevices(drilled, out _);
         var metaH = drilled.IsPersistedEditable ? 160f : 120f;
-        var rowH = TableHeaderH + Mathf.Max(1, devices.Count) * TableRowH + (drilled.IsPersistedEditable ? 380f : 40f);
+        var rowH = TableHeaderH + Mathf.Max(1, devices.Count) * TableRowH + (drilled.IsPersistedEditable ? 580f : 40f);
         var middleCol = metaH + rowH + 24f;
         var rightCol = SectionTitleH + RackDiagramFixedHeight + 56f;
         var body = Mathf.Max(middleCol, rightCol) + 36f;
@@ -1425,14 +1425,16 @@ public static partial class IPAMOverlay
             }
         }
 
-        var colType = midW * 0.14f;
-        var colPos = midW * 0.12f;
-        var colSz = midW * 0.12f;
-        var colDev = midW - colType - colPos - colSz - 40f;
+        var colType = midW * 0.12f;
+        var colPos = midW * 0.10f;
+        var colSz = midW * 0.10f;
+        var colCable = midW * 0.12f;
+        var colDev = midW - colType - colPos - colSz - colCable - 40f;
         GUI.Label(new Rect(mx0, yMid, colType, TableHeaderH), "Type", _stTableHeaderText);
         GUI.Label(new Rect(mx0 + colType, yMid, colPos, TableHeaderH), "Pos", _stTableHeaderText);
         GUI.Label(new Rect(mx0 + colType + colPos, yMid, colSz, TableHeaderH), "Size", _stTableHeaderText);
-        GUI.Label(new Rect(mx0 + colType + colPos + colSz, yMid, colDev, TableHeaderH), "Device", _stTableHeaderText);
+        GUI.Label(new Rect(mx0 + colType + colPos + colSz, yMid, colCable, TableHeaderH), "Kabel", _stTableHeaderText);
+        GUI.Label(new Rect(mx0 + colType + colPos + colSz + colCable, yMid, colDev, TableHeaderH), "Device", _stTableHeaderText);
         yMid += TableHeaderH;
 
         for (var r = 0; r < diagramDevices.Count; r++)
@@ -1454,7 +1456,27 @@ public static partial class IPAMOverlay
             GUI.Label(new Rect(mx0 + 4f, yMid, colType - 8f, TableRowH), d.TypeLabel ?? "", _stTableCell);
             GUI.Label(new Rect(mx0 + colType, yMid, colPos - 4f, TableRowH), posTxt, _stTableCell);
             GUI.Label(new Rect(mx0 + colType + colPos, yMid, colSz, TableRowH), $"{d.HeightU} U", _stTableCell);
-            GUI.Label(new Rect(mx0 + colType + colPos + colSz, yMid, colDev - 6f, TableRowH), d.DisplayName, _stTableCell);
+
+            // Cabling info column
+            if (selected.IsPersistedEditable && selected.Persisted != null && !string.IsNullOrEmpty(d.EntryId))
+            {
+                DrawCablingInfoColumn(mx0 + colType + colPos + colSz, yMid, colCable, selected.Persisted.Id, d.EntryId);
+            }
+
+            // Power LED for servers
+            var devX = mx0 + colType + colPos + colSz + colCable;
+            if (selected.IsPersistedEditable && selected.Persisted != null
+                && string.Equals(d.TypeLabel, "Server", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(d.EntryId))
+            {
+                var isPowered = CablingDataStore.IsPoweredOn(selected.Persisted.Id, d.EntryId);
+                var ledSize = 8f;
+                var ledY = yMid + (TableRowH - ledSize) * 0.5f;
+                DrawTintedRect(new Rect(devX, ledY, ledSize, ledSize), isPowered ? PowerOnColor : PowerOffColor);
+                devX += ledSize + 4f;
+            }
+
+            GUI.Label(new Rect(devX, yMid, colDev - (devX - (mx0 + colType + colPos + colSz + colCable)) - 6f, TableRowH), d.DisplayName, _stTableCell);
 
             if (selected.IsPersistedEditable
                 && selected.Persisted?.Mounts != null
@@ -1476,6 +1498,34 @@ public static partial class IPAMOverlay
 
         if (selected.IsPersistedEditable && selected.Persisted != null)
         {
+            yMid += 8f;
+
+            // ── Rack Editor: Auto-Verkabelung + Power ──
+            GUI.Label(new Rect(mx0, yMid, midW, SectionTitleH), "Rack Editor", _stSectionTitle);
+            yMid += SectionTitleH + 4f;
+
+            // Auto-Verkabelung button
+            var cableMode = CablingDataStore.GetCablingMode(selected.Persisted.Id);
+            var cableCount = CablingDataStore.GetConnections(selected.Persisted.Id).Count;
+            var modeLabel = cableMode switch
+            {
+                CablingMode.Simple => "Einfach",
+                CablingMode.Redundant => "Redundant",
+                _ => "Keine",
+            };
+            GUI.Label(new Rect(mx0, yMid, 200f, 22f), $"Verkabelung: {modeLabel} ({cableCount} Kabel)", _stTableCell);
+
+            if (ImguiButtonOnce(new Rect(mx0 + 210f, yMid, 140f, 24f), "Auto-Verkabelung", 94100, _stPrimaryBtn))
+            {
+                _autoCablingModalOpen = true;
+                _autoCablingPreview = null;
+            }
+
+            yMid += 30f;
+
+            // Power panel
+            DrawPowerPanel(mx0, ref yMid, cardW, selected.Persisted.Id, diagramDevices, selected);
+
             yMid += 8f;
             GUI.Label(new Rect(mx0, yMid, midW, SectionTitleH), "Add device", _stSectionTitle);
             yMid += SectionTitleH + 4f;
@@ -1654,7 +1704,8 @@ public static partial class IPAMOverlay
 
         GUI.Label(new Rect(dx, yDiagCol, rightDiagW, SectionTitleH), "Front view", _stSectionTitle);
         yDiagCol += SectionTitleH + 6f;
-        DrawRackFrontDiagramDevices(rackBodyRect, ru, diagramDevices, eff);
+        DrawRackFrontDiagramDevices(rackBodyRect, ru, diagramDevices, eff, selected.Persisted?.Id ?? "");
+        DrawCablingLinesInDiagram(rackBodyRect, ru, diagramDevices, eff, selected.Persisted?.Id ?? "");
         DrawRackFrontDiagramDropTarget(rackBodyRect, selected.Persisted?.Id ?? _rackMountDropRackId, ru);
         DrawRackMountDropPreview(rackBodyRect, ru, _rackMountDragHeightU, _rackMountDragHoverStartU);
         DrawRackUnitLabels(new Rect(dx, yDiagCol, unitLab, diagramH), ru);
@@ -1665,6 +1716,12 @@ public static partial class IPAMOverlay
                 new Rect(dx, yDiagCol + diagramH + 6f, rightDiagW, 36f),
                 "~ Position estimated where the game did not expose start U.",
                 _stHint);
+        }
+
+        // Auto-Cabling Modal (drawn on top of everything)
+        if (selected?.Persisted != null)
+        {
+            DrawAutoCablingModal(x0, y, cardW, selected.Persisted.Id);
         }
     }
 
@@ -1689,7 +1746,7 @@ public static partial class IPAMOverlay
         return e?.SceneCopy?.DisplayName ?? "Rack";
     }
 
-    private static void DrawRackFrontDiagramDevices(Rect rackBody, int totalU, IReadOnlyList<RackDiagramDevice> devices, int[] effStart)
+    private static void DrawRackFrontDiagramDevices(Rect rackBody, int totalU, IReadOnlyList<RackDiagramDevice> devices, int[] effStart, string rackId = "")
     {
         if (Event.current.type == EventType.Repaint)
         {
@@ -1769,6 +1826,16 @@ public static partial class IPAMOverlay
             GUI.contentColor = txtCol;
             GUI.Label(devRect, nm, _stTableCell);
             GUI.contentColor = oldCc;
+
+            // Power LED indicator on server blocks
+            if (!string.IsNullOrEmpty(d.EntryId) && string.Equals(d.TypeLabel, "Server", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(rackId))
+            {
+                var isPowered = CablingDataStore.IsPoweredOn(rackId, d.EntryId);
+                var ledSize = Mathf.Clamp(cell * 0.45f, 4f, 10f);
+                var ledRect = new Rect(devRect.x + 4f, devRect.y + (devRect.height - ledSize) * 0.5f, ledSize, ledSize);
+                DrawTintedRect(ledRect, isPowered ? PowerOnColor : PowerOffColor);
+            }
         }
 
         // Draw utilization summary at bottom

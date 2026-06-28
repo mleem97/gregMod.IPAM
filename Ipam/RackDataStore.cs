@@ -648,4 +648,8 @@ internal sealed class RackMountRecord
     public string PatchLabel { get; set; }
     public int StartU { get; set; }
     public int HeightU { get; set; }
+    /// <summary>Available port count (Switch: 24/48, Server: 2). 0 = use default.</summary>
+    public int PortCount { get; set; }
+    /// <summary>User-visible device name. Null = auto-resolve from scene.</summary>
+    public string DisplayName { get; set; }
 }
