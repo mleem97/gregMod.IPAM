@@ -10,23 +10,81 @@ namespace GregModIPAM;
 /// <summary>
 /// While IPAM is open, suppress mouse button and delta reads on the Input System path so camera rotation
 /// and world / menu clicks do not fire behind the overlay.
+///
+/// All patches are applied manually via TryApply — nested types with [HarmonyPatch] are skipped by PatchAll
+/// to avoid hard-failure when a target method is unavailable on a specific Unity/IL2CPP build.
 /// </summary>
 internal static class InputSystemMouseBlockPatches
 {
     internal static void TryApply(HarmonyLib.Harmony harmonyInstance)
     {
-        foreach (var nested in typeof(InputSystemMouseBlockPatches).GetNestedTypes(BindingFlags.NonPublic | BindingFlags.Static))
+        var applied = 0;
+        var skipped = 0;
+
+        // Button patches (ButtonControl properties — stable across Unity versions)
+        applied += TryPatchProperty(harmonyInstance, typeof(ButtonControl), "wasPressedThisFrame", typeof(MouseWasPressedPatch));
+        applied += TryPatchProperty(harmonyInstance, typeof(ButtonControl), "wasReleasedThisFrame", typeof(MouseWasReleasedPatch));
+        applied += TryPatchProperty(harmonyInstance, typeof(ButtonControl), "isPressed", typeof(MouseIsPressedPatch));
+
+        // Delta patch (Vector2Control.ReadValue — may not resolve on all IL2CPP builds)
+        var deltaPatched = TryPatchMethod(harmonyInstance, typeof(Vector2Control), "ReadValue", typeof(MouseDeltaStripPatch));
+        if (deltaPatched) applied++; else skipped++;
+
+        ModReleaseLog.HarmonyPatch($"InputSystemMouseBlockPatches: {applied} applied, {skipped} skipped (optional)", true);
+    }
+
+    private static int TryPatchProperty(HarmonyLib.Harmony h, Type targetType, string propertyName, Type patchType)
+    {
+        try
         {
-            try
+            var prop = targetType.GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+            if (prop == null)
             {
-                harmonyInstance.CreateClassProcessor(nested).Patch();
+                ModReleaseLog.Warning($"InputSystemMouseBlockPatches: {targetType.Name}.{propertyName} not found, skipping");
+                return 0;
             }
-            catch (Exception ex)
+
+            var getter = prop.GetGetMethod();
+            if (getter == null)
             {
-                ModLogging.Warning($"gregMod.IPAM: Input System mouse patch {nested.Name} failed: {ex.Message}");
+                ModReleaseLog.Warning($"InputSystemMouseBlockPatches: {targetType.Name}.{propertyName} getter not found, skipping");
+                return 0;
             }
+
+            h.Patch(getter, postfix: new HarmonyMethod(patchType.GetMethod("Postfix", BindingFlags.Static | BindingFlags.NonPublic)));
+            ModReleaseLog.HarmonyPatch($"InputSystemMouseBlockPatches.{patchType.Name}", true);
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            ModReleaseLog.HarmonyPatch($"InputSystemMouseBlockPatches.{patchType.Name}", false, ex.Message);
+            return 0;
         }
     }
+
+    private static bool TryPatchMethod(HarmonyLib.Harmony h, Type targetType, string methodName, Type patchType)
+    {
+        try
+        {
+            var method = targetType.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+            if (method == null)
+            {
+                ModReleaseLog.Warning($"InputSystemMouseBlockPatches: {targetType.Name}.{methodName}() not found, skipping (optional delta blocker)");
+                return false;
+            }
+
+            h.Patch(method, postfix: new HarmonyMethod(patchType.GetMethod("Postfix", BindingFlags.Static | BindingFlags.NonPublic)));
+            ModReleaseLog.HarmonyPatch($"InputSystemMouseBlockPatches.{patchType.Name}", true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ModReleaseLog.Warning($"InputSystemMouseBlockPatches: {targetType.Name}.{methodName}() patch skipped: {ex.Message}");
+            return false;
+        }
+    }
+
+    // ── Shared logic ──
 
     private static bool ShouldStripMouseButton(ButtonControl control)
     {
@@ -60,20 +118,8 @@ internal static class InputSystemMouseBlockPatches
             && path.IndexOf("/mouse/delta", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-    private static bool ShouldStripMousePosition(InputControl control)
-    {
-        if (!IPAMOverlay.IsVisible || control == null)
-        {
-            return false;
-        }
+    // ── Patch postfixes (referenced by TryApply via reflection) ──
 
-        var path = control.path;
-        return !string.IsNullOrEmpty(path)
-            && path.IndexOf("/mouse/position", StringComparison.OrdinalIgnoreCase) >= 0
-            && !IpamGameInputGate.ShouldStripGameMouse; // position only if not already in bypass
-    }
-
-    [HarmonyPatch(typeof(ButtonControl), nameof(ButtonControl.wasPressedThisFrame), MethodType.Getter)]
     private static class MouseWasPressedPatch
     {
         private static void Postfix(ButtonControl __instance, ref bool __result)
@@ -85,7 +131,6 @@ internal static class InputSystemMouseBlockPatches
         }
     }
 
-    [HarmonyPatch(typeof(ButtonControl), nameof(ButtonControl.wasReleasedThisFrame), MethodType.Getter)]
     private static class MouseWasReleasedPatch
     {
         private static void Postfix(ButtonControl __instance, ref bool __result)
@@ -97,7 +142,6 @@ internal static class InputSystemMouseBlockPatches
         }
     }
 
-    [HarmonyPatch(typeof(ButtonControl), nameof(ButtonControl.isPressed), MethodType.Getter)]
     private static class MouseIsPressedPatch
     {
         private static void Postfix(ButtonControl __instance, ref bool __result)
@@ -109,7 +153,6 @@ internal static class InputSystemMouseBlockPatches
         }
     }
 
-    [HarmonyPatch(typeof(Vector2Control), nameof(Vector2Control.ReadValue), MethodType.Normal)]
     private static class MouseDeltaStripPatch
     {
         private static void Postfix(InputControl __instance, ref Vector2 __result)

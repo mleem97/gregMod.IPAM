@@ -10,7 +10,7 @@
     <RootNamespace>GregModIPAM</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Prevent nested tool/obj output under artifacts/ from being compiled as mod sources -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**;exports\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**;exports\**;NoMoreEOL\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

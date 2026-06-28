@@ -1,0 +1,3 @@
+[submodule "NoMoreEOL"]
+	path = NoMoreEOL
+	url = git@github.com:MartelSimon/NoMoreEOL.git

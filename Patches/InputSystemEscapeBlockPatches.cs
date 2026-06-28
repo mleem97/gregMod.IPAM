@@ -8,25 +8,38 @@ namespace GregModIPAM;
 /// <summary>
 /// While IPAM is open, Escape is NOT blocked — the game opens the pause menu alongside IPAM closing.
 /// P key IS blocked so it only closes IPAM without opening the pause menu.
+///
+/// Applied manually via TryApply to avoid hard-failure if ButtonControl.wasPressedThisFrame is unavailable.
 /// </summary>
 internal static class InputSystemEscapeBlockPatches
 {
     internal static void TryApply(HarmonyLib.Harmony harmonyInstance)
     {
-        foreach (var nested in typeof(InputSystemEscapeBlockPatches).GetNestedTypes(BindingFlags.NonPublic | BindingFlags.Static))
+        try
         {
-            try
+            var prop = typeof(ButtonControl).GetProperty("wasPressedThisFrame", BindingFlags.Instance | BindingFlags.Public);
+            if (prop == null)
             {
-                harmonyInstance.CreateClassProcessor(nested).Patch();
+                ModReleaseLog.Warning("InputSystemEscapeBlockPatches: ButtonControl.wasPressedThisFrame not found, skipping");
+                return;
             }
-            catch (Exception ex)
+
+            var getter = prop.GetGetMethod();
+            if (getter == null)
             {
-                ModLogging.Warning($"gregMod.IPAM: Input System escape patch {nested.Name} failed: {ex.Message}");
+                ModReleaseLog.Warning("InputSystemEscapeBlockPatches: ButtonControl.wasPressedThisFrame getter not found, skipping");
+                return;
             }
+
+            harmonyInstance.Patch(getter, postfix: new HarmonyMethod(typeof(PKeyStripPatch).GetMethod("Postfix", BindingFlags.Static | BindingFlags.NonPublic)));
+            ModReleaseLog.HarmonyPatch("InputSystemEscapeBlockPatches.PKeyStripPatch", true);
+        }
+        catch (Exception ex)
+        {
+            ModReleaseLog.HarmonyPatch("InputSystemEscapeBlockPatches.PKeyStripPatch", false, ex.Message);
         }
     }
 
-    [HarmonyPatch(typeof(ButtonControl), nameof(ButtonControl.wasPressedThisFrame), MethodType.Getter)]
     private static class PKeyStripPatch
     {
         private static void Postfix(ButtonControl __instance, ref bool __result)
