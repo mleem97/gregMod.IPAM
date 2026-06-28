@@ -477,7 +477,7 @@ public static partial class IPAMOverlay
     /// <summary>
     /// IPAM IMGUI font scale (applied when styles are rebuilt). 1.0 = current default.
     /// </summary>
-    private static float _uiFontScale = 1.2f;
+    private static float _uiFontScale = 1f;
 
     internal static float UiFontScale
     {
@@ -529,12 +529,12 @@ public static partial class IPAMOverlay
     private const float EolSnapshotRefreshInterval = 60f;
 
     // Layout (NetBox-style shell)
-    /// <summary>Title/subtitle row + button row so actions never cover “Inventory”.</summary>
-    private const float ToolbarHBase = 74f;
-    private const float ToolbarTitleBlockHBase = 44f;
+    /// <summary>Title/subtitle row + button row so actions never cover "Inventory".</summary>
+    private const float ToolbarHBase = 88f;
+    private const float ToolbarTitleBlockHBase = 52f;
     /// <summary>Two rows: title + window buttons, then DHCP/IPAM license toggles on the right.</summary>
-    private const float TitleBarHBase = 54f;
-    private const float SidebarWBase = 208f;
+    private const float TitleBarHBase = 64f;
+    private const float SidebarWBase = 250f;
 
     private static readonly float[] TableColWeight = { 0.22f, 0.16f, 0.08f, 0.22f, 0.12f, 0.20f };
     private const float ColumnGripHalfWidth = 5f;
@@ -545,10 +545,10 @@ public static partial class IPAMOverlay
     private static float _lastInventoryTableWidth;
     private const float MinColWeight = 0.045f;
     private const float MaxColWeight = 0.52f;
-    private const float TableRowHBase = 30f;
-    private const float SectionTitleHBase = 22f;
-    private const float TableHeaderHBase = 26f;
-    private const float CardPadBase = 14f;
+    private const float TableRowHBase = 36f;
+    private const float SectionTitleHBase = 26f;
+    private const float TableHeaderHBase = 32f;
+    private const float CardPadBase = 16f;
 
     private static float S(float px) => Mathf.Round(px * Mathf.Clamp(UiFontScale, 0.5f, 2.0f));
 

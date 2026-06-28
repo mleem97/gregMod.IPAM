@@ -43,7 +43,7 @@ public class GregModIPAMMod : MelonMod
             DeviceConfigRegistry.BootstrapLoadDisk();
 
             _prefs = MelonPreferences.CreateCategory(PrefCategoryId, PrefCategoryName);
-            _prefUiFontScale = _prefs.CreateEntry(PrefUiFontScaleKey, 1.2f, "IPAM UI font scale");
+            _prefUiFontScale = _prefs.CreateEntry(PrefUiFontScaleKey, 1f, "IPAM UI font scale");
             IPAMOverlay.UiFontScale = _prefUiFontScale.Value;
             IPAMOverlay.UiFontScaleChanged += OnUiFontScaleChanged;
             ModReleaseLog.Pref("UiFontScale", _prefUiFontScale.Value.ToString("F2"));
