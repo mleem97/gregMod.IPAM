@@ -1,11 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 namespace GregModIPAM;
 
 /// <summary>
-/// While the CLI is open, disables <see cref="PlayerInput"/> devices so letter keys do not trigger in-game actions.
+/// While IPAM is open, disables <see cref="PlayerInput"/> devices so letter keys do not trigger in-game actions.
+/// Also forces cursor visible/unlocked and clears EventSystem selection.
 /// Falls back silently if the game does not use <see cref="PlayerInput"/>.
 /// </summary>
 internal static class GameInputSuppression
@@ -24,6 +26,17 @@ internal static class GameInputSuppression
         _active = suppress;
         if (suppress)
         {
+            // Force cursor state
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+
+            // Clear EventSystem selection so game UI does not steal focus
+            var es = EventSystem.current;
+            if (es != null)
+            {
+                es.SetSelectedGameObject(null);
+            }
+
             Suspended.Clear();
             DisabledAssets.Clear();
             var all = Resources.FindObjectsOfTypeAll<PlayerInput>();
@@ -53,7 +66,7 @@ internal static class GameInputSuppression
                 }
                 catch (System.Exception ex)
                 {
-                    ModLogging.Warning($"CLI input lock: could not deactivate PlayerInput: {ex.Message}");
+                    ModLogging.Warning($"IPAM input lock: could not deactivate PlayerInput: {ex.Message}");
                 }
             }
         }
@@ -72,7 +85,7 @@ internal static class GameInputSuppression
                 }
                 catch (System.Exception ex)
                 {
-                    ModLogging.Warning($"CLI input lock: could not reactivate PlayerInput: {ex.Message}");
+                    ModLogging.Warning($"IPAM input lock: could not reactivate PlayerInput: {ex.Message}");
                 }
             }
 
@@ -89,7 +102,7 @@ internal static class GameInputSuppression
                 }
                 catch (System.Exception ex)
                 {
-                    ModLogging.Warning($"CLI input lock: could not re-enable InputActionAsset: {ex.Message}");
+                    ModLogging.Warning($"IPAM input lock: could not re-enable InputActionAsset: {ex.Message}");
                 }
             }
 

@@ -158,6 +158,11 @@ public class GregModIPAMMod : MelonMod
             return;
         }
 
+        // Force cursor visible and unlocked every frame while IPAM is open
+        // (game may override cursor state in its own Update/LateUpdate).
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
         IPAMOverlay.TickIpamGameInputSuppression();
     }
 

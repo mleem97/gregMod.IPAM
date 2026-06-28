@@ -812,7 +812,13 @@ public static partial class IPAMOverlay
         {
             _focusIpamWindowOnNextFrame = false;
             GUI.FocusWindow(9001);
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
         }
+
+        // Force cursor state every frame while IPAM is open
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
 
         GUI.DrawTexture(_windowRect, _texBackdrop, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
 

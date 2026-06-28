@@ -34,6 +34,13 @@ internal static class UiRaycastBlocker
 
             // Run every time IPAM is shown — game UI may create canvases later with higher sort orders.
             RefreshFrontStack();
+
+            // Clear EventSystem selection so game buttons do not stay focused.
+            var es = EventSystem.current;
+            if (es != null)
+            {
+                es.SetSelectedGameObject(null);
+            }
         }
         else if (_root.activeSelf)
         {
