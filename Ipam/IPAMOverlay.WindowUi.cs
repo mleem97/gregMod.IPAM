@@ -605,6 +605,7 @@ public static partial class IPAMOverlay
         }
 
         _selectedServerInstanceIds.Clear();
+                _autoPrefixCidr = null;
         _selectedServer = null;
         _serverRangeAnchorInstanceId = -1;
         if (!ctrlHeld)
@@ -634,6 +635,7 @@ public static partial class IPAMOverlay
         var ctrl = e.control || e.command;
         var shift = e.shift;
         _selectedServerInstanceIds.Clear();
+                _autoPrefixCidr = null;
         _selectedServer = null;
         _serverRangeAnchorInstanceId = -1;
         _customerDropdownOpen = false;
@@ -684,6 +686,7 @@ public static partial class IPAMOverlay
         if (!ctrlHeld)
         {
             _selectedServerInstanceIds.Clear();
+                _autoPrefixCidr = null;
             _selectedServerInstanceIds.Add(server.GetInstanceID());
         }
         else
@@ -759,6 +762,7 @@ public static partial class IPAMOverlay
             var lo = Mathf.Min(anchorIdx, sortedIndex);
             var hi = Mathf.Max(anchorIdx, sortedIndex);
             _selectedServerInstanceIds.Clear();
+                _autoPrefixCidr = null;
             for (var i = lo; i <= hi; i++)
             {
                 var s = viewRows[i];
@@ -2771,12 +2775,67 @@ public static partial class IPAMOverlay
                 DHCPManager.ClearLastSetIpError();
                 BeginImGuiInputRecoveryBurst();
             }
+
+            // Auto-load prefix and next free IP into octet editor for single-server selection
+            if (SelectedServersScratch.Count == 1)
+            {
+                var srv = SelectedServersScratch[0];
+                var assignedIp = DHCPManager.GetServerIP(srv);
+                if (!string.IsNullOrWhiteSpace(assignedIp) && assignedIp != "0.0.0.0")
+                {
+                    LoadOctetsFromIp(assignedIp);
+                    // Determine and cache the customer's CIDR for display
+                    _autoPrefixCidr = ResolveCustomerPrefixCidr(srv, cb);
+                    ShowIpamToast($"IP auto-assigned: {assignedIp}");
+                }
+                else
+                {
+                    // Try next free
+                    var nextIp = DHCPManager.GetNextFreeIpForServer(srv);
+                    if (!string.IsNullOrEmpty(nextIp))
+                    {
+                        LoadOctetsFromIp(nextIp);
+                        _autoPrefixCidr = ResolveCustomerPrefixCidr(srv, cb);
+                        ShowIpamToast($"Suggested: {nextIp}");
+                    }
+                    else
+                    {
+                        _autoPrefixCidr = ResolveCustomerPrefixCidr(srv, cb);
+                        ShowIpamToast("No free IP in contract subnet");
+                    }
+                }
+            }
         }
 
         if (failed > 0)
         {
             DHCPManager.SetLastIpamError("Customer assignment failed for one or more selected servers.");
         }
+    }
+
+    private static string _autoPrefixCidr;
+
+    private static string ResolveCustomerPrefixCidr(Server server, CustomerBase cb)
+    {
+        if (server == null || cb == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var tryOrder = GameSubnetHelper.BuildDhcpCidrTryOrder(server, cb, null, logSteps: false);
+            if (tryOrder != null && tryOrder.Count > 0)
+            {
+                return tryOrder[0];
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        return null;
     }
 
     private static bool TrySetServerCustomer(Server server, CustomerBase customer)
@@ -3502,6 +3561,7 @@ public static partial class IPAMOverlay
             if (ImguiButtonOnce(new Rect(ox, py, 100, 26), "Deselect", 52, _stMutedBtn))
             {
                 _selectedServerInstanceIds.Clear();
+                _autoPrefixCidr = null;
                 _selectedServer = null;
                 _serverRangeAnchorInstanceId = -1;
             }
@@ -3521,7 +3581,37 @@ public static partial class IPAMOverlay
         {
             var srv = SelectedServersScratch[0];
             var currentIp = DHCPManager.GetServerIP(srv);
-            LoadOctetsFromIp(currentIp);
+
+            // Resolve customer prefix for display
+            var cidr = _autoPrefixCidr;
+            if (string.IsNullOrEmpty(cidr))
+            {
+                var cb = GameSubnetHelper.FindCustomerBaseForServer(srv);
+                cidr = ResolveCustomerPrefixCidr(srv, cb);
+                _autoPrefixCidr = cidr;
+            }
+
+            // Load current IP or auto-suggest from prefix
+            if (!string.IsNullOrWhiteSpace(currentIp) && currentIp != "0.0.0.0")
+            {
+                LoadOctetsFromIp(currentIp);
+            }
+            else if (!string.IsNullOrEmpty(cidr))
+            {
+                // Auto-suggest next free IP from customer prefix
+                var nextIp = DHCPManager.GetNextFreeIpForServer(srv);
+                if (!string.IsNullOrEmpty(nextIp))
+                {
+                    LoadOctetsFromIp(nextIp);
+                }
+            }
+
+            // Prefix info line
+            if (!string.IsNullOrEmpty(cidr))
+            {
+                GUI.Label(new Rect(px, py, iw, 18f), $"Contract subnet:  {cidr}", _stHint);
+                py += 20f;
+            }
 
             // Octet Editor Row
             var ox = px;
