@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v0.3.8)'
+        description: 'Tag to release (e.g. v0.6.6)'
         required: true
         type: string
 
@@ -22,6 +22,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Build
+        run: dotnet build -c Release
 
       - name: Get version from tag
         id: version
@@ -30,25 +39,17 @@ jobs:
           echo "VERSION=${TAG#v}" >> $GITHUB_OUTPUT
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
 
-      - name: Find DLL
-        id: dll
+      - name: Create version branch
         run: |
-          if [ -f "dist/gregMod.IPAM.dll" ]; then
-            echo "FILE=dist/gregMod.IPAM.dll" >> $GITHUB_OUTPUT
-            echo "Found: dist/gregMod.IPAM.dll"
-          elif [ -f "dist/DHCP and IPAM.dll" ]; then
-            echo "FILE=dist/DHCP and IPAM.dll" >> $GITHUB_OUTPUT
-            echo "Found: dist/DHCP and IPAM.dll"
-          else
-            echo "No DLL found in dist/"
-            echo "FILE=" >> $GITHUB_OUTPUT
-          fi
+          TAG="${{ steps.version.outputs.TAG }}"
+          BRANCH="release/${TAG}"
+          git checkout -b "$BRANCH"
+          git push origin "$BRANCH" || true
 
       - name: Create Release
-        if: steps.dll.outputs.FILE != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.TAG }}
           name: Release ${{ steps.version.outputs.VERSION }}
           generate_release_notes: true
-          files: ${{ steps.dll.outputs.FILE }}
+          files: bin/Release/net6.0/gregMod.IPAM.dll
