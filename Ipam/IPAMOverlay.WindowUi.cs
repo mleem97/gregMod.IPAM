@@ -5,7 +5,7 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Main IPAM window: title/toolbar, navigation, scroll content; switches keep a bottom strip; servers use popup 9005 only.
 
@@ -231,8 +231,8 @@ public static partial class IPAMOverlay
                 ModDebugLog.IpamPerfRuntimeEnabled = true;
                 ModDebugLog.WriteIpamPerf("Enabled from IPAM toolbar (runtime).");
                 var perfPath = ModDebugLog.GetIpamPerfLogPath() ?? "(path unavailable)";
-                ShowIpamToast($"Perf log on — see file next to _Data: DHCPSwitches-ipam-perf.log");
-                ModLogging.Msg("[DHCPSwitches] IPAM perf log: " + perfPath);
+                ShowIpamToast($"Perf log on — see file next to _Data: gregModIPAM-ipam-perf.log");
+                ModLogging.Msg("[gregMod.IPAM] IPAM perf log: " + perfPath);
             }
         }
 
@@ -365,7 +365,9 @@ public static partial class IPAMOverlay
             DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 0, subNavW, navRowH), IpamSubSection.IpAddresses, "IP addresses", 9050);
             DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 1, subNavW, navRowH), IpamSubSection.Prefixes, "Prefixes", 9051);
             DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 2, subNavW, navRowH), IpamSubSection.Vlans, "VLANs", 9052);
-            navAfterIpam = ipamSubBaseY + navRowH * 3 + Sp(8f);
+            DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 3, subNavW, navRowH), IpamSubSection.DhcpScopes, "DHCP Scopes", 9053);
+            DrawIpamSubNav(new Rect(navX + ipamSubIndent, ipamSubBaseY + navRowH * 4, subNavW, navRowH), IpamSubSection.Tutorial, "Tutorial", 9054);
+            navAfterIpam = ipamSubBaseY + navRowH * 5 + Sp(8f);
         }
         else
         {
@@ -461,6 +463,12 @@ public static partial class IPAMOverlay
                             break;
                         case IpamSubSection.Vlans:
                             DrawIpamVlansView(innerW);
+                            break;
+                        case IpamSubSection.DhcpScopes:
+                            DrawIpamDhcpScopesView(innerW);
+                            break;
+                        case IpamSubSection.Tutorial:
+                            DrawIpamTutorialView(innerW);
                             break;
                     }
 
@@ -1264,6 +1272,12 @@ public static partial class IPAMOverlay
                         return;
                     case IpamSubSection.Vlans:
                         _cachedContentHeight = Mathf.Max(220f, ComputeIpamVlansContentHeight());
+                        return;
+                    case IpamSubSection.DhcpScopes:
+                        _cachedContentHeight = Mathf.Max(220f, ComputeIpamDhcpScopesContentHeight());
+                        return;
+                    case IpamSubSection.Tutorial:
+                        _cachedContentHeight = Mathf.Max(400f, ComputeIpamTutorialContentHeight());
                         return;
                     default:
                         _cachedContentHeight = 260f;
@@ -3333,11 +3347,63 @@ public static partial class IPAMOverlay
         }
         else
         {
-            GUI.Label(
-                new Rect(px, py, iw, 44f),
-                "Pick a customer, then Apply with Contract+DHCP or IPAM prefix. The manual octet editor was removed; use toolbar “Edit servers” after selecting one or more rows.",
-                _stHint);
-            py += 48f;
+            var srv = SelectedServersScratch[0];
+            var currentIp = DHCPManager.GetServerIP(srv);
+            LoadOctetsFromIp(currentIp);
+
+            // Octet Editor Row
+            var ox = px;
+            DrawOctetEditor(ref _oct0, ref ox, py, 0);
+            GUI.Label(new Rect(ox, py + 2, 10, 22), ".", _stOctetVal);
+            ox += 12f;
+            DrawOctetEditor(ref _oct1, ref ox, py, 1);
+            GUI.Label(new Rect(ox, py + 2, 10, 22), ".", _stOctetVal);
+            ox += 12f;
+            DrawOctetEditor(ref _oct2, ref ox, py, 2);
+            GUI.Label(new Rect(ox, py + 2, 10, 22), ".", _stOctetVal);
+            ox += 12f;
+            DrawOctetEditor(ref _oct3, ref ox, py, 3);
+            py += 30f;
+
+            // Apply IP + Next Free Buttons
+            var bx = px;
+            if (ImguiButtonOnce(new Rect(bx, py, 100, 26), "Apply IP", 53, _stPrimaryBtn))
+            {
+                var ip = $"{_oct0}.{_oct1}.{_oct2}.{_oct3}";
+                if (DHCPManager.SetServerIP(srv, ip))
+                {
+                    ShowIpamToast($"IP set to {ip}");
+                    InvalidateDeviceCache();
+                }
+                else if (!string.IsNullOrEmpty(DHCPManager.LastSetIpError))
+                {
+                    ShowIpamToast(DHCPManager.LastSetIpError);
+                }
+            }
+
+            bx += 108f;
+            if (ImguiButtonOnce(new Rect(bx, py, 120, 26), "Next Free IP", 54, _stMutedBtn))
+            {
+                var nextIp = DHCPManager.GetNextFreeIpForServer(srv);
+                if (!string.IsNullOrEmpty(nextIp))
+                {
+                    LoadOctetsFromIp(nextIp);
+                    ShowIpamToast($"Suggested: {nextIp}");
+                }
+                else
+                {
+                    ShowIpamToast("No free IP available");
+                }
+            }
+
+            py += 32f;
+
+            // Error Display
+            if (!string.IsNullOrEmpty(DHCPManager.LastSetIpError))
+            {
+                GUI.Label(new Rect(px, py, iw, 36f), DHCPManager.LastSetIpError, _stError);
+                py += 40f;
+            }
         }
     }
 
@@ -3441,6 +3507,16 @@ public static partial class IPAMOverlay
         {
             _activeOctetSlot = octetSlot;
             _ipamFormFieldFocus = IpamFormFocusNone;
+            Event.current.Use();
+        }
+
+        // Mouse-Wheel auf aktives Octet
+        if (_activeOctetSlot == octetSlot
+            && Event.current.type == EventType.ScrollWheel
+            && labelRect.Contains(Event.current.mousePosition))
+        {
+            var delta = Mathf.RoundToInt(-Event.current.delta.y);
+            oct = Mathf.Clamp(oct + delta, 0, 255);
             Event.current.Use();
         }
 

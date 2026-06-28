@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>Per-<see cref="NetworkSwitch"/> running config keyed by a stable ID (see <see cref="DeviceStableId"/>), restored from disk after restart.</summary>
 public static class DeviceConfigRegistry

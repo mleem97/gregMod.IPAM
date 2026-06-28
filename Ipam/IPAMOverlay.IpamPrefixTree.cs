@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Prefixes table: available free-slot rows (one row per block when reasonable) + child prefixes; IPs shown in drilled folder view only.
 

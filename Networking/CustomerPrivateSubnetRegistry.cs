@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Optional mod-defined private LAN CIDR per server when there is no game contract subnet (e.g. routed lab).

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Naming convention mode inside the server edit popup (9005).
 

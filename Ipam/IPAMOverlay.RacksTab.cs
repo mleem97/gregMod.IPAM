@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // User-defined racks (rack_data.json) + optional scene-detected layouts (AssetManagementDeviceLine).
 
@@ -1700,20 +1700,50 @@ public static partial class IPAMOverlay
         var cell = rackBody.height / tu;
         var lineColor = new Color(0.52f, 0.56f, 0.62f, 0.85f);
 
+        // Draw U-slot grid lines
         for (var u = 1; u < tu; u++)
         {
             var yLine = rackBody.yMax - u * cell;
             GUI.DrawTexture(new Rect(rackBody.x, yLine, rackBody.width, 1f), _texTableHeader, ScaleMode.StretchToFill, false, 0f, lineColor, 0f, 0f);
         }
 
+        // Draw border
         var borderColor = new Color(0.58f, 0.64f, 0.72f, 0.95f);
         GUI.DrawTexture(new Rect(rackBody.x, rackBody.y, rackBody.width, 2f), _texTableHeader, ScaleMode.StretchToFill, false, 0f, borderColor, 0f, 0f);
         GUI.DrawTexture(new Rect(rackBody.x, rackBody.yMax - 1f, rackBody.width, 2f), _texTableHeader, ScaleMode.StretchToFill, false, 0f, borderColor, 0f, 0f);
         GUI.DrawTexture(new Rect(rackBody.x, rackBody.y, 2f, rackBody.height), _texTableHeader, ScaleMode.StretchToFill, false, 0f, borderColor, 0f, 0f);
         GUI.DrawTexture(new Rect(rackBody.xMax - 2f, rackBody.y, 2f, rackBody.height), _texTableHeader, ScaleMode.StretchToFill, false, 0f, borderColor, 0f, 0f);
 
+        // Build occupied-slot map
+        var occupied = new bool[tu + 1];
+        for (var i = 0; i < devices.Count && i < effStart.Length; i++)
+        {
+            var su = effStart[i];
+            var h = Mathf.Max(1, devices[i].HeightU);
+            for (var u = su; u < su + h && u <= tu; u++)
+            {
+                occupied[u] = true;
+            }
+        }
+
+        // Mark empty slots with subtle highlight
+        var emptyColor = new Color(0.18f, 0.22f, 0.28f, 0.4f);
+        for (var u = 1; u <= tu; u++)
+        {
+            if (!occupied[u])
+            {
+                var yTop = rackBody.yMax - u * cell;
+                var slotRect = new Rect(rackBody.x + 2f, yTop, rackBody.width - 4f, cell - 1f);
+                if (Event.current.type == EventType.Repaint)
+                {
+                    DrawTintedRect(slotRect, emptyColor);
+                }
+            }
+        }
+
         var maxChars = Mathf.Clamp((int)(rackBody.width / 6.2f), 16, 80);
 
+        // Draw devices
         for (var i = 0; i < devices.Count && i < effStart.Length; i++)
         {
             var d = devices[i];
@@ -1740,6 +1770,29 @@ public static partial class IPAMOverlay
             GUI.Label(devRect, nm, _stTableCell);
             GUI.contentColor = oldCc;
         }
+
+        // Draw utilization summary at bottom
+        var usedSlots = 0;
+        for (var u = 1; u <= tu; u++)
+        {
+            if (occupied[u]) usedSlots++;
+        }
+
+        var pct = tu > 0 ? Mathf.RoundToInt(100f * usedSlots / tu) : 0;
+        var summaryY = rackBody.yMax + 4f;
+        var barW = rackBody.width - 4f;
+        var barH = 6f;
+        var barRect = new Rect(rackBody.x + 2f, summaryY, barW, barH);
+        var barBg = new Color(0.15f, 0.17f, 0.20f, 0.8f);
+        DrawTintedRect(barRect, barBg);
+        var utilColor = pct switch
+        {
+            >= 90 => new Color(0.95f, 0.25f, 0.20f, 1f),
+            >= 70 => new Color(0.95f, 0.75f, 0.20f, 1f),
+            _ => new Color(0.2f, 0.75f, 0.45f, 1f),
+        };
+        DrawTintedRect(new Rect(rackBody.x + 2f, summaryY, barW * (pct / 100f), barH), utilColor);
+        GUI.Label(new Rect(rackBody.x + 2f, summaryY + barH + 1f, barW, 14f), $"{usedSlots}/{tu} U used ({pct}%)", _stMuted);
     }
 
     private static void DrawRackUnitLabels(Rect labelColumn, int totalU)

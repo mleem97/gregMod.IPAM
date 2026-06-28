@@ -6,7 +6,7 @@ using System.Text.Json;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Binds mod UserData JSON (IPAM prefixes, racks, etc.) to a single playthrough so a new game does not
@@ -14,7 +14,7 @@ namespace DHCPSwitches;
 /// </summary>
 internal static class ModSaveScope
 {
-    private const string SubDir = "DHCPSwitches";
+    private const string SubDir = "gregMod.IPAM";
     private const string BindingFileName = "save_binding.json";
 
     private static string _currentScopeId;
@@ -102,7 +102,7 @@ internal static class ModSaveScope
         {
             resetModUserData = true;
             ModLogging.Msg(
-                "DHCPSwitches: detected a new game/save — resetting mod UserData (IPAM prefixes, racks, etc.).");
+                "gregMod.IPAM: detected a new game/save — resetting mod UserData (IPAM prefixes, racks, etc.).");
             WipeModUserDataFiles();
             IpamDataStore.ResetForNewSaveSession();
             RackDataStore.ResetForNewSaveSession();
@@ -133,7 +133,7 @@ internal static class ModSaveScope
         }
         catch (Exception ex)
         {
-            ModLogging.Warning($"DHCPSwitches: could not delete {path}: {ex.Message}");
+            ModLogging.Warning($"gregMod.IPAM: could not delete {path}: {ex.Message}");
         }
     }
 
@@ -229,7 +229,7 @@ internal static class ModSaveScope
         }
         catch (Exception ex)
         {
-            ModLogging.Warning("DHCPSwitches: save_binding.json write failed: " + ex.Message);
+            ModLogging.Warning("gregMod.IPAM: save_binding.json write failed: " + ex.Message);
         }
     }
 

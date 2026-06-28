@@ -3,7 +3,7 @@ using System.Reflection;
 using HarmonyLib;
 using UnityEngine.InputSystem.Controls;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// While IPAM is open, suppress mouse button reads on the Input System path so world / menu clicks do not fire
@@ -21,7 +21,7 @@ internal static class InputSystemMouseBlockPatches
             }
             catch (Exception ex)
             {
-                ModLogging.Warning($"DHCPSwitches: Input System mouse patch {nested.Name} failed: {ex.Message}");
+                ModLogging.Warning($"gregMod.IPAM: Input System mouse patch {nested.Name} failed: {ex.Message}");
             }
         }
     }

@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Modal window (9006): create a child prefix from a free gap or edit an existing prefix (CIDR, name, tenant).
 

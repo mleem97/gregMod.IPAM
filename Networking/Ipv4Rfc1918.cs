@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Net;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>Reserved private IPv4 ranges (RFC 1918). Optional checks for mod-assigned LANs.</summary>
 public static class Ipv4Rfc1918

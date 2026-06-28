@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Game update broke Il2CppInterop unstripping for `GUI.BeginScrollView` / `GUI.Scroller` / scrollbar APIs.
 // Manual scroll: viewport clip group + inner translate group (standard IMGUI pattern), custom thumb via
@@ -59,7 +59,7 @@ public static partial class IPAMOverlay
                     try
                     {
                         ModLogging.Warning(
-                            "DHCPSwitches: GUI.BeginScrollView unsupported on this game build ("
+                            "gregMod.IPAM: GUI.BeginScrollView unsupported on this game build ("
                             + ex.GetType().Name
                             + "), switching IPAM scroll views to manual fallback.");
                     }

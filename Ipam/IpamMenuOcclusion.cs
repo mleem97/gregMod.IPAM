@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Screen-space Overlay canvases (pause, system/settings) are drawn after IMGUI, so they paint on top of IPAM.
@@ -10,7 +10,7 @@ namespace DHCPSwitches;
 /// </summary>
 internal static class IpamMenuOcclusion
 {
-    private const string OurBlockerName = "DHCPSwitches_IPAMClickBlocker";
+    private const string OurBlockerName = "gregModIPAM_IPAMClickBlocker";
 
     /// <summary>Substring matches on canvas or root name (case-insensitive). Keep specific to avoid hiding HUD.</summary>
     private static readonly string[] CanvasNameHints =

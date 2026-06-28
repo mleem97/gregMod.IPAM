@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Optional full-screen canvas kept at max sort order while IPAM is open. The plate does not raycast (post–game-update
@@ -99,11 +99,11 @@ internal static class UiRaycastBlocker
         if (EventSystem.current == null)
         {
             ModLogging.Warning(
-                "DHCPSwitches: No EventSystem in scene — clicks may still reach UI behind IPAM.");
+                "gregMod.IPAM: No EventSystem in scene — clicks may still reach UI behind IPAM.");
             return;
         }
 
-        _root = new GameObject("DHCPSwitches_IPAMClickBlocker");
+        _root = new GameObject("gregModIPAM_IPAMClickBlocker");
         UnityEngine.Object.DontDestroyOnLoad(_root);
 
         var canvas = _root.AddComponent<Canvas>();

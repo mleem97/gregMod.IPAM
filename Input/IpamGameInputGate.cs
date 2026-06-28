@@ -1,6 +1,6 @@
 using System;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// While IPAM is open, strips gameplay mouse reads unless code is inside <see cref="BeginHardwareMouseBypass"/>.

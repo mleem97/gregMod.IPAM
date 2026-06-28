@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Per-frame cache refresh, Input System workarounds for IOPS toolbar, IMGUI focus recovery after closing overlays.
 // Does not own: OnGUI draw order (see Draw in IPAMOverlay.cs).
@@ -40,6 +40,17 @@ public static partial class IPAMOverlay
         _ipamPrevEscapeIsPressed = down;
         if (IpamEscapePressedThisFrame)
         {
+            if (_iopsCalculatorOpen)
+            {
+                // Close IOPS modal only — keep IPAM open.
+                CloseIopsCalculatorModal("Escape");
+            }
+            else
+            {
+                // Close IPAM — game will open pause menu via its own Escape handler.
+                IsVisible = false;
+            }
+
             IpamMenuOcclusion.BumpScanPriority();
         }
     }
@@ -190,7 +201,7 @@ public static partial class IPAMOverlay
         _ipamPerfWindowPasses++;
     }
 
-    /// <summary>Throttled IPAM GUI cost when <c>DHCPSwitches-ipam-perf.flag</c> is present (call from <see cref="DHCPSwitchesBehaviour.Update"/> while IPAM is open).</summary>
+    /// <summary>Throttled IPAM GUI cost when <c>gregModIPAM-ipam-perf.flag</c> is present (call from <see cref="GregModIPAMBehaviour.Update"/> while IPAM is open).</summary>
     public static void TickIpamPerfLog()
     {
         if (!IsVisible)
@@ -349,11 +360,7 @@ public static partial class IPAMOverlay
             return;
         }
 
-        if (IpamEscapePressedThisFrame)
-        {
-            CloseIopsCalculatorModal("Escape");
-            return;
-        }
+        // Escape is handled by TickIpamEscapeEdgeDetection — no duplicate handling here.
 
         if (kb.backspaceKey.wasPressedThisFrame)
         {

@@ -35,4 +35,4 @@ Changes since **0.3.5** (Racks tab, prefix wizard).
 
 ## Install
 
-Copy `bin/Release/net6.0/DHCP and IPAM.dll` into your game **Mods** folder.
+Copy `bin/Release/net6.0/gregMod.IPAM.dll` into your game **Mods** folder.

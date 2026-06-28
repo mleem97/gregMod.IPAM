@@ -3,7 +3,7 @@ using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// While the router/switch CLI is open, suppress legacy <see cref="Input"/> keys that still reach gameplay
@@ -25,17 +25,13 @@ internal static class LegacyInputBlockPatches
             return true;
         }
 
-        // Many builds bind pause / in-game menu to P on the legacy Input Manager path; block while IPAM is focused.
+        // P closes IPAM only (no pause menu); block while IPAM is open.
         if (ipam && key == KeyCode.P)
         {
             return true;
         }
 
-        // Escape toggles pause / menu on the legacy Input Manager path; IPAM snapshots Escape separately.
-        if (ipam && key == KeyCode.Escape)
-        {
-            return true;
-        }
+        // Escape is NOT blocked — the game opens the pause menu alongside IPAM closing.
 
         return false;
     }
@@ -261,7 +257,7 @@ internal static class LegacyInputBlockPatches
     {
         if (InputType == null)
         {
-            ModLogging.Msg("DHCPSwitches: UnityEngine.InputLegacyModule not loaded — skipping legacy key block patches.");
+            ModLogging.Msg("gregMod.IPAM: UnityEngine.InputLegacyModule not loaded — skipping legacy key block patches.");
             return;
         }
 
@@ -273,7 +269,7 @@ internal static class LegacyInputBlockPatches
             }
             catch (System.Exception ex)
             {
-                ModLogging.Warning($"DHCPSwitches: legacy input patch {nested.Name} failed: {ex.Message}");
+                ModLogging.Warning($"gregMod.IPAM: legacy input patch {nested.Name} failed: {ex.Message}");
             }
         }
     }

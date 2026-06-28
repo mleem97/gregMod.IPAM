@@ -1,7 +1,7 @@
 using System;
 using MelonLoader;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 internal static class ModLogging
 {

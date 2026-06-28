@@ -1,4 +1,4 @@
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// IOPS / flow gating vs L3 reachability. Extend when the mod enforces routing between customers;

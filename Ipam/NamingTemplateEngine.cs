@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 internal sealed class DeviceNamingContext
 {

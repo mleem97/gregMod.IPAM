@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Resolves per-application contract subnets from the game (<c>CustomerBase.subnetsPerApp</c> and related) and usable host lists.
@@ -1971,6 +1971,22 @@ public static class GameSubnetHelper
 
             ModDebugLog.WriteDhcpStep(
                 $"BuildDhcpCidrTryOrder enter server={FormatServerBrief(server)} GetCustomerID={cid} CustomerBase.customerID={cbId}");
+        }
+
+        // Phase 0: Check for configured DHCP scopes (highest priority)
+        if (server != null)
+        {
+            var scope = IpamDataStore.FindScopeForServer(server, cb);
+            if (scope != null && !string.IsNullOrEmpty(scope.Cidr))
+            {
+                if (logSteps)
+                {
+                    ModDebugLog.WriteDhcpStep(
+                        $"BuildDhcpCidrTryOrder phase=DhcpScope matched scope='{scope.Name}' level={scope.Level} cidr={scope.Cidr}");
+                }
+
+                return new List<string> { scope.Cidr };
+            }
         }
 
         var fromUiLine = new List<string>();
@@ -4028,6 +4044,112 @@ public static class GameSubnetHelper
             }
 
             return new Il2CppStringArray(tmp);
+        }
+
+        return null;
+    }
+
+    public static List<int> GetVlanIdsForServer(Server server, CustomerBase cb)
+    {
+        var result = new List<int>();
+        if (cb == null)
+        {
+            return result;
+        }
+
+        try
+        {
+            var raw = TryGetVlanIdsPerAppRaw(cb);
+            if (raw == null)
+            {
+                return result;
+            }
+
+            var t = raw.GetType();
+            if (raw is IList list)
+            {
+                foreach (var item in list)
+                {
+                    if (item is int iv)
+                    {
+                        result.Add(iv);
+                    }
+                    else if (item != null && int.TryParse(item.ToString(), out var parsed))
+                    {
+                        result.Add(parsed);
+                    }
+                }
+            }
+            else
+            {
+                foreach (var prop in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+                {
+                    if (prop.PropertyType == typeof(int) || prop.PropertyType == typeof(int?))
+                    {
+                        try
+                        {
+                            var val = prop.GetValue(raw);
+                            if (val is int iv && iv > 0)
+                            {
+                                result.Add(iv);
+                            }
+                        }
+                        catch
+                        {
+                            // Il2Cpp
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        return result;
+    }
+
+    public static AssetManagementDeviceLine FindAssetManagementDeviceLineForServer(Server server)
+    {
+        if (server == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var lines = UnityEngine.Object.FindObjectsOfType<AssetManagementDeviceLine>(true);
+            if (lines == null)
+            {
+                return null;
+            }
+
+            var serverIid = server.GetInstanceID();
+            foreach (var line in lines)
+            {
+                if (line == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var lineServer = line.server;
+                    if (lineServer != null && lineServer.GetInstanceID() == serverIid)
+                    {
+                        return line;
+                    }
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
+            }
+        }
+        catch
+        {
+            // Il2Cpp
         }
 
         return null;

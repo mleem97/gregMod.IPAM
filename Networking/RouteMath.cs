@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>IPv4 CIDR parsing and host enumeration for DHCP when the game does not expose a usable-IP API.</summary>
 public static class RouteMath

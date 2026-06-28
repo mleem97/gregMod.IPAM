@@ -25,5 +25,4 @@ jobs:
           name: Release ${{ steps.version.outputs.VERSION }}
           generate_release_notes: true
           files: |
-            dist/DHCP and IPAM.dll
             dist/gregMod.IPAM.dll

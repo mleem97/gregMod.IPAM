@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Inline "Assign + address" inside server edit popup (9005): Contract+DHCP or IPAM prefix pick + search.
 

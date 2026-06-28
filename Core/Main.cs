@@ -9,17 +9,17 @@ using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
-public class DHCPSwitchesMod : MelonMod
+public class GregModIPAMMod : MelonMod
 {
-    public const string ModGuid = "com.marvin.dhcpswitches";
+    public const string ModGuid = "com.gregmod.ipam";
 
     public const string DHCP_LICENSE_GUID = "dhcp-auto-assign-v1";
     public const string IPAM_LICENSE_GUID = "ipam-remote-view-v1";
 
-    private const string PrefCategoryId = "DHCPSwitches";
-    private const string PrefCategoryName = "DHCP Switches & IPAM";
+    private const string PrefCategoryId = "gregMod.IPAM";
+    private const string PrefCategoryName = "gregMod.IPAM";
     private const string PrefUiFontScaleKey = "IpamUiFontScale";
 
     private static MelonPreferences_Category _prefs;
@@ -41,12 +41,12 @@ public class DHCPSwitchesMod : MelonMod
             IPAMOverlay.UiFontScaleChanged += OnUiFontScaleChanged;
 
             ClassInjector.RegisterTypeInIl2Cpp<DHCPController>();
-            ClassInjector.RegisterTypeInIl2Cpp<DHCPSwitchesBehaviour>();
+            ClassInjector.RegisterTypeInIl2Cpp<GregModIPAMBehaviour>();
 
-            var host = new GameObject("DHCPSwitches_Host");
+            var host = new GameObject("gregModIPAM_Host");
             UnityEngine.Object.DontDestroyOnLoad(host);
             host.hideFlags = HideFlags.HideAndDontSave;
-            host.AddComponent<DHCPSwitchesBehaviour>();
+            host.AddComponent<GregModIPAMBehaviour>();
 
             var harmony = new HarmonyLib.Harmony(ModGuid);
             harmony.CreateClassProcessor(typeof(DHCPManager.ServerSetIpPatch)).Patch();
@@ -57,17 +57,17 @@ public class DHCPSwitchesMod : MelonMod
             InputSystemMouseBlockPatches.TryApply(harmony);
 
             LoggerInstance.Msg(
-                "DHCP Switches & IPAM loaded. F1 = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles. Rack switch/router red menu = CLI, or IPAM → device → Open CLI.");
+                "gregMod.IPAM loaded. F1 = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles. Rack switch/router red menu = CLI, or IPAM → device → Open CLI.");
             if (!string.IsNullOrEmpty(ModDebugLog.DiagnosticLogPath))
             {
                 LoggerInstance.Msg(
-                    "DHCPSwitches debug log (replaced each game launch): " + ModDebugLog.DiagnosticLogPath);
+                    "gregMod.IPAM debug log (replaced each game launch): " + ModDebugLog.DiagnosticLogPath);
             }
 
             if (ModDebugLog.IsIpamFileLogEnabled && !string.IsNullOrEmpty(ModDebugLog.IpamDiagnosticLogPath))
             {
-                ModDebugLog.WriteIpam("Mod loaded (DHCPSwitches-ipam.flag is present).");
-                LoggerInstance.Msg("DHCPSwitches IPAM diagnostic file: " + ModDebugLog.IpamDiagnosticLogPath);
+                ModDebugLog.WriteIpam("Mod loaded (gregModIPAM-ipam.flag is present).");
+                LoggerInstance.Msg("gregMod.IPAM IPAM diagnostic file: " + ModDebugLog.IpamDiagnosticLogPath);
             }
         }
         catch (System.Exception ex)
@@ -111,7 +111,20 @@ public class DHCPSwitchesMod : MelonMod
             if (kb.f1Key.wasPressedThisFrame)
             {
                 IPAMOverlay.NotifyF1ToggleHandledThisFrame();
+                var opening = !IPAMOverlay.IsVisible;
                 IPAMOverlay.IsVisible = !IPAMOverlay.IsVisible;
+                if (opening)
+                {
+                    // Take mouse focus from game — show cursor, release lock.
+                    Cursor.lockState = CursorLockMode.None;
+                    Cursor.visible = true;
+                }
+            }
+
+            // P closes IPAM without opening pause menu
+            if (IPAMOverlay.IsVisible && kb.pKey.wasPressedThisFrame)
+            {
+                IPAMOverlay.IsVisible = false;
             }
 
             if (kb.leftCtrlKey.isPressed && kb.lKey.wasPressedThisFrame)
@@ -162,11 +175,11 @@ public class DHCPSwitchesMod : MelonMod
 /// <summary>
 /// Handles per-frame input and IMGUI; IL2CPP MonoBehaviour must live in its own injected type.
 /// </summary>
-public class DHCPSwitchesBehaviour : MonoBehaviour
+public class GregModIPAMBehaviour : MonoBehaviour
 {
-    internal static DHCPSwitchesBehaviour Instance { get; private set; }
+    internal static GregModIPAMBehaviour Instance { get; private set; }
 
-    public DHCPSwitchesBehaviour(IntPtr ptr)
+    public GregModIPAMBehaviour(IntPtr ptr)
         : base(ptr)
     {
     }
@@ -195,7 +208,7 @@ public class DHCPSwitchesBehaviour : MonoBehaviour
             _deferredInitialSceneSyncFrames--;
             if (_deferredInitialSceneSyncFrames == 0)
             {
-                DHCPSwitchesMod.TryNotifyModSaveScopeSceneChange();
+                GregModIPAMMod.TryNotifyModSaveScopeSceneChange();
             }
         }
 

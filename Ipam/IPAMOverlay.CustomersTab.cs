@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Customers tab: customer list → per-customer servers → Add server wizard (top-level GUI.Window).
 

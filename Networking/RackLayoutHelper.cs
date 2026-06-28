@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Scene rack layout derived from <see cref="AssetManagementDeviceLine"/> rows (customer rack / asset UI).

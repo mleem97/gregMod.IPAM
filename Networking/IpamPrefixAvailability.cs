@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// phpIPAM-style “free split” counts: how many non-overlapping, CIDR-aligned child subnets of a template size

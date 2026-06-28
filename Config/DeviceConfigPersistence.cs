@@ -5,13 +5,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>Loads/saves <see cref="RouterRuntimeConfig"/> and <see cref="SwitchRuntimeConfig"/> keyed by <see cref="DeviceStableId"/>.</summary>
 internal static class DeviceConfigPersistence
 {
     private const int FileVersion = 1;
-    private const string SubDir = "DHCPSwitches";
+    private const string SubDir = "gregMod.IPAM";
     private const string FileName = "saved_device_configs.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()

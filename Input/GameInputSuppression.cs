@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// While the CLI is open, disables <see cref="PlayerInput"/> devices so letter keys do not trigger in-game actions.

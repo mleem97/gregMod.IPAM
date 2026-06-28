@@ -4,21 +4,21 @@ using System.IO;
 using System.Threading;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
-/// Debug log in the game install folder (directory containing the <c>_Data</c> folder). The file <c>DHCPSwitches-debug.log</c>
+/// Debug log in the game install folder (directory containing the <c>_Data</c> folder). The file <c>gregModIPAM-debug.log</c>
 /// is replaced (truncated) at the start of each game launch; later lines append during that session.
-/// Create an empty file <c>DHCPSwitches-trace.flag</c> in that same folder to enable verbose step traces
+/// Create an empty file <c>gregModIPAM-trace.flag</c> in that same folder to enable verbose step traces
 /// (<c>[trace:…]</c> lines) for ping routing, cable checks, and IOPS reachability.
-/// <c>IOPS ALLOW</c> lines in this file omit per-server IP samples by default; create <c>DHCPSwitches-iops-allow-ips.flag</c> to restore the long sample (server=name=ip) on those lines.
-/// IPAM UI diagnostics (IOPS toolbar, OnGUI mouse) go to <c>DHCPSwitches-ipam.log</c> when <c>DHCPSwitches-ipam.flag</c>
+/// <c>IOPS ALLOW</c> lines in this file omit per-server IP samples by default; create <c>gregModIPAM-iops-allow-ips.flag</c> to restore the long sample (server=name=ip) on those lines.
+/// IPAM UI diagnostics (IOPS toolbar, OnGUI mouse) go to <c>gregModIPAM-ipam.log</c> when <c>gregModIPAM-ipam.flag</c>
 /// is present — see <see cref="IpamDebugLog"/>.
 /// Batch DHCP from IPAM (e.g. &quot;DHCP all selected&quot;) always writes <c>dhcp-assign:</c> lines to this file; create
-/// <c>DHCPSwitches-dhcp-assign.flag</c> beside <c>_Data</c> for extra subnet/reflection detail on those lines.
+/// <c>gregModIPAM-dhcp-assign.flag</c> beside <c>_Data</c> for extra subnet/reflection detail on those lines.
 /// During explicit IPAM DHCP (assign all / batch / single), <c>dhcp-step:</c> lines record try-order construction and per-CIDR picks.
-/// Create <c>DHCPSwitches-dhcp-trace.flag</c> for maximum detail (every string field scanned, every usable-IP skip reason).
-/// IPAM perf: use the <b>Perf: on/off</b> button in the IPAM toolbar, or create <c>DHCPSwitches-ipam-perf.flag</c> beside <c>_Data</c>; throttled lines append to <c>DHCPSwitches-ipam-perf.log</c>.
+/// Create <c>gregModIPAM-dhcp-trace.flag</c> for maximum detail (every string field scanned, every usable-IP skip reason).
+/// IPAM perf: use the <b>Perf: on/off</b> button in the IPAM toolbar, or create <c>gregModIPAM-ipam-perf.flag</c> beside <c>_Data</c>; throttled lines append to <c>gregModIPAM-ipam-perf.log</c>.
 /// </summary>
 internal static class ModDebugLog
 {
@@ -36,7 +36,7 @@ internal static class ModDebugLog
     private static bool _ipamPerfFlagCached;
     private static bool _ipamPerfLogBannerWritten;
 
-    /// <summary>When true (set from the IPAM toolbar), performance samples append to <c>DHCPSwitches-ipam-perf.log</c> without any flag file.</summary>
+    /// <summary>When true (set from the IPAM toolbar), performance samples append to <c>gregModIPAM-ipam-perf.log</c> without any flag file.</summary>
     public static bool IpamPerfRuntimeEnabled { get; set; }
     private static DateTime _iopsAllowIpsFlagCacheUntilUtc;
     private static bool _iopsAllowIpsFlagCached;
@@ -51,10 +51,10 @@ internal static class ModDebugLog
     /// <summary>Full path after <see cref="Bootstrap"/>; may be null if logging could not be initialized.</summary>
     internal static string DiagnosticLogPath => _path;
 
-    /// <summary>Append-only IPAM diagnostics next to the game <c>_Data</c> folder when <c>DHCPSwitches-ipam.flag</c> exists there.</summary>
+    /// <summary>Append-only IPAM diagnostics next to the game <c>_Data</c> folder when <c>gregModIPAM-ipam.flag</c> exists there.</summary>
     internal static string IpamDiagnosticLogPath => _ipamPath;
 
-    /// <summary>Checked every ~2s; create empty <c>DHCPSwitches-ipam.flag</c> beside the log to enable <see cref="WriteIpam"/>.</summary>
+    /// <summary>Checked every ~2s; create empty <c>gregModIPAM-ipam.flag</c> beside the log to enable <see cref="WriteIpam"/>.</summary>
     internal static bool IsIpamFileLogEnabled
     {
         get
@@ -82,7 +82,7 @@ internal static class ModDebugLog
                     return false;
                 }
 
-                _ipamFlagCached = File.Exists(Path.Combine(dir, "DHCPSwitches-ipam.flag"));
+                _ipamFlagCached = File.Exists(Path.Combine(dir, "gregModIPAM-ipam.flag"));
                 if (_ipamFlagCached)
                 {
                     BootstrapIpamPath();
@@ -98,8 +98,8 @@ internal static class ModDebugLog
     }
 
     /// <summary>
-    /// True when <see cref="IpamPerfRuntimeEnabled"/> is on or <c>DHCPSwitches-ipam-perf.flag</c> exists beside <c>_Data</c> (flag checked every ~2s).
-    /// Throttled lines go to <c>DHCPSwitches-ipam-perf.log</c>.
+    /// True when <see cref="IpamPerfRuntimeEnabled"/> is on or <c>gregModIPAM-ipam-perf.flag</c> exists beside <c>_Data</c> (flag checked every ~2s).
+    /// Throttled lines go to <c>gregModIPAM-ipam-perf.log</c>.
     /// </summary>
     internal static bool IsIpamPerfLoggingEnabled
     {
@@ -126,7 +126,7 @@ internal static class ModDebugLog
                     return false;
                 }
 
-                _ipamPerfFlagCached = File.Exists(Path.Combine(dir, "DHCPSwitches-ipam-perf.flag"));
+                _ipamPerfFlagCached = File.Exists(Path.Combine(dir, "gregModIPAM-ipam-perf.flag"));
             }
             catch
             {
@@ -137,13 +137,13 @@ internal static class ModDebugLog
         }
     }
 
-    /// <summary>Full path to the IPAM performance append log (same folder as <c>DHCPSwitches-debug.log</c>).</summary>
+    /// <summary>Full path to the IPAM performance append log (same folder as <c>gregModIPAM-debug.log</c>).</summary>
     internal static string GetIpamPerfLogPath()
     {
         try
         {
             var dir = Path.GetDirectoryName(Application.dataPath);
-            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "DHCPSwitches-ipam-perf.log");
+            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "gregModIPAM-ipam-perf.log");
         }
         catch
         {
@@ -167,7 +167,7 @@ internal static class ModDebugLog
                 return;
             }
 
-            var perfPath = Path.Combine(dir, "DHCPSwitches-ipam-perf.log");
+            var perfPath = Path.Combine(dir, "gregModIPAM-ipam-perf.log");
             lock (Sync)
             {
                 if (!_ipamPerfLogBannerWritten)
@@ -175,7 +175,7 @@ internal static class ModDebugLog
                     _ipamPerfLogBannerWritten = true;
                     File.AppendAllText(
                         perfPath,
-                        $"\r\n======== DHCPSwitches IPAM performance log {DateTime.UtcNow:u} ========\r\n");
+                        $"\r\n======== gregMod.IPAM IPAM performance log {DateTime.UtcNow:u} ========\r\n");
                 }
 
                 File.AppendAllText(perfPath, $"{DateTime.UtcNow:HH:mm:ss.fff} {message}\r\n");
@@ -204,9 +204,9 @@ internal static class ModDebugLog
                     return;
                 }
 
-                _path = Path.Combine(dir, "DHCPSwitches-debug.log");
+                _path = Path.Combine(dir, "gregModIPAM-debug.log");
                 var banner =
-                    $"======== DHCPSwitches debug session (new file each game launch) {DateTime.UtcNow:u} ========\r\n";
+                    $"======== gregMod.IPAM debug session (new file each game launch) {DateTime.UtcNow:u} ========\r\n";
                 File.WriteAllText(_path, banner);
             }
             catch
@@ -234,7 +234,7 @@ internal static class ModDebugLog
                     return;
                 }
 
-                _ipamPath = Path.Combine(dir, "DHCPSwitches-ipam.log");
+                _ipamPath = Path.Combine(dir, "gregModIPAM-ipam.log");
             }
             catch
             {
@@ -267,7 +267,7 @@ internal static class ModDebugLog
                     _ipamSessionBannerWritten = true;
                     File.AppendAllText(
                         _ipamPath,
-                        $"\r\n======== DHCPSwitches IPAM debug {DateTime.UtcNow:u} ========\r\n");
+                        $"\r\n======== gregMod.IPAM IPAM debug {DateTime.UtcNow:u} ========\r\n");
                 }
 
                 File.AppendAllText(_ipamPath, line);
@@ -300,7 +300,7 @@ internal static class ModDebugLog
         }
     }
 
-    /// <summary>True when <c>DHCPSwitches-dhcp-assign.flag</c> exists beside the debug log (checked every ~2s).</summary>
+    /// <summary>True when <c>gregModIPAM-dhcp-assign.flag</c> exists beside the debug log (checked every ~2s).</summary>
     internal static bool IsDhcpAssignVerboseEnabled
     {
         get
@@ -328,7 +328,7 @@ internal static class ModDebugLog
                     return false;
                 }
 
-                _dhcpAssignVerboseFlagCached = File.Exists(Path.Combine(dir, "DHCPSwitches-dhcp-assign.flag"));
+                _dhcpAssignVerboseFlagCached = File.Exists(Path.Combine(dir, "gregModIPAM-dhcp-assign.flag"));
             }
             catch
             {
@@ -339,7 +339,7 @@ internal static class ModDebugLog
         }
     }
 
-    /// <summary>Writes a <c>dhcp-assign:</c> line to <c>DHCPSwitches-debug.log</c> (creates/truncates log on first bootstrap of the session).</summary>
+    /// <summary>Writes a <c>dhcp-assign:</c> line to <c>gregModIPAM-debug.log</c> (creates/truncates log on first bootstrap of the session).</summary>
     internal static void WriteDhcpAssign(string message)
     {
         if (string.IsNullOrEmpty(message))
@@ -364,7 +364,7 @@ internal static class ModDebugLog
     /// <summary>True during <see cref="EnterDhcpResolutionBatch"/> scope.</summary>
     internal static bool IsDhcpResolutionStepLogging => _dhcpResolutionBatchDepth > 0;
 
-    /// <summary>True when <c>DHCPSwitches-dhcp-trace.flag</c> exists beside the debug log (checked every ~2s).</summary>
+    /// <summary>True when <c>gregModIPAM-dhcp-trace.flag</c> exists beside the debug log (checked every ~2s).</summary>
     internal static bool IsDhcpStepTraceEnabled
     {
         get
@@ -392,7 +392,7 @@ internal static class ModDebugLog
                     return false;
                 }
 
-                _dhcpStepTraceFlagCached = File.Exists(Path.Combine(dir, "DHCPSwitches-dhcp-trace.flag"));
+                _dhcpStepTraceFlagCached = File.Exists(Path.Combine(dir, "gregModIPAM-dhcp-trace.flag"));
             }
             catch
             {
@@ -419,7 +419,7 @@ internal static class ModDebugLog
         WriteLine($"dhcp-step: {message}");
     }
 
-    /// <summary>Low-level DHCP (per field, per skipped IP). Requires <c>DHCPSwitches-dhcp-trace.flag</c>.</summary>
+    /// <summary>Low-level DHCP (per field, per skipped IP). Requires <c>gregModIPAM-dhcp-trace.flag</c>.</summary>
     internal static void WriteDhcpTrace(string message)
     {
         if (string.IsNullOrEmpty(message) || !IsDhcpStepTraceEnabled)
@@ -460,7 +460,7 @@ internal static class ModDebugLog
                     return false;
                 }
 
-                _iopsAllowIpsFlagCached = File.Exists(Path.Combine(dir, "DHCPSwitches-iops-allow-ips.flag"));
+                _iopsAllowIpsFlagCached = File.Exists(Path.Combine(dir, "gregModIPAM-iops-allow-ips.flag"));
             }
             catch
             {
@@ -471,7 +471,7 @@ internal static class ModDebugLog
         }
     }
 
-    /// <summary>True when <c>DHCPSwitches-trace.flag</c> exists next to the main debug log (checked every ~2s).</summary>
+    /// <summary>True when <c>gregModIPAM-trace.flag</c> exists next to the main debug log (checked every ~2s).</summary>
     internal static bool IsTraceEnabled
     {
         get
@@ -499,7 +499,7 @@ internal static class ModDebugLog
                     return false;
                 }
 
-                _traceCached = File.Exists(Path.Combine(dir, "DHCPSwitches-trace.flag"));
+                _traceCached = File.Exists(Path.Combine(dir, "gregModIPAM-trace.flag"));
             }
             catch
             {

@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 internal enum IpamPrefixParentMode
 {
@@ -16,11 +16,11 @@ internal enum IpamPrefixParentMode
     ExplicitParent = 2,
 }
 
-/// <summary>Persists user-defined IPAM prefixes (parent/child) and VLAN rows under UserData/DHCPSwitches/ipam_data.json.</summary>
+/// <summary>Persists user-defined IPAM prefixes (parent/child) and VLAN rows under UserData/gregMod.IPAM/ipam_data.json.</summary>
 internal static class IpamDataStore
 {
     private const int FileVersion = 1;
-    private const string SubDir = "DHCPSwitches";
+    private const string SubDir = "gregMod.IPAM";
     private const string FileName = "ipam_data.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -41,6 +41,7 @@ internal static class IpamDataStore
             Version = FileVersion,
             Prefixes = new List<IpamPrefixEntry>(),
             Vlans = new List<IpamVlanEntry>(),
+            DhcpScopes = new List<DhcpScopeEntry>(),
         };
     }
 
@@ -488,6 +489,102 @@ internal static class IpamDataStore
         return true;
     }
 
+    internal static IReadOnlyList<DhcpScopeEntry> GetDhcpScopes()
+    {
+        return EnsureLoaded().DhcpScopes ?? new List<DhcpScopeEntry>();
+    }
+
+    internal static bool TryAddDhcpScope(string name, string level, string cidr, int? vlanId, string switchKey, int priority, out string error)
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            error = "Name is required.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(cidr) || !RouteMath.TryParseIpv4Cidr(cidr, out _, out _))
+        {
+            error = "Invalid CIDR (expected x.x.x.x/nn).";
+            return false;
+        }
+
+        var root = EnsureLoaded();
+        root.DhcpScopes ??= new List<DhcpScopeEntry>();
+        root.DhcpScopes.Add(new DhcpScopeEntry
+        {
+            Id = Guid.NewGuid().ToString("D"),
+            Name = name.Trim(),
+            Level = level,
+            Cidr = cidr.Trim(),
+            VlanId = vlanId,
+            SwitchKey = switchKey,
+            Priority = priority,
+        });
+        Save();
+        return true;
+    }
+
+    internal static bool TryDeleteDhcpScope(Guid id, out string error)
+    {
+        error = null;
+        var root = EnsureLoaded();
+        if (root.DhcpScopes == null)
+        {
+            error = "Scope not found.";
+            return false;
+        }
+
+        var idStr = id.ToString("D");
+        var n = root.DhcpScopes.RemoveAll(s => s.Id == idStr);
+        if (n == 0)
+        {
+            error = "Scope not found.";
+            return false;
+        }
+
+        Save();
+        return true;
+    }
+
+    internal static DhcpScopeEntry FindScopeForServer(Server server, CustomerBase cb)
+    {
+        var root = EnsureLoaded();
+        if (root.DhcpScopes == null || root.DhcpScopes.Count == 0)
+        {
+            return null;
+        }
+
+        var sorted = root.DhcpScopes.OrderBy(s => s.Priority).ToList();
+        foreach (var scope in sorted)
+        {
+            if (scope.Level == "Global")
+            {
+                return scope;
+            }
+
+            if (scope.Level == "VLAN" && scope.VlanId.HasValue)
+            {
+                var serverVlans = GameSubnetHelper.GetVlanIdsForServer(server, cb);
+                if (serverVlans != null && serverVlans.Contains(scope.VlanId.Value))
+                {
+                    return scope;
+                }
+            }
+
+            if (scope.Level == "Switch" && !string.IsNullOrEmpty(scope.SwitchKey))
+            {
+                var stableId = DeviceStableId.ForServer(server);
+                if (stableId == scope.SwitchKey)
+                {
+                    return scope;
+                }
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Bumped whenever prefix/VLAN data is saved — used to invalidate IMGUI pick-list caches.</summary>
     internal static int DataRevision { get; private set; }
 
@@ -518,6 +615,7 @@ internal sealed class IpamPersistedRoot
     public int Version { get; set; }
     public List<IpamPrefixEntry> Prefixes { get; set; }
     public List<IpamVlanEntry> Vlans { get; set; }
+    public List<DhcpScopeEntry> DhcpScopes { get; set; }
 }
 
 internal sealed class IpamPrefixEntry
@@ -534,4 +632,18 @@ internal sealed class IpamVlanEntry
     public string Id { get; set; }
     public int VlanId { get; set; }
     public string Name { get; set; }
+}
+
+internal sealed class DhcpScopeEntry
+{
+    public string Id { get; set; }
+    public string Name { get; set; }
+    public string Level { get; set; } = "Global";
+    public string Cidr { get; set; }
+    public string RangeStart { get; set; }
+    public string RangeEnd { get; set; }
+    public string Exclusions { get; set; }
+    public string SwitchKey { get; set; }
+    public int? VlanId { get; set; }
+    public int Priority { get; set; }
 }

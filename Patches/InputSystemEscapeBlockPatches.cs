@@ -3,12 +3,11 @@ using System.Reflection;
 using HarmonyLib;
 using UnityEngine.InputSystem.Controls;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
-/// While IPAM is open, games still read <see cref="Keyboard.escapeKey"/> directly for pause / menu toggle.
-/// Postfixes strip Escape button presses/releases so only our overlay handles Escape (after we snapshot it in
-/// <see cref="IPAMOverlay.InputSystemAfterUpdateCaptureEscape"/>).
+/// While IPAM is open, Escape is NOT blocked — the game opens the pause menu alongside IPAM closing.
+/// P key IS blocked so it only closes IPAM without opening the pause menu.
 /// </summary>
 internal static class InputSystemEscapeBlockPatches
 {
@@ -22,43 +21,24 @@ internal static class InputSystemEscapeBlockPatches
             }
             catch (Exception ex)
             {
-                ModLogging.Warning($"DHCPSwitches: Input System escape patch {nested.Name} failed: {ex.Message}");
+                ModLogging.Warning($"gregMod.IPAM: Input System escape patch {nested.Name} failed: {ex.Message}");
             }
         }
-    }
-
-    private static bool ShouldStripEscapeButton(ButtonControl control)
-    {
-        if (!IPAMOverlay.IsVisible || control == null)
-        {
-            return false;
-        }
-
-        var path = control.path;
-        return !string.IsNullOrEmpty(path)
-            && path.IndexOf("/escape", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     [HarmonyPatch(typeof(ButtonControl), nameof(ButtonControl.wasPressedThisFrame), MethodType.Getter)]
-    private static class EscapeWasPressedPatch
+    private static class PKeyStripPatch
     {
         private static void Postfix(ButtonControl __instance, ref bool __result)
         {
-            if (__result && ShouldStripEscapeButton(__instance))
+            if (__result && IPAMOverlay.IsVisible && __instance != null)
             {
-                __result = false;
-            }
-        }
-    }
-
-    [HarmonyPatch(typeof(ButtonControl), nameof(ButtonControl.wasReleasedThisFrame), MethodType.Getter)]
-    private static class EscapeWasReleasedPatch
-    {
-        private static void Postfix(ButtonControl __instance, ref bool __result)
-        {
-            if (__result && ShouldStripEscapeButton(__instance))
-            {
-                __result = false;
+                var path = __instance.path;
+                if (!string.IsNullOrEmpty(path) && path.IndexOf("/p", StringComparison.OrdinalIgnoreCase) >= 0
+                    && path.Length >= 2 && path[path.Length - 2] == '/' && path[path.Length - 1] is 'p' or 'P')
+                {
+                    __result = false;
+                }
             }
         }
     }

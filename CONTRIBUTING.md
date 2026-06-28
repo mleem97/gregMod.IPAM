@@ -1,6 +1,6 @@
-# Contributing to DHCPSwitches
+# Contributing to gregMod.IPAM
 
-Thanks for your interest in improving `DHCPSwitches`.
+Thanks for your interest in improving `gregMod.IPAM`.
 
 ---
 

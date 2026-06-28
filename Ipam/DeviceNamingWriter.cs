@@ -6,7 +6,7 @@ using UnityEngine;
 
 
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 
 

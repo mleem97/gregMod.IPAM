@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 internal enum NamingCounterScope
 {
@@ -44,7 +44,7 @@ internal sealed class NamingConventionEntry
 internal static class NamingConventionStore
 {
     private const int FileVersion = 1;
-    private const string SubDir = "DHCPSwitches";
+    private const string SubDir = "gregMod.IPAM";
     private const string FileName = "naming_data.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Inventory tables: EOL string snapshot, resizable columns, server/switch sort, row rendering.
 // Does not own: DHCP assignment (DHCPManager), main shell (WindowUi).

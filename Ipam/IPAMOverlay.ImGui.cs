@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // IMGUI primitives for IPAM: 1x1 textures, GUIStyle construction, deduped buttons, octet/IOPS toolbar controls.
 // Does not own: device list ticks (Lifecycle), table sort/EOL (InventoryTable), main window layout (WindowUi).

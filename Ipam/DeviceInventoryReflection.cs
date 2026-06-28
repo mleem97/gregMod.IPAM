@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Best-effort display names, EOL text, and lifecycle actions via reflection (game DLL varies by version).
@@ -972,8 +972,8 @@ internal static class DeviceInventoryReflection
         }
 
         ModLogging.Warning(
-            "[DHCPSwitches IPAM] Send technician: no game dispatch path succeeded (device line → TechnicianManager → AssetManagement). "
-            + "Check MelonLoader/Latest.log next to the game, and DHCPSwitches-debug.log in the folder above *_Data (if created).");
+            "[gregMod.IPAM IPAM] Send technician: no game dispatch path succeeded (device line → TechnicianManager → AssetManagement). "
+            + "Check MelonLoader/Latest.log next to the game, and gregModIPAM-debug.log in the folder above *_Data (if created).");
 
         return false;
     }
@@ -1013,7 +1013,7 @@ internal static class DeviceInventoryReflection
     private static void LogLifecycleInvoke(string label, string detail)
     {
         ModLogging.Msg(
-            $"[DHCPSwitches IPAM] {label}: {detail} — if the visible effect is wrong, the game may use a different API; check the game assembly for this type.");
+            $"[gregMod.IPAM IPAM] {label}: {detail} — if the visible effect is wrong, the game may use a different API; check the game assembly for this type.");
     }
 
     private static bool TryInvokeLifecycleOnTarget(
@@ -1298,7 +1298,7 @@ internal static class DeviceInventoryReflection
             return false;
         }
 
-        if (ns.StartsWith("DHCPSwitches", StringComparison.Ordinal))
+        if (ns.StartsWith("gregMod.IPAM", StringComparison.Ordinal))
         {
             return false;
         }

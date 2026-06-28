@@ -1,8 +1,8 @@
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Feature gates for DHCP / IPAM. Default: both enabled. Title-bar toggles simulate locked state for testing.
-/// Later: hook into ComputerShop / save unlock GUIDs (see DHCPSwitchesMod constants).
+/// Later: hook into ComputerShop / save unlock GUIDs (see GregModIPAMMod constants).
 /// </summary>
 internal static class LicenseManager
 {

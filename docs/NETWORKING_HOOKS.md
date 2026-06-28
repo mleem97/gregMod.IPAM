@@ -1,4 +1,4 @@
-# Networking hooks (Data Center + DHCPSwitches)
+# Networking hooks (Data Center + gregMod.IPAM)
 
 ## Local decompile (reference sources)
 
@@ -30,7 +30,7 @@ The mod still links **`Assembly-CSharp.dll`** from MelonLoader’s interop folde
 ## Input: IPAM hotkey vs game Inventory
 
 - In **`InputController`** (generated / decompiled), **`UIActions.Inventory`** is an `InputAction` the game uses for inventory UI.
-- IPAM toggles on **`Keyboard.current.f1Key`** (`DHCPSwitchesBehaviour.Update` in [`Main.cs`](../Core/Main.cs)). **`PlayerInput` is only suspended while the device CLI is open** (`GameInputSuppression`); IPAM stays overlay-only so gameplay / pause menus are not forced closed by the old **I**-key + inventory conflict.
+- IPAM toggles on **`Keyboard.current.f1Key`** (`GregModIPAMBehaviour.Update` in [`Main.cs`](../Core/Main.cs)). **`PlayerInput` is only suspended while the device CLI is open** (`GameInputSuppression`); IPAM stays overlay-only so gameplay / pause menus are not forced closed by the old **I**-key + inventory conflict.
 
 ## Future work
 

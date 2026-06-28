@@ -6,7 +6,7 @@ using System.Text;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 public static class DHCPManager
 {
@@ -322,7 +322,7 @@ public static class DHCPManager
 
             return ModDebugLog.IsDhcpAssignVerboseEnabled
                 ? $"no try CIDRs after Server/DeviceLine + CustomerBase. {GameSubnetHelper.FormatSubnetsDiagnostic(cb)}"
-                : "0 CIDRs (CustomerBase map empty and no x.x.x.x/nn on Server or AssetManagementDeviceLine); add DHCPSwitches-dhcp-assign.flag";
+                : "0 CIDRs (CustomerBase map empty and no x.x.x.x/nn on Server or AssetManagementDeviceLine); add gregModIPAM-dhcp-assign.flag";
         }
 
         var sb = new StringBuilder();
@@ -655,7 +655,7 @@ public static class DHCPManager
         return null;
     }
 
-    private static string GetNextFreeIpForServer(Server server, Server[] allServersCache = null)
+    internal static string GetNextFreeIpForServer(Server server, Server[] allServersCache = null)
     {
         if (server == null)
         {

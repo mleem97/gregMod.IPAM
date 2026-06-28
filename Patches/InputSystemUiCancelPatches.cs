@@ -3,7 +3,7 @@ using System.Reflection;
 using HarmonyLib;
 using UnityEngine.InputSystem;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Blocks UI "cancel" (usually bound to Escape) from reaching Unity's Input System UI module while the CLI is open.
@@ -20,7 +20,7 @@ internal static class InputSystemUiCancelPatches
             }
             catch (System.Exception ex)
             {
-                ModLogging.Warning($"DHCPSwitches: Input System UI patch {nested.Name} failed: {ex.Message}");
+                ModLogging.Warning($"gregMod.IPAM: Input System UI patch {nested.Name} failed: {ex.Message}");
             }
         }
     }

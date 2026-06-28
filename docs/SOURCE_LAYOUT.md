@@ -1,6 +1,6 @@
 # C# source layout
 
-All compilation units use the root namespace **`DHCPSwitches`** (see `DHCPSwitches.csproj`). Folders are for navigation only; no `DHCPSwitches.SubFolder` namespaces.
+All compilation units use the root namespace **`GregModIPAM`** (see `gregMod.IPAM.csproj`). Folders are for navigation only; no `GregModIPAM.SubFolder` namespaces.
 
 | Folder | Role |
 |--------|------|
@@ -10,7 +10,7 @@ All compilation units use the root namespace **`DHCPSwitches`** (see `DHCPSwitch
 | **`Ipam/`** | IPAM IMGUI overlay (`IPAMOverlay` partials), device display reflection, menu occlusion, license toggles. |
 | **`Patches/`** | Standalone Harmony patches (legacy input block, UI cancel / Input System). |
 | **`Input/`** | Suspend game `PlayerInput` while overlays are open, legacy axis reset, IMGUI raycast blocking. |
-| **`Diagnostics/`** | File + Melon logging helpers (`DHCPSwitches-debug.log`, trace flag). |
+| **`Diagnostics/`** | File + Melon logging helpers (`gregModIPAM-debug.log`, trace flag). |
 
 ## Quick map (file → folder)
 
@@ -36,6 +36,6 @@ All compilation units use the root namespace **`DHCPSwitches`** (see `DHCPSwitch
 | `IPAMOverlay.IopsModal.cs` | Standalone IOPS `GUI.Window`, IMGUI `KeyDown` pump when no keyboard device, IPAM debug mouse line. |
 | `IPAMOverlay.WindowUi.cs` | `DrawWindow`, nav sections, dashboard / devices / IP views, selection + detail panel, octet editor. |
 
-The project file **`DHCPSwitches.csproj`** stays at the repository root; SDK-style includes pick up all `*.cs` under the project directory (excluding `bin/` and `obj/`).
+The project file **`gregMod.IPAM.csproj`** stays at the repository root; SDK-style includes pick up all `*.cs` under the project directory (excluding `bin/` and `obj/`).
 
 **`StreamingAssets.Mods/`** — template `config.json` (+ README) for the game’s passive shop pipeline; copy into `Data Center_Data/StreamingAssets/Mods/` and add `model.obj` / textures from your install (not redistributed here).

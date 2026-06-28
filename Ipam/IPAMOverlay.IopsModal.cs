@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Standalone IOPS calculator window (top-level GUI.Window), IMGUI KeyDown pump when no Input System keyboard, debug mouse line.
 

@@ -1,14 +1,14 @@
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
-/// IPAM-focused lines appended to <c>DHCPSwitches-ipam.log</c> in the game install folder (directory that contains the <c>_Data</c> folder).
+/// IPAM-focused lines appended to <c>gregModIPAM-ipam.log</c> in the game install folder (directory that contains the <c>_Data</c> folder).
 /// </summary>
 /// <remarks>
-/// <para><b>Enable:</b> create an empty file named <c>DHCPSwitches-ipam.flag</c> in that same folder (next to the game executable). Remove the flag to stop writing.</para>
-/// <para><b>Performance:</b> in IPAM use toolbar <b>Perf: on</b>, or create <c>DHCPSwitches-ipam-perf.flag</c>; see <see cref="ModDebugLog.WriteIpamPerf"/> and <c>DHCPSwitches-ipam-perf.log</c>.</para>
-/// <para><b>File:</b> <c>DHCPSwitches-ipam.log</c> — same folder. Lines are UTC timestamps from <see cref="ModDebugLog.WriteIpam"/>.</para>
+/// <para><b>Enable:</b> create an empty file named <c>gregModIPAM-ipam.flag</c> in that same folder (next to the game executable). Remove the flag to stop writing.</para>
+/// <para><b>Performance:</b> in IPAM use toolbar <b>Perf: on</b>, or create <c>gregModIPAM-ipam-perf.flag</c>; see <see cref="ModDebugLog.WriteIpamPerf"/> and <c>gregModIPAM-ipam-perf.log</c>.</para>
+/// <para><b>File:</b> <c>gregModIPAM-ipam.log</c> — same folder. Lines are UTC timestamps from <see cref="ModDebugLog.WriteIpam"/>.</para>
 /// </remarks>
 internal static class IpamDebugLog
 {

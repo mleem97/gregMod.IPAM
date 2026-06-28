@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Prefixes (parent/child, utilization) and VLAN list for the IPAM nav section.
 
@@ -875,6 +875,371 @@ public static partial class IPAMOverlay
         }
 
         return top + SectionTitleH + 4f + TableHeaderH + n * TableRowH + 24f;
+    }
+
+    private static string _ipamScopeFormName = "";
+    private static string _ipamScopeFormCidr = "";
+    private static string _ipamScopeFormLevel = "Global";
+    private static string _ipamScopeFormError = "";
+    private static readonly HashSet<string> _selectedScopeIds = new();
+    private static string _scopeRangeAnchorId;
+    private static bool _scopeAddFormOpen;
+
+    private static void DrawIpamDhcpScopesView(float innerW)
+    {
+        var x0 = CardPad;
+        var y = CardPad;
+        var cardW = innerW - CardPad * 2f;
+
+        // ── Info Box ──
+        GUI.Label(new Rect(x0, y, cardW, SectionTitleH), "DHCP Scopes", _stSectionTitle);
+        y += SectionTitleH + 4f;
+        GUI.Label(
+            new Rect(x0, y, cardW, 44f),
+            "Scopes override the default contract-based DHCP CIDR. Higher priority (lower number) wins. Level determines which servers match: Global = all, VLAN = servers on that VLAN, Switch = servers on that rack device.",
+            _stHint);
+        y += 50f;
+
+        // ── Add Form (collapsible card) ──
+        var addCardRect = new Rect(x0, y, cardW, 22f);
+        DrawTintedRect(addCardRect, new Color(0.08f, 0.10f, 0.14f, 0.7f));
+        GUI.Label(new Rect(x0 + 8f, y, cardW - 16f, 22f), "+ Add new scope", _stSectionTitle);
+        if (Event.current.type == EventType.MouseDown && addCardRect.Contains(Event.current.mousePosition))
+        {
+            _scopeAddFormOpen = !_scopeAddFormOpen;
+            Event.current.Use();
+        }
+
+        y += 26f;
+
+        if (_scopeAddFormOpen)
+        {
+            DrawTintedRect(new Rect(x0, y, cardW, 100f), new Color(0.05f, 0.06f, 0.08f, 0.5f));
+
+            GUI.Label(new Rect(x0 + 8f, y + 4f, 46f, 20f), "Name", _stFormLabel);
+            DrawIpamFormTextField(
+                new Rect(x0 + 58f, y + 4f, Mathf.Max(120f, cardW * 0.28f), 20f),
+                IpamFormFocusScopeName,
+                64,
+                IpamTextFieldKind.Name);
+
+            GUI.Label(new Rect(x0 + 58f + Mathf.Max(120f, cardW * 0.28f) + 10f, y + 4f, 36f, 20f), "CIDR", _stFormLabel);
+            DrawIpamFormTextField(
+                new Rect(x0 + 58f + Mathf.Max(120f, cardW * 0.28f) + 50f, y + 4f, 130f, 20f),
+                IpamFormFocusScopeCidr,
+                18,
+                IpamTextFieldKind.Cidr);
+
+            GUI.Label(new Rect(x0 + 8f, y + 30f, 46f, 20f), "Level", _stFormLabel);
+            var levelBtnW = 72f;
+            var levels = new[] { "Global", "VLAN", "Switch" };
+            for (var li = 0; li < levels.Length; li++)
+            {
+                var lx = x0 + 58f + li * (levelBtnW + 4f);
+                var sel = _ipamScopeFormLevel == levels[li];
+                if (ImguiButtonOnce(new Rect(lx, y + 30f, levelBtnW, 20f), levels[li], 9300 + li, sel ? _stPrimaryBtn : _stMutedBtn))
+                {
+                    _ipamScopeFormLevel = levels[li];
+                }
+            }
+
+            if (ImguiButtonOnce(new Rect(x0 + cardW - 114f, y + 30f, 106f, 24f), "Add Scope", 9310, _stPrimaryBtn))
+            {
+                _ipamScopeFormError = "";
+                if (string.IsNullOrWhiteSpace(_ipamScopeFormName))
+                {
+                    _ipamScopeFormError = "Name is required.";
+                }
+                else if (string.IsNullOrWhiteSpace(_ipamScopeFormCidr))
+                {
+                    _ipamScopeFormError = "CIDR is required.";
+                }
+                else if (!IpamDataStore.TryAddDhcpScope(
+                             _ipamScopeFormName,
+                             _ipamScopeFormLevel,
+                             _ipamScopeFormCidr,
+                             null,
+                             null,
+                             0,
+                             out var err))
+                {
+                    _ipamScopeFormError = err ?? "Could not add scope.";
+                }
+                else
+                {
+                    _ipamScopeFormName = "";
+                    _ipamScopeFormCidr = "";
+                    _scopeAddFormOpen = false;
+                    RecomputeContentHeight();
+                }
+            }
+
+            y += 58f;
+            if (!string.IsNullOrEmpty(_ipamScopeFormError))
+            {
+                GUI.Label(new Rect(x0 + 8f, y, cardW - 16f, 20f), _ipamScopeFormError, _stError);
+                y += 22f;
+            }
+        }
+
+        y += 8f;
+
+        // ── Scope List ──
+        var scopes = IpamDataStore.GetDhcpScopes().OrderBy(s => s.Priority).ToList();
+        var listTitle = scopes.Count == 0 ? "Configured Scopes" : $"Configured Scopes ({scopes.Count})";
+        GUI.Label(new Rect(x0, y, cardW, SectionTitleH), listTitle, _stSectionTitle);
+        y += SectionTitleH + 4f;
+
+        // Toolbar: Select All / Delete Selected
+        if (_selectedScopeIds.Count > 0)
+        {
+            if (ImguiButtonOnce(new Rect(x0, y, 100f, 22f), $"Delete ({_selectedScopeIds.Count})", 9315, _stMutedBtn))
+            {
+                foreach (var id in _selectedScopeIds)
+                {
+                    if (Guid.TryParse(id, out var gid))
+                    {
+                        IpamDataStore.TryDeleteDhcpScope(gid, out _);
+                    }
+                }
+
+                _selectedScopeIds.Clear();
+                _scopeRangeAnchorId = null;
+                RecomputeContentHeight();
+            }
+
+            if (ImguiButtonOnce(new Rect(x0 + 108f, y, 80f, 22f), "Clear sel.", 9316, _stMutedBtn))
+            {
+                _selectedScopeIds.Clear();
+                _scopeRangeAnchorId = null;
+            }
+
+            y += 26f;
+        }
+
+        // Table header
+        var colPriority = 64f;
+        var colLevel = 72f;
+        var colCidr = 130f;
+        var colBtn = 60f;
+        var colName = cardW - colPriority - colLevel - colCidr - colBtn - 8f;
+
+        GUI.Label(new Rect(x0, y, colPriority, TableHeaderH), "Prio", _stTableHeaderText);
+        GUI.Label(new Rect(x0 + colPriority, y, colLevel, TableHeaderH), "Level", _stTableHeaderText);
+        GUI.Label(new Rect(x0 + colPriority + colLevel, y, colName, TableHeaderH), "Name", _stTableHeaderText);
+        GUI.Label(new Rect(x0 + colPriority + colLevel + colName, y, colCidr, TableHeaderH), "CIDR", _stTableHeaderText);
+        y += TableHeaderH;
+
+        if (scopes.Count == 0)
+        {
+            GUI.Label(new Rect(x0, y, cardW, 28f), "No scopes configured yet. Click \"+ Add new scope\" above to create one.", _stMuted);
+            return;
+        }
+
+        // Rows
+        for (var i = 0; i < scopes.Count; i++)
+        {
+            var s = scopes[i];
+            var isSelected = _selectedScopeIds.Contains(s.Id);
+            var rowRect = new Rect(x0, y, cardW, TableRowH);
+
+            // Row background
+            if (Event.current.type == EventType.Repaint)
+            {
+                Color tint;
+                if (isSelected)
+                {
+                    tint = new Color(0.12f, 0.22f, 0.38f, 0.7f);
+                }
+                else
+                {
+                    tint = i % 2 == 1 ? new Color(0.06f, 0.08f, 0.1f, 0.5f) : new Color(0.04f, 0.05f, 0.06f, 0.35f);
+                }
+
+                DrawTintedRect(rowRect, tint);
+            }
+
+            // Row click (multiselect)
+            if (Event.current.type == EventType.MouseDown && rowRect.Contains(Event.current.mousePosition) && Event.current.button == 0)
+            {
+                var e = Event.current;
+                var ctrl = e.control || e.command;
+                var shift = e.shift;
+
+                if (shift && !ctrl && _scopeRangeAnchorId != null)
+                {
+                    // Range select
+                    _selectedScopeIds.Clear();
+                    var anchorIdx = scopes.FindIndex(x => x.Id == _scopeRangeAnchorId);
+                    if (anchorIdx < 0) anchorIdx = i;
+                    var lo = Mathf.Min(anchorIdx, i);
+                    var hi = Mathf.Max(anchorIdx, i);
+                    for (var j = lo; j <= hi; j++)
+                    {
+                        _selectedScopeIds.Add(scopes[j].Id);
+                    }
+                }
+                else if (ctrl)
+                {
+                    // Toggle
+                    if (!_selectedScopeIds.Add(s.Id))
+                    {
+                        _selectedScopeIds.Remove(s.Id);
+                    }
+
+                    _scopeRangeAnchorId = s.Id;
+                }
+                else
+                {
+                    // Single select
+                    _selectedScopeIds.Clear();
+                    _selectedScopeIds.Add(s.Id);
+                    _scopeRangeAnchorId = s.Id;
+                }
+
+                Event.current.Use();
+            }
+
+            // Row content
+            var textColor = isSelected ? Color.white : _stTableCell.normal.textColor;
+            var prevColor = _stTableCell.normal.textColor;
+            _stTableCell.normal.textColor = textColor;
+
+            GUI.Label(new Rect(x0 + 4f, y, colPriority - 4f, TableRowH), s.Priority.ToString(CultureInfo.InvariantCulture), _stTableCell);
+            GUI.Label(new Rect(x0 + colPriority, y, colLevel, TableRowH), s.Level ?? "", _stTableCell);
+            GUI.Label(new Rect(x0 + colPriority + colLevel, y, colName, TableRowH), s.Name ?? "", _stTableCell);
+            GUI.Label(new Rect(x0 + colPriority + colLevel + colName, y, colCidr, TableRowH), s.Cidr ?? "", _stTableCell);
+
+            _stTableCell.normal.textColor = prevColor;
+
+            // Delete button (only if not multiselect)
+            if (_selectedScopeIds.Count <= 1)
+            {
+                if (Guid.TryParse(s.Id, out var gid) && ImguiButtonOnce(new Rect(x0 + cardW - colBtn + 2f, y + 2f, colBtn - 4f, TableRowH - 4f), "Delete", 9320 + i, _stMutedBtn))
+                {
+                    IpamDataStore.TryDeleteDhcpScope(gid, out _);
+                    _selectedScopeIds.Remove(s.Id);
+                    RecomputeContentHeight();
+                }
+            }
+
+            y += TableRowH;
+        }
+    }
+
+    private static float ComputeIpamDhcpScopesContentHeight()
+    {
+        var top = CardPad * 2f + SectionTitleH + 4f + 50f + 26f;
+        if (_scopeAddFormOpen)
+        {
+            top += 100f;
+            if (!string.IsNullOrEmpty(_ipamScopeFormError))
+            {
+                top += 22f;
+            }
+        }
+
+        top += 8f + SectionTitleH + 4f;
+        if (_selectedScopeIds.Count > 0)
+        {
+            top += 26f;
+        }
+
+        var n = IpamDataStore.GetDhcpScopes().Count;
+        if (n == 0)
+        {
+            n = 1;
+        }
+
+        return top + TableHeaderH + n * TableRowH + 24f;
+    }
+
+    private static void DrawTutorialSection(float x0, ref float y, float cardW, string title, string body)
+    {
+        DrawTintedRect(new Rect(x0, y, cardW, 22f), new Color(0.08f, 0.10f, 0.14f, 0.7f));
+        GUI.Label(new Rect(x0 + 8f, y, cardW - 16f, 22f), title, _stSectionTitle);
+        y += 26f;
+        GUI.Label(new Rect(x0 + 8f, y, cardW - 16f, 80f), body, _stHint);
+        y += 84f;
+    }
+
+    private static void DrawIpamTutorialView(float innerW)
+    {
+        var x0 = CardPad;
+        var y = CardPad;
+        var cardW = innerW - CardPad * 2f;
+
+        GUI.Label(new Rect(x0, y, cardW, SectionTitleH), "How to use gregMod.IPAM", _stSectionTitle);
+        y += SectionTitleH + 8f;
+        GUI.Label(
+            new Rect(x0, y, cardW, 36f),
+            "This guide explains the core features of the IPAM overlay. Press F1 to open/close the overlay at any time.",
+            _stMuted);
+        y += 40f;
+
+        // Section 1: IP Assignment
+        DrawTutorialSection(x0, ref y, cardW, "1. IP Assignment (Servers)",
+            "Open IPAM (F1) → select a server → use the Octet Editor to set an IP manually, or click \"Next Free IP\" for automatic assignment. " +
+            "DHCP auto-assign runs when a server is placed without an IP. Use Ctrl+L to assign all servers at once.");
+
+        // Section 2: Prefixes
+        DrawTutorialSection(x0, ref y, cardW, "2. IPAM Prefixes",
+            "Prefixes define your network segments (e.g. 10.0.1.0/24). Create a prefix tree to organize subnets. " +
+            "The utilization bar shows how many IPs are assigned. Prefixes are persisted in UserData/gregMod.IPAM/ipam_data.json.");
+
+        // Section 3: VLANs
+        DrawTutorialSection(x0, ref y, cardW, "3. VLANs",
+            "Define VLAN IDs and names. VLANs can be used to segment network traffic. " +
+            "DHCP scopes can be bound to specific VLANs so servers on that VLAN get IPs from the matching scope.");
+
+        // Section 4: DHCP Scopes
+        DrawTutorialSection(x0, ref y, cardW, "4. DHCP Scopes",
+            "Scopes override the default contract-based DHCP CIDR. Set a priority (lower = higher precedence). " +
+            "Level options: Global (all servers), VLAN (servers on that VLAN), Switch (servers on that rack device). " +
+            "Use Ctrl+Click for multi-select, Shift+Click for range select.");
+
+        // Section 5: Racks
+        DrawTutorialSection(x0, ref y, cardW, "5. Rack Management",
+            "The Racks tab shows your physical rack layout. Drag devices from the pick list into rack slots. " +
+            "Patch panels can be labeled. The rack diagram visualizes U-height and device placement.");
+
+        // Section 6: Naming Templates
+        DrawTutorialSection(x0, ref y, cardW, "6. Naming Templates",
+            "Bulk-name devices using patterns like {customer}-{seq} or {row}{col}. " +
+            "Tokens: {customer}, {ip}, {octet}, {prefix}, {rack}, {role}, {color}, {seq}, {letter}. " +
+            "Preview names before applying. Conventions can be saved and reused.");
+
+        // Section 7: Customers
+        DrawTutorialSection(x0, ref y, cardW, "7. Customer Management",
+            "The Customers tab shows all customers and their assigned servers. " +
+            "Assign servers to customers, configure DHCP, and manage multi-tenant setups.");
+
+        // Section 8: Keyboard Shortcuts
+        DrawTutorialSection(x0, ref y, cardW, "8. Keyboard Shortcuts",
+            "F1 = Toggle IPAM overlay (takes mouse focus from game)\n" +
+            "Escape = Close IPAM + open game pause menu\n" +
+            "P = Close IPAM only (no pause menu)\n" +
+            "Ctrl+L = Assign DHCP to all servers\n" +
+            "Mouse wheel on octet = Increment/decrement IP\n" +
+            "Ctrl+Click = Multi-select rows\n" +
+            "Shift+Click = Range-select rows");
+
+        // Section 9: Troubleshooting
+        DrawTutorialSection(x0, ref y, cardW, "9. Troubleshooting",
+            "If DHCP fails: check that the server is on a customer contract with a valid subnet. " +
+            "If IPs collide: the overlay prevents duplicate assignments. " +
+            "Check UserData/gregMod.IPAM/ for persisted data. Debug logs: gregModIPAM-debug.log beside _Data folder.");
+
+        y += 8f;
+        GUI.Label(
+            new Rect(x0, y, cardW, 22f),
+            "gregMod.IPAM v0.5.0 — TeamGreg Modding (mleem97 & mochimus)",
+            _stMuted);
+    }
+
+    private static float ComputeIpamTutorialContentHeight()
+    {
+        return CardPad * 2f + SectionTitleH + 8f + 40f + 9 * 84f + 30f;
     }
 
     private static void DrawIpamPrefixTableHeader(

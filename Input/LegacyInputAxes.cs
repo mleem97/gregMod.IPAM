@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>Clears legacy Unity Input Manager button/axis state so games using <c>Input.GetKey</c> stop seeing keys held for the CLI.</summary>
 internal static class LegacyInputAxes

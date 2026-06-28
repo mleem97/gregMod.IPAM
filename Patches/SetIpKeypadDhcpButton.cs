@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Adds a dedicated "DHCP" row for the vanilla <see cref="SetIP"/> keypad as a separate uGUI block parented to the same
@@ -298,7 +298,7 @@ internal static class SetIpKeypadDhcpButton
             parentRt = canvasRt;
         }
 
-        var root = new GameObject("DHCPSwitches_FloatingDhcp");
+        var root = new GameObject("gregModIPAM_FloatingDhcp");
         var rootRt = root.AddComponent<RectTransform>();
         root.transform.SetParent(parentRt, false);
         rootRt.SetAsLastSibling();

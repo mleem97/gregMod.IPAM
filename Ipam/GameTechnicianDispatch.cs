@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Uses the game's own technician entry points (same as Assembly-CSharp):

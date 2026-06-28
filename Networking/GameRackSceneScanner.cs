@@ -6,7 +6,7 @@ using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Discovers physical racks via game types <see cref="Rack"/>, <see cref="RackPosition"/>, and <see cref="RackMount"/>.
@@ -504,7 +504,7 @@ internal static class GameRackSceneScanner
     {
         try
         {
-            ModDebugLog.WriteLine("[DHCPSwitches Racks] Game rack reflection sample:");
+            ModDebugLog.WriteLine("[gregMod.IPAM Racks] Game rack reflection sample:");
             DumpTypeMembers(rack, "Rack");
             DumpTypeMembers(pos, "RackPosition");
             DumpTypeMembers(mount, "RackMount");

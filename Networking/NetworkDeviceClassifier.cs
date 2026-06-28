@@ -1,4 +1,4 @@
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>Lightweight device kind checks for IPAM / dispatch (expand as needed).</summary>
 public static class NetworkDeviceClassifier

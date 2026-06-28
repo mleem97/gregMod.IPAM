@@ -7,9 +7,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
-/// <summary>Persists user-defined racks and device mounts under UserData/DHCPSwitches/rack_data.json.</summary>
+/// <summary>Persists user-defined racks and device mounts under UserData/gregMod.IPAM/rack_data.json.</summary>
 internal static class RackDataStore
 {
     /// <summary>All racks in this mod use a standard 47 U cabinet.</summary>
@@ -22,7 +22,7 @@ internal static class RackDataStore
     }
 
     private const int FileVersion = 1;
-    private const string SubDir = "DHCPSwitches";
+    private const string SubDir = "gregMod.IPAM";
     private const string FileName = "rack_data.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()

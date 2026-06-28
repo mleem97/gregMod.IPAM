@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // IPAMOverlay partial map (same static class):
 // - IPAMOverlay.cs (this file): shared state, visibility, Draw() ordering vs modal layer.
@@ -60,6 +60,7 @@ public static partial class IPAMOverlay
                 _iopsToolbarScreenRect = default;
                 _iopsToolbarRectLogHash = 0;
                 _nextEolSnapshotRefreshTime = 0f;
+                _focusIpamWindowOnNextFrame = true;
                 UiRaycastBlocker.SetBlocking(true);
                 GameInputSuppression.SetSuppressed(true);
                 GameInputSuppression.RefreshWhileActive();
@@ -208,8 +209,9 @@ public static partial class IPAMOverlay
         return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
     }
 
-    private static Rect _windowRect = new(48f, 48f, 1200f, 640f);
-    private static Rect _windowRectRestored = new(48f, 48f, 1200f, 640f);
+    private static Rect _windowRect = new(-1f, -1f, 1200f, 640f);
+    private static Rect _windowRectRestored = new(-1f, -1f, 1200f, 640f);
+    private static bool _windowRectCentered;
     private static bool _windowMaximized;
 
     /// <summary>Window height without the edit-object strip (non-maximized); extra height is added while a device is selected.</summary>
@@ -312,6 +314,8 @@ public static partial class IPAMOverlay
         IpAddresses = 0,
         Prefixes = 1,
         Vlans = 2,
+        DhcpScopes = 3,
+        Tutorial = 4,
    }
 
     private enum DevicesSubSection
@@ -337,6 +341,8 @@ public static partial class IPAMOverlay
     private const int IpamFormFocusPrefixName = 1;
     private const int IpamFormFocusVlanId = 2;
     private const int IpamFormFocusVlanName = 3;
+    private const int IpamFormFocusScopeName = 4;
+    private const int IpamFormFocusScopeCidr = 5;
     /// <summary>Search box for IPAM prefix list inside the server edit popup (inline assign).</summary>
     private const int IpamFormFocusInlinePrefixSearch = 6;
     private const int IpamFormFocusInlineAvailableCidr = 7;
@@ -557,6 +563,7 @@ public static partial class IPAMOverlay
     /// <summary>Editable IP as four octets — GUI.TextField breaks under IL2CPP (TextEditor unstripping).</summary>
     private static int _oct0 = 192, _oct1 = 168, _oct2 = 1, _oct3 = 10;
     private static int _activeOctetSlot = -1;
+    private static bool _focusIpamWindowOnNextFrame;
 
     private static bool _iopsCalculatorOpen;
     /// <summary>Digits only — typed via <see cref="EventType.KeyDown"/> (no TextField on IL2CPP).</summary>
@@ -787,6 +794,23 @@ public static partial class IPAMOverlay
         var perf = ModDebugLog.IsIpamPerfLoggingEnabled;
         var tBackdrop0 = perf ? Time.realtimeSinceStartupAsDouble : 0d;
         GUI.Box(fullScreen, string.Empty, _stModalBlocker);
+
+        // Center window on first open
+        if (!_windowRectCentered && _windowRect.x < 0)
+        {
+            _windowRectCentered = true;
+            var w = Mathf.Min(_windowRect.width, Screen.width - 40f);
+            var h = Mathf.Min(_windowRect.height, Screen.height - 40f);
+            _windowRect = new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h);
+            _windowRectRestored = _windowRect;
+        }
+
+        // Focus IPAM window on first frame after opening so clicks go directly into the overlay.
+        if (_focusIpamWindowOnNextFrame)
+        {
+            _focusIpamWindowOnNextFrame = false;
+            GUI.FocusWindow(9001);
+        }
 
         GUI.DrawTexture(_windowRect, _texBackdrop, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
 

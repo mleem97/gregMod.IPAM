@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// Stable key for a rack device across game sessions (unlike <see cref="UnityEngine.Object.GetInstanceID"/>).

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>
 /// phpIPAM-style free space: subtract child CIDRs from a parent, then cover remainder with maximal IPv4 CIDR blocks.

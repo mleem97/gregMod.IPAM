@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 // Prefix/VLAN form text entry without GUI.TextField — IL2CPP games strip TextEditor APIs used by that control.
 
@@ -335,6 +335,8 @@ public static partial class IPAMOverlay
             IpamFormFocusPrefixName => IpamTextFieldKind.Name,
             IpamFormFocusVlanId => IpamTextFieldKind.VlanIdDigits,
             IpamFormFocusVlanName => IpamTextFieldKind.Name,
+            IpamFormFocusScopeName => IpamTextFieldKind.Name,
+            IpamFormFocusScopeCidr => IpamTextFieldKind.Cidr,
             IpamFormFocusInlinePrefixSearch => IpamTextFieldKind.Name,
             IpamFormFocusInlineAvailableCidr => IpamTextFieldKind.Cidr,
             IpamFormFocusInlineNamingPattern => IpamTextFieldKind.Name,
@@ -362,6 +364,8 @@ public static partial class IPAMOverlay
             IpamFormFocusPrefixName => 128,
             IpamFormFocusVlanId => 4,
             IpamFormFocusVlanName => 128,
+            IpamFormFocusScopeName => 64,
+            IpamFormFocusScopeCidr => 18,
             IpamFormFocusInlinePrefixSearch => 128,
             IpamFormFocusInlineAvailableCidr => 64,
             IpamFormFocusInlineNamingPattern => 128,
@@ -396,6 +400,8 @@ public static partial class IPAMOverlay
             IpamFormFocusPrefixName => _ipamPrefixFormName ?? "",
             IpamFormFocusVlanId => _ipamVlanFormId ?? "",
             IpamFormFocusVlanName => _ipamVlanFormName ?? "",
+            IpamFormFocusScopeName => _ipamScopeFormName ?? "",
+            IpamFormFocusScopeCidr => _ipamScopeFormCidr ?? "",
             IpamFormFocusInlinePrefixSearch => _inlineIpamPrefixSearchBuf ?? "",
             IpamFormFocusInlineAvailableCidr => _inlineIpamAvailableCidrBuf ?? "",
             IpamFormFocusInlineNamingPattern => _inlineNamingPatternBuf ?? "",
@@ -437,6 +443,12 @@ public static partial class IPAMOverlay
                 break;
             case IpamFormFocusVlanName:
                 _ipamVlanFormName = s;
+                break;
+            case IpamFormFocusScopeName:
+                _ipamScopeFormName = s;
+                break;
+            case IpamFormFocusScopeCidr:
+                _ipamScopeFormCidr = s;
                 break;
             case IpamFormFocusInlinePrefixSearch:
                 _inlineIpamPrefixSearchBuf = s;

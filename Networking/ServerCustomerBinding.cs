@@ -1,4 +1,4 @@
-namespace DHCPSwitches;
+namespace GregModIPAM;
 
 /// <summary>Thin wrapper for resolving a server&apos;s <see cref="CustomerBase"/> from scene state.</summary>
 public static class ServerCustomerBinding
