@@ -2076,130 +2076,105 @@ public static partial class IPAMOverlay
         }
     }
 
+    // ── Dashboard Colors (Material dark theme) ──
     private static readonly Color32 DashboardColor4U = new(0, 188, 164, 255);
     private static readonly Color32 DashboardColor2U = new(56, 189, 248, 255);
     private static readonly Color32 DashboardColorOther = new(148, 163, 184, 255);
     private static readonly Color32 DashboardTrackDim = new(34, 42, 56, 255);
+    private static readonly Color DashCardBg = new(0.08f, 0.10f, 0.13f, 0.85f);
+    private static readonly Color DashCardBorder = new(0.14f, 0.17f, 0.22f, 0.6f);
+    private static readonly Color DashTeal = new(0f, 0.74f, 0.64f, 1f);
+    private static readonly Color DashBlue = new(0.22f, 0.74f, 0.97f, 1f);
+    private static readonly Color DashOrange = new(0.95f, 0.55f, 0.2f, 1f);
+    private static readonly Color DashGreen = new(0.3f, 0.85f, 0.45f, 1f);
+    private static readonly Color DashRed = new(0.95f, 0.3f, 0.25f, 1f);
+    private static readonly Color DashYellow = new(0.95f, 0.78f, 0.2f, 1f);
 
     private static float ComputeDashboardContentHeight()
     {
-        var heroH = Mathf.Max(72f, Mathf.Round(92f * UiFontScale));
-        const float sectionGap = 18f;
-        var barH = Mathf.Max(22f, Mathf.Round(28f * UiFontScale));
-        var legendBlockH = Mathf.Max(58f, Mathf.Round(72f * UiFontScale));
-        var sceneCardH = Mathf.Max(58f, Mathf.Round(68f * UiFontScale));
+        var cardH = Mathf.Max(100f, Mathf.Round(120f * UiFontScale));
+        var metricCardH = Mathf.Max(80f, Mathf.Round(96f * UiFontScale));
+        var sceneCardH = Mathf.Max(70f, Mathf.Round(84f * UiFontScale));
+        const float gap = 14f;
         var y = CardPad;
-        y += SectionTitleH + 2f + 1f + 6f;
-        y += heroH + sectionGap;
-        y += SectionTitleH + 4f + barH + 10f + legendBlockH;
-        y += 26f + sectionGap;
-        y += SectionTitleH + 4f + sceneCardH + 16f;
-        y += 72f + CardPad;
-        return Mathf.Max(420f, y);
+        y += SectionTitleH + 4f + 20f; // header
+        y += cardH + gap; // health card
+        y += metricCardH + gap; // metric cards row
+        y += cardH + gap; // server inventory
+        y += Mathf.Ceil(sceneCardH * 0.5f) + gap; // scene devices grid
+        y += 60f + CardPad; // info strip
+        return Mathf.Max(520f, y);
     }
 
-    private static void DashboardDrawTintedRect(Rect r, Color tint)
-    {
-        if (_texWhite == null)
-        {
-            return;
-        }
+    // ── Material Card Helpers ──
 
-        GUI.DrawTexture(r, _texWhite, ScaleMode.StretchToFill, false, 0f, tint, 0f, 0f);
-    }
-
-    private static void DrawDashboardHeroCard(Rect r, string title, string value, string subtitle)
+    private static void DashDrawCard(Rect r)
     {
         if (_texCard != null)
         {
-            GUI.DrawTexture(r, _texCard, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
+            GUI.DrawTexture(r, _texCard, ScaleMode.StretchToFill, false, 0f, DashCardBg, 0f, 0f);
         }
 
-        if (_texNavActive != null)
-        {
-            GUI.DrawTexture(new Rect(r.x, r.y, 4f, r.height), _texNavActive, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
-        }
-
-        var padX = Mathf.Max(10f, Mathf.Round(14f * UiFontScale));
-        var innerW = Mathf.Max(40f, r.width - padX - 10f);
-        var tx = r.x + padX;
-        var ty = r.y + Mathf.Max(6f, Mathf.Round(10f * UiFontScale));
-        var titleH = Mathf.Max(14f, Mathf.Round(16f * UiFontScale));
-        GUI.Label(new Rect(tx, ty, innerW, titleH), title, _stMuted);
-        ty += titleH + Mathf.Max(2f, Mathf.Round(2f * UiFontScale));
-        var valSt = _stDashboardHeroValue ?? _stIopsResultCounts;
-        var valH = Mathf.Max(30f, Mathf.Round(36f * UiFontScale));
-        GUI.Label(new Rect(tx, ty, innerW, valH), value, valSt);
-        ty += valH + Mathf.Max(2f, Mathf.Round(2f * UiFontScale));
-        GUI.Label(new Rect(tx, ty, innerW, Mathf.Max(18f, Mathf.Round(22f * UiFontScale))), subtitle, _stMuted);
+        // subtle top border accent
+        DrawTintedRect(new Rect(r.x, r.y, r.width, 2f), DashCardBorder);
     }
 
-    private static void DrawDashboardServerMixBar(float x0, float y, float w, float h, int n7u, int n3u, int nOther)
+    private static void DashDrawProgressBar(Rect r, float fill01, Color barColor)
     {
-        var bar = new Rect(x0, y, w, h);
-        DashboardDrawTintedRect(bar, DashboardTrackDim);
-        var mix = n7u + n3u + nOther;
-        if (mix <= 0)
+        DrawTintedRect(r, DashboardTrackDim);
+        var f = Mathf.Clamp01(fill01);
+        if (f > 0.001f)
         {
-            GUI.Label(bar, "No servers in inventory cache", _stMutedCenter ?? _stMuted);
-            return;
-        }
-
-        var w7 = (n7u / (float)mix) * w;
-        var w3 = (n3u / (float)mix) * w;
-        var wO = Mathf.Max(0f, w - w7 - w3);
-        var x = x0;
-        if (w7 > 0.5f)
-        {
-            DashboardDrawTintedRect(new Rect(x, y, w7, h), DashboardColor4U);
-            x += w7;
-        }
-
-        if (w3 > 0.5f)
-        {
-            DashboardDrawTintedRect(new Rect(x, y, w3, h), DashboardColor2U);
-            x += w3;
-        }
-
-        if (wO > 0.5f)
-        {
-            DashboardDrawTintedRect(new Rect(x, y, wO, h), DashboardColorOther);
+            DrawTintedRect(new Rect(r.x, r.y, Mathf.Max(3f, r.width * f), r.height), barColor);
         }
     }
 
-    private static void DrawDashboardLegendLine(Rect r, Color32 swatchColor, string text)
+    private static void DashDrawMetricCard(Rect r, string title, string value, string subtitle, Color accentColor)
     {
-        const float sw = 10f;
-        DashboardDrawTintedRect(new Rect(r.x, r.y + 5f, sw, sw), swatchColor);
-        GUI.Label(new Rect(r.x + 16f, r.y, Mathf.Max(20f, r.width - 16f), 22f), text, _stMuted);
-    }
-
-    private static void DrawDashboardSceneCard(Rect r, string title, int count, float fill01, Color32 barTint)
-    {
-        if (_texCard != null)
-        {
-            GUI.DrawTexture(r, _texCard, ScaleMode.StretchToFill, false, 0f, Color.white, 0f, 0f);
-        }
-
-        var pad = Mathf.Max(8f, Mathf.Round(12f * UiFontScale));
-        var innerW = Mathf.Max(40f, r.width - pad * 2f);
+        DashDrawCard(r);
+        var pad = Mathf.Max(10f, Mathf.Round(14f * UiFontScale));
         var tx = r.x + pad;
-        var ty = r.y + Mathf.Max(5f, Mathf.Round(8f * UiFontScale));
-        var titleH = Mathf.Max(14f, Mathf.Round(16f * UiFontScale));
-        GUI.Label(new Rect(tx, ty, innerW, titleH), title, _stMuted);
-        ty += titleH + Mathf.Max(2f, Mathf.Round(2f * UiFontScale));
+        var ty = r.y + Mathf.Max(8f, Mathf.Round(12f * UiFontScale));
+        var innerW = r.width - pad * 2f;
+        // accent line
+        DrawTintedRect(new Rect(r.x + 4f, ty, 3f, Mathf.Max(20f, r.height - 24f)), accentColor);
+        GUI.Label(new Rect(tx + 6f, ty, innerW - 6f, 18f), title, _stMuted);
+        ty += 22f;
         var valSt = _stIopsResultCounts ?? _stTableCell;
-        var countH = Mathf.Max(24f, Mathf.Round(30f * UiFontScale));
-        GUI.Label(new Rect(tx, ty, innerW, countH), count.ToString("N0"), valSt);
-        ty += countH + Mathf.Max(2f, Mathf.Round(2f * UiFontScale));
-        var track = new Rect(tx, ty, innerW, Mathf.Max(6f, Mathf.Round(8f * UiFontScale)));
-        DashboardDrawTintedRect(track, DashboardTrackDim);
-        var fill = Mathf.Clamp01(fill01);
-        if (fill > 0.001f)
+        GUI.Label(new Rect(tx + 6f, ty, innerW - 6f, 32f), value, valSt);
+        ty += 36f;
+        GUI.Label(new Rect(tx + 6f, ty, innerW - 6f, 18f), subtitle, _stMuted);
+    }
+
+    private static void DashDrawSceneCard(Rect r, string title, int count, float fill01, Color barColor, string emptyMsg)
+    {
+        DashDrawCard(r);
+        var pad = Mathf.Max(10f, Mathf.Round(14f * UiFontScale));
+        var tx = r.x + pad;
+        var ty = r.y + Mathf.Max(8f, Mathf.Round(12f * UiFontScale));
+        var innerW = r.width - pad * 2f;
+        GUI.Label(new Rect(tx, ty, innerW, 16f), title, _stMuted);
+        ty += 20f;
+        var valSt = _stIopsResultCounts ?? _stTableCell;
+        if (count > 0)
         {
-            DashboardDrawTintedRect(new Rect(track.x, track.y, Mathf.Max(2f, track.width * fill), track.height), barTint);
+            GUI.Label(new Rect(tx, ty, innerW, 28f), count.ToString("N0"), valSt);
+            ty += 32f;
+            DashDrawProgressBar(new Rect(tx, ty, innerW, 8f), fill01, barColor);
+        }
+        else
+        {
+            GUI.Label(new Rect(tx, ty, innerW, 22f), emptyMsg ?? "No devices detected", _stMuted);
         }
     }
+
+    private static void DashDrawLegendRow(Rect r, Color swatch, string text)
+    {
+        DrawTintedRect(new Rect(r.x, r.y + 4f, 10f, 10f), swatch);
+        GUI.Label(new Rect(r.x + 16f, r.y, r.width - 16f, 18f), text, _stMuted);
+    }
+
+    // ── Dashboard Main ──
 
     private static void DrawDashboard(float innerW)
     {
@@ -2211,98 +2186,194 @@ public static partial class IPAMOverlay
             out var totalServers,
             out var ratedIopsSum);
 
-        var x0 = CardPad;
-        var y = CardPad;
-        var w = innerW - CardPad * 2f;
-        var heroH = Mathf.Max(72f, Mathf.Round(92f * UiFontScale));
-        const float heroGap = 12f;
-        const float sectionGap = 18f;
-        var barH = Mathf.Max(22f, Mathf.Round(28f * UiFontScale));
-        var legendRowH = Mathf.Max(18f, Mathf.Round(22f * UiFontScale));
-        var sceneCardH = Mathf.Max(58f, Mathf.Round(68f * UiFontScale));
+        var sceneLoaded = totalServers > 0 || _cachedSwitches.Length > 0;
 
-        // Network Health Score
+        // Scene device counts (routers/firewalls filtered from switches)
+        var swTotal = _cachedSwitches.Length;
+        var routerCount = 0;
+        var firewallCount = 0;
+        var pureSwitchCount = 0;
+        foreach (var sw in _cachedSwitches)
+        {
+            if (sw == null) continue;
+            if (DeviceInventoryReflection.NetworkSwitchBehavesAsFirewall(sw)) firewallCount++;
+            else if (DeviceInventoryReflection.NetworkSwitchBehavesAsRouter(sw)) routerCount++;
+            else pureSwitchCount++;
+        }
+
+        // Assigned IP count
+        var assignedIpCount = 0;
+        foreach (var s in _cachedServers)
+        {
+            if (s == null) continue;
+            var ip = DHCPManager.GetServerIP(s);
+            if (!string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0") assignedIpCount++;
+        }
+
+        // Health
         var healthScore = NetworkHealthScore.ComputeScore();
         var healthLabel = NetworkHealthScore.GetScoreLabel(healthScore);
         var healthColor = NetworkHealthScore.GetScoreColor(healthScore);
 
+        // Layout
+        var x0 = CardPad;
+        var y = CardPad;
+        var w = innerW - CardPad * 2f;
+        var cardH = Mathf.Max(100f, Mathf.Round(120f * UiFontScale));
+        var metricCardH = Mathf.Max(80f, Mathf.Round(96f * UiFontScale));
+        var sceneCardH = Mathf.Max(70f, Mathf.Round(84f * UiFontScale));
+        const float gap = 14f;
+        var colGap = 12f;
+
+        // ── Header ──
         GUI.Label(new Rect(x0, y - 2, w, SectionTitleH), "Organization / Dashboard", _stBreadcrumb);
         y += SectionTitleH + 2f;
         GUI.DrawTexture(new Rect(x0, y, w, 1f), _texTableHeader);
         y += 6f;
+        GUI.Label(new Rect(x0, y, w, 28f), "Inventory", _stToolbarTitle);
+        y += 30f;
+        GUI.Label(new Rect(x0, y, w, 18f), "Live devices · IPv4 assignments", _stMuted);
+        y += 24f + gap;
 
-        // Health bar
-        var healthBarRect = new Rect(x0, y, w, 28f);
-        DrawTintedRect(healthBarRect, new Color(0.06f, 0.08f, 0.10f, 0.7f));
-        var healthFillW = (w - 4f) * (healthScore / 100f);
-        DrawTintedRect(new Rect(x0 + 2f, y + 2f, healthFillW, 24f), healthColor);
-        GUI.Label(new Rect(x0 + 8f, y + 4f, w - 16f, 20f), $"Network Health: {healthScore}/100 — {healthLabel}", _stSectionTitle);
-        y += 34f + sectionGap;
+        if (!sceneLoaded)
+        {
+            GUI.Label(new Rect(x0, y, w, 40f), "Waiting for scene data…", _stMuted);
+            return;
+        }
 
-        var half = (w - heroGap) * 0.5f;
-        DrawDashboardHeroCard(
-            new Rect(x0, y, half, heroH),
+        // ── 1. Network Health Card ──
+        var healthCardRect = new Rect(x0, y, w, cardH);
+        DashDrawCard(healthCardRect);
+        var hPad = Mathf.Max(14f, Mathf.Round(18f * UiFontScale));
+        var htx = x0 + hPad;
+        var hty = y + Mathf.Max(12f, Mathf.Round(16f * UiFontScale));
+        GUI.Label(new Rect(htx, hty, w - hPad * 2f, 20f), "Network Health", _stMuted);
+        hty += 24f;
+        var valSt = _stIopsResultCounts ?? _stTableCell;
+        GUI.Label(new Rect(htx, hty, 200f, 36f), $"{healthScore}/100", valSt);
+        // health label with color
+        var prevColor = GUI.contentColor;
+        GUI.contentColor = healthColor;
+        GUI.Label(new Rect(htx + 140f, hty + 8f, 120f, 24f), healthLabel, _stSectionTitle);
+        GUI.contentColor = prevColor;
+        hty += 42f;
+        DashDrawProgressBar(new Rect(htx, hty, w - hPad * 2f, 10f), healthScore / 100f, healthColor);
+        y += cardH + gap;
+
+        // ── 2. Summary Metric Cards (2-column) ──
+        var halfW = (w - colGap) * 0.5f;
+        DashDrawMetricCard(
+            new Rect(x0, y, halfW, metricCardH),
             "Customer contracts",
             customerContracts.ToString("N0"),
-            "Distinct CustomerBase IDs in scene");
-        DrawDashboardHeroCard(
-            new Rect(x0 + half + heroGap, y, half, heroH),
-            "Rated IOPS (3 U + 7 U)",
+            "Distinct CustomerBase IDs in scene",
+            DashTeal);
+        DashDrawMetricCard(
+            new Rect(x0 + halfW + colGap, y, halfW, metricCardH),
+            "Rated IOPS",
             ratedIopsSum.ToString("N0"),
-            $"{n7u}×{IopsPer7UServer:N0} + {n3u}×{IopsPer3UServer:N0} (7 U + 3 U tiers)");
-        y += heroH + sectionGap;
+            $"{n7u}×{IopsPer7UServer:N0} + {n3u}×{IopsPer3UServer:N0} (7 U + 3 U tiers)",
+            DashBlue);
+        y += metricCardH + gap;
 
-        GUI.Label(new Rect(x0, y, w, SectionTitleH), "Server inventory (by rack type)", _stSectionTitle);
-        y += SectionTitleH + 4f;
-        DrawDashboardServerMixBar(x0, y, w, barH, n7u, n3u, nOther);
-        y += barH + 10f;
+        // Second row: Assigned IPs + Unassigned devices
+        var unassigned = totalServers - assignedIpCount;
+        DashDrawMetricCard(
+            new Rect(x0, y, halfW, metricCardH),
+            "Assigned IPv4 addresses",
+            assignedIpCount.ToString("N0"),
+            $"of {totalServers} total servers",
+            DashGreen);
+        DashDrawMetricCard(
+            new Rect(x0 + halfW + colGap, y, halfW, metricCardH),
+            "Unassigned devices",
+            unassigned.ToString("N0"),
+            unassigned > 0 ? "Servers without IPv4 assignment" : "All servers have IPs",
+            unassigned > 0 ? DashOrange : DashGreen);
+        y += metricCardH + gap;
+
+        // ── 3. Server Inventory Card ──
+        var invCardH = cardH + Mathf.Max(50f, Mathf.Round(60f * UiFontScale));
+        var invCardRect = new Rect(x0, y, w, invCardH);
+        DashDrawCard(invCardRect);
+        var invPad = hPad;
+        var invTx = x0 + invPad;
+        var invTy = y + Mathf.Max(12f, Mathf.Round(16f * UiFontScale));
+        var invInnerW = w - invPad * 2f;
+        GUI.Label(new Rect(invTx, invTy, invInnerW, 20f), "Server inventory", _stMuted);
+        invTy += 6f;
+        GUI.Label(new Rect(invTx, invTy, invInnerW, 24f), "By rack type", _stSectionTitle);
+        invTy += 28f;
 
         var mix = n7u + n3u + nOther;
+        // Stacked bar
+        DashDrawProgressBar(new Rect(invTx, invTy, invInnerW, 14f), 1f, DashboardTrackDim);
+        if (mix > 0)
+        {
+            var w7 = (n7u / (float)mix) * invInnerW;
+            var w3 = (n3u / (float)mix) * invInnerW;
+            var bx = invTx;
+            if (w7 > 0.5f) { DrawTintedRect(new Rect(bx, invTy, w7, 14f), DashboardColor4U); bx += w7; }
+            if (w3 > 0.5f) { DrawTintedRect(new Rect(bx, invTy, w3, 14f), DashboardColor2U); bx += w3; }
+            if (invInnerW - bx + invTx > 0.5f) { DrawTintedRect(new Rect(bx, invTy, invInnerW - (bx - invTx), 14f), DashboardColorOther); }
+        }
+        invTy += 22f;
+
+        // Legend
         float P(int n) => mix > 0 ? (100f * n) / mix : 0f;
-        DrawDashboardLegendLine(
-            new Rect(x0, y, w, legendRowH),
-            DashboardColor4U,
+        var legH = Mathf.Max(18f, Mathf.Round(20f * UiFontScale));
+        DashDrawLegendRow(new Rect(invTx, invTy, invInnerW, legH), DashboardColor4U,
             $"7 U servers  ·  {n7u}  ({P(n7u):0.#}%)  — {IopsPer7UServer:N0} IOPS each");
-        y += legendRowH;
-        DrawDashboardLegendLine(
-            new Rect(x0, y, w, legendRowH),
-            DashboardColor2U,
+        invTy += legH;
+        DashDrawLegendRow(new Rect(invTx, invTy, invInnerW, legH), DashboardColor2U,
             $"3 U servers  ·  {n3u}  ({P(n3u):0.#}%)  — {IopsPer3UServer:N0} IOPS each");
-        y += legendRowH;
-        DrawDashboardLegendLine(
-            new Rect(x0, y, w, legendRowH),
-            DashboardColorOther,
+        invTy += legH;
+        DashDrawLegendRow(new Rect(invTx, invTy, invInnerW, legH), DashboardColorOther,
             $"Other / unknown  ·  {nOther}  ({P(nOther):0.#}%)  — excluded from IOPS total");
-        y += legendRowH + 6f;
+        invTy += legH + 6f;
+        GUI.Label(new Rect(invTx, invTy, invInnerW, 22f), $"Total rated IOPS:  {ratedIopsSum:N0}", _stTableCell);
+        y += invCardH + gap;
 
-        GUI.Label(new Rect(x0, y, w, 24f), $"Total rated IOPS:  {ratedIopsSum:N0}", _stTableCell);
-        y += 26f + sectionGap;
-
-        var swCount = _cachedSwitches.Length;
-        var sceneDenom = Mathf.Max(1, swCount + totalServers);
-        var fillSw = swCount / (float)sceneDenom;
-        var fillSv = totalServers / (float)sceneDenom;
-
-        GUI.Label(new Rect(x0, y, w, SectionTitleH), "Scene devices", _stSectionTitle);
-        y += SectionTitleH + 4f;
-        var halfScene = (w - heroGap) * 0.5f;
-        DrawDashboardSceneCard(
-            new Rect(x0, y, halfScene, sceneCardH),
+        // ── 4. Scene Devices Grid (2x2) ──
+        var sceneHalfW = (w - colGap) * 0.5f;
+        var sceneDenom = Mathf.Max(1, swTotal + totalServers + routerCount + firewallCount);
+        DashDrawSceneCard(
+            new Rect(x0, y, sceneHalfW, sceneCardH),
             "Network switches",
-            swCount,
-            fillSw,
-            DashboardColor2U);
-        DrawDashboardSceneCard(
-            new Rect(x0 + halfScene + heroGap, y, halfScene, sceneCardH),
-            "Servers (all types)",
+            pureSwitchCount,
+            pureSwitchCount / (float)sceneDenom,
+            DashTeal,
+            "No switches found");
+        DashDrawSceneCard(
+            new Rect(x0 + sceneHalfW + colGap, y, sceneHalfW, sceneCardH),
+            "Servers",
             totalServers,
-            fillSv,
-            DashboardColor4U);
-        y += sceneCardH + 16f;
+            totalServers / (float)sceneDenom,
+            DashBlue,
+            "No servers detected");
+        y += sceneCardH + gap;
+        DashDrawSceneCard(
+            new Rect(x0, y, sceneHalfW, sceneCardH),
+            "Routers",
+            routerCount,
+            routerCount / (float)sceneDenom,
+            DashTeal,
+            "No routers found");
+        DashDrawSceneCard(
+            new Rect(x0 + sceneHalfW + colGap, y, sceneHalfW, sceneCardH),
+            "Firewalls",
+            firewallCount,
+            firewallCount / (float)sceneDenom,
+            DashOrange,
+            "No firewalls found");
+        y += sceneCardH + gap;
 
+        // ── 5. Info Strip ──
+        var infoRect = new Rect(x0, y, w, 48f);
+        DrawTintedRect(infoRect, new Color(0.06f, 0.08f, 0.10f, 0.5f));
         GUI.Label(
-            new Rect(x0, y, w, 72f),
-            "IOPS totals use the same mod constants as the IOPS sizing calculator. Open Devices or Customers for full tables; assign IPs from the bottom panel.",
+            new Rect(x0 + 10f, y + 6f, w - 20f, 36f),
+            "IOPS totals use the same mod constants as the IOPS sizing calculator. Open Assets or Customers for full tables; assign IPs from the bottom panel.",
             _stHint);
     }
 
