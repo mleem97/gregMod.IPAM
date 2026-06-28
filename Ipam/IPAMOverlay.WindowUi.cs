@@ -1771,6 +1771,18 @@ public static partial class IPAMOverlay
                 HandleSwitchRowClick(sw, sortedIdx >= 0 ? sortedIdx : rowIdx);
             }
 
+            // Toggle button
+            if (sw != null)
+            {
+                var toggleKey = 95000 + Mathf.Abs(sw.GetInstanceID()) % 10000;
+                var isActive = IsDeviceActive(sw);
+                if (DrawDeviceToggle(r, isActive, toggleKey))
+                {
+                    ToggleDevice(sw);
+                    ModReleaseLog.Info($"Device toggle: {DeviceInventoryReflection.GetDisplayName(sw)} -> {(isActive ? "OFF" : "ON")}");
+                }
+            }
+
             y += TableRowH;
         }
 
@@ -1962,6 +1974,15 @@ public static partial class IPAMOverlay
                 HandleServerRowClick(server, rowIdx, ip, SortedServersBuffer);
             }
 
+            // Toggle button
+            var toggleKeySv = 96000 + Mathf.Abs(server.GetInstanceID()) % 10000;
+            var isActiveSv = IsDeviceActive(server);
+            if (DrawDeviceToggle(r, isActiveSv, toggleKeySv))
+            {
+                ToggleDevice(server);
+                ModReleaseLog.Info($"Server toggle: {DeviceInventoryReflection.GetDisplayName(server)} -> {(isActiveSv ? "OFF" : "ON")}");
+            }
+
             y += TableRowH;
         }
 
@@ -2107,6 +2128,52 @@ public static partial class IPAMOverlay
         y += Mathf.Ceil(sceneCardH * 0.5f) + gap; // scene devices grid
         y += 60f + CardPad; // info strip
         return Mathf.Max(520f, y);
+    }
+
+    // ── Device Toggle Button ──
+
+    private static readonly Color ToggleOnColor = new(0.2f, 0.75f, 0.45f, 1f);
+    private static readonly Color ToggleOffColor = new(0.85f, 0.25f, 0.2f, 1f);
+    private static readonly Color ToggleOnHover = new(0.3f, 0.85f, 0.55f, 1f);
+    private static readonly Color ToggleOffHover = new(0.95f, 0.35f, 0.3f, 1f);
+
+    private static GUIStyle _stToggleOn;
+    private static GUIStyle _stToggleOff;
+
+    private static bool DrawDeviceToggle(Rect rowRect, bool isActive, int dedupeKey)
+    {
+        var btnW = 64f;
+        var btnH = Mathf.Max(20f, rowRect.height - 6f);
+        var btnRect = new Rect(rowRect.xMax - btnW - 8f, rowRect.y + (rowRect.height - btnH) * 0.5f, btnW, btnH);
+
+        var label = isActive ? "⏻ ON" : "⏻ OFF";
+        var style = isActive ? _stToggleOn : _stToggleOff;
+        if (style == null) style = _stMutedBtn;
+
+        return ImguiButtonOnce(btnRect, label, dedupeKey, style);
+    }
+
+    private static bool IsDeviceActive(UnityEngine.Object obj)
+    {
+        if (obj == null) return false;
+        try
+        {
+            if (obj is Component c) return c.gameObject.activeSelf;
+            if (obj is GameObject go) return go.activeSelf;
+        }
+        catch { }
+        return true;
+    }
+
+    private static void ToggleDevice(UnityEngine.Object obj)
+    {
+        if (obj == null) return;
+        try
+        {
+            if (obj is Component c) c.gameObject.SetActive(!c.gameObject.activeSelf);
+            else if (obj is GameObject go) go.SetActive(!go.activeSelf);
+        }
+        catch { }
     }
 
     // ── Material Card Helpers ──

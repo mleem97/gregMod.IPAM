@@ -596,6 +596,32 @@ public static partial class IPAMOverlay
         _stMutedBtn.active.textColor = Color.white;
         _stMutedBtn.border = Ro(3, 3, 3, 3);
 
+        _stToggleOn = new GUIStyle();
+        _stToggleOn.font = bf;
+        _stToggleOn.fontSize = Fs(11);
+        _stToggleOn.fontStyle = FontStyle.Bold;
+        _stToggleOn.alignment = TextAnchor.MiddleCenter;
+        _stToggleOn.normal.textColor = Color.white;
+        _stToggleOn.hover.textColor = Color.white;
+        _stToggleOn.active.textColor = Color.white;
+        _stToggleOn.normal.background = MakeTexture(51, 191, 115, 255);
+        _stToggleOn.hover.background = MakeTexture(76, 216, 140, 255);
+        _stToggleOn.active.background = MakeTexture(40, 170, 100, 255);
+        _stToggleOn.border = Ro(4, 4, 4, 4);
+
+        _stToggleOff = new GUIStyle();
+        _stToggleOff.font = bf;
+        _stToggleOff.fontSize = Fs(11);
+        _stToggleOff.fontStyle = FontStyle.Bold;
+        _stToggleOff.alignment = TextAnchor.MiddleCenter;
+        _stToggleOff.normal.textColor = Color.white;
+        _stToggleOff.hover.textColor = Color.white;
+        _stToggleOff.active.textColor = Color.white;
+        _stToggleOff.normal.background = MakeTexture(217, 64, 51, 255);
+        _stToggleOff.hover.background = MakeTexture(243, 89, 76, 255);
+        _stToggleOff.active.background = MakeTexture(190, 50, 40, 255);
+        _stToggleOff.border = Ro(4, 4, 4, 4);
+
         _stIopsResult = new GUIStyle();
         _stIopsResult.font = lf;
         _stIopsResult.fontSize = Fs(14);
