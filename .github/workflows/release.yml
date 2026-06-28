@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.3.8)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,25 +20,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "VERSION=${TAG#v}" >> $GITHUB_OUTPUT
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
 
       - name: Find DLL
         id: dll
         run: |
           if [ -f "dist/gregMod.IPAM.dll" ]; then
             echo "FILE=dist/gregMod.IPAM.dll" >> $GITHUB_OUTPUT
+            echo "Found: dist/gregMod.IPAM.dll"
           elif [ -f "dist/DHCP and IPAM.dll" ]; then
             echo "FILE=dist/DHCP and IPAM.dll" >> $GITHUB_OUTPUT
+            echo "Found: dist/DHCP and IPAM.dll"
           else
+            echo "No DLL found in dist/"
             echo "FILE=" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Release
+        if: steps.dll.outputs.FILE != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.TAG }}
           name: Release ${{ steps.version.outputs.VERSION }}
           generate_release_notes: true
           files: ${{ steps.dll.outputs.FILE }}
