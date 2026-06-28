@@ -50,7 +50,7 @@ See [`ROADMAP.md`](./ROADMAP.md) for details. Main development tracks include:
 
 ## Installation
 
-1. Install **MelonLoader** for **Data Center**.
+1. Install **MelonLoader** (v0.7.2+) for **Data Center**.
 2. Copy the release DLL into the mod folder:
 
    ```text
@@ -77,9 +77,10 @@ See [`ROADMAP.md`](./ROADMAP.md) for details. Main development tracks include:
 
 ## Dependencies
 
-Runtime / mod setup requirements:
+- **MelonLoader** (v0.7.2+)
 
-- **MelonLoader**
+### Build only
+
 - **Il2CppInterop**
 - **Harmony**
 - Unity / game interop assemblies from the local Data Center installation
@@ -90,7 +91,8 @@ Requirements:
 
 - .NET 6 SDK
 - local Data Center / MelonLoader installation
-- available interop assemblies
+
+> **Note:** This mod was built on Linux using Proton-GE 10-34. The `.csproj` uses MSBuild variables (`$(MelonLoaderNetDir)`, `$(GameInteropDir)`) to locate game and MelonLoader DLLs. When building on a different system, either set these variables or adjust the `<HintPath>` entries to point to your local MelonLoader and game interop assemblies.
 
 Build:
 
