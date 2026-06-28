@@ -2296,7 +2296,8 @@ public static partial class IPAMOverlay
         y += metricCardH + gap;
 
         // ── 3. Server Inventory Card ──
-        var invCardH = cardH + Mathf.Max(50f, Mathf.Round(60f * UiFontScale));
+        var legH = Mathf.Max(18f, Mathf.Round(20f * UiFontScale));
+        var invCardH = Mathf.Max(180f, Mathf.Round(220f * UiFontScale));
         var invCardRect = new Rect(x0, y, w, invCardH);
         DashDrawCard(invCardRect);
         var invPad = hPad;
@@ -2324,7 +2325,6 @@ public static partial class IPAMOverlay
 
         // Legend
         float P(int n) => mix > 0 ? (100f * n) / mix : 0f;
-        var legH = Mathf.Max(18f, Mathf.Round(20f * UiFontScale));
         DashDrawLegendRow(new Rect(invTx, invTy, invInnerW, legH), DashboardColor4U,
             $"7 U servers  ·  {n7u}  ({P(n7u):0.#}%)  — {IopsPer7UServer:N0} IOPS each");
         invTy += legH;
