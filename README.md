@@ -6,7 +6,7 @@
 [![gregFramework](https://img.shields.io/badge/gregFramework-Website-blue?style=for-the-badge)](https://gregframework.eu)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green?style=for-the-badge)](./LICENSE)
 [![Version](https://img.shields.io/badge/Version-0.5.0-orange?style=for-the-badge)](./ROADMAP.md)
-[![GameVersion](https://img.shields.io/badge/Game%20Version-1.1-yellow?style=for-the-badge)]()
+[![GameVersion](https://img.shields.io/badge/Game%20Version-1.0.50.15-yellow?style=for-the-badge)]()
 [![Unity](https://img.shields.io/badge/Unity-6000.5-black?style=for-the-badge&logo=unity&logoColor=white)]()
 
 ## Links
