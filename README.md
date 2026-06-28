@@ -1,62 +1,93 @@
-# gregMod.IPAM — Network Management
+# gregMod.IPAM
 
-> IP Address Management and subnet automation for your data center network.
+> IP Address Management, DHCP workflows, and network tooling for **Data Center** — built for the **gregFramework** ecosystem.
 
-**Repository:** [github.com/mleem97/gregMod.IPAM](https://github.com/mleem97/gregMod.IPAM)  
-**Author:** TeamGreg Modding (mleem97 & mochimus) | **License:** Apache 2.0 | **Framework:** MelonLoader
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/greg)
+[![gregFramework](https://img.shields.io/badge/gregFramework-Website-blue?style=for-the-badge)](https://gregframework.eu)
+[![License](https://img.shields.io/badge/License-Apache%202.0-green?style=for-the-badge)](./LICENSE)
+[![Version](https://img.shields.io/badge/Version-0.5.0-orange?style=for-the-badge)](./ROADMAP.md)
 
----
+## Links
+
+- **Website:** [gregframework.eu](https://gregframework.eu)
+- **Discord / Support:** [discord.gg/greg](https://discord.gg/greg)
+- **Repository:** [github.com/mleem97/gregMod.IPAM](https://github.com/mleem97/gregMod.IPAM)
+- **Roadmap:** [`ROADMAP.md`](./ROADMAP.md)
 
 ## Overview
 
-**gregMod.IPAM** is a gamified networking system and IPAM layer for **Data Center**. It expands network management depth while keeping the experience practical and fun.
+**gregMod.IPAM** extends **Data Center** with an in-game IPAM and network management layer. The focus is faster IP handling, better device visibility, DHCP/subnet workflows, and a foundation for more advanced network features.
 
-## Features
-- Auto-subnetting (/24, /22, /16 blocks)
-- VLAN editor and assignment
-- DeepFlow network status integration
-- Customer-to-subnet mapping
+The project is designed as **normal-mode first**: core features should be usable directly in-game without external tools or unnecessary complexity.
+
+## Current Features
+
+- IPAM overlay with dashboard, device, and IP views
+- Device inventory via in-game reflection
+- IPv4/subnet helpers and private subnet logic
+- DHCP scope management (Global / VLAN / Switch)
+- Routing, ping, and reachability helpers
+- Cisco-like CLI / terminal concept for network devices
+- Persistent device configuration
+- Rack management with live slot status
+- Naming templates with bulk rename
+- Debug logging for mod and network diagnostics
+
+## Planned Focus Areas
+
+See [`ROADMAP.md`](./ROADMAP.md) for details. Main development tracks include:
+
+- improved IP assignment UX
 - DHCP scope management
-- Shared server / multi-tenant gameplay concepts
-
----
+- VLAN and management-plane foundations
+- patch-port labeling
+- shared-server / multi-tenant concepts
+- redundancy and advanced networking features
+- gamified IPAM objectives, health scores, and conflict reporting
+- iPad-style UI border
 
 ## Installation
 
-1. Install **MelonLoader** (v0.6+)
-2. Place `gregMod.IPAM.dll` into `Game/Mods/`
-3. Start the game and press **F1**
+1. Install **MelonLoader** for **Data Center**.
+2. Copy the release DLL into the mod folder:
+
+   ```text
+   Game/Mods/gregMod.IPAM.dll
+   ```
+
+3. Start the game.
+4. Open the IPAM overlay in-game. Default hotkey: **F1**.
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| **F1** | Toggle IPAM overlay (takes mouse focus) |
+| **Escape** | Close IPAM + open game pause menu |
+| **P** | Close IPAM only (no pause menu) |
+| **Ctrl+L** | Assign DHCP to all servers |
+| **Mouse wheel** | Increment/decrement IP octet |
+| **Ctrl+Click** | Multi-select rows |
+| **Shift+Click** | Range-select rows |
 
 ## Dependencies
 
-- None (standalone mod)
+Runtime / mod setup requirements:
 
----
+- **MelonLoader**
+- **Il2CppInterop**
+- **Harmony**
+- Unity / game interop assemblies from the local Data Center installation
 
-## Tech Stack
+## Build from Source
 
-- **Game:** Data Center
-- **Runtime:** MelonLoader (`0.7.2+` target)
-- **Language:** C# / .NET 6
-- **Interop:** Il2CppInterop
-- **Patching:** Harmony
+Requirements:
 
----
+- .NET 6 SDK
+- local Data Center / MelonLoader installation
+- available interop assemblies
 
-## Repository Structure
-
-- **`Core/`** — MelonLoader entry (`Main.cs`, `MelonModInfo.cs`, …)
-- **`Networking/`** — DHCP, subnets, device helpers
-- **`Ipam/`** — IPAM overlay (`IPAMOverlay.cs`), `LicenseManager`
-- **`Config/`** — Device configuration persistence
-- **`Patches/`** — Harmony patches for input/UI
-- **`Diagnostics/`** — Debug logging utilities
-- **`ROADMAP.md`** — phased implementation roadmap
-- **`docs/SOURCE_LAYOUT.md`** — folder-by-folder map of all C# sources
-
----
-
-## Building from Source
+Build:
 
 ```bash
 git clone https://github.com/mleem97/gregMod.IPAM.git
@@ -64,31 +95,46 @@ cd gregMod.IPAM
 dotnet build -c Release
 ```
 
-Release DLL: `bin/Release/net6.0/gregMod.IPAM.dll` (also packaged under `dist/`).
+Release output:
+
+```text
+bin/Release/net6.0/gregMod.IPAM.dll
+```
+
+## Project Structure
+
+- **`Core/`** — MelonLoader entry point, mod info, global helpers
+- **`Networking/`** — DHCP, subnets, reachability, device and customer logic
+- **`Config/`** — device configuration, registry, and persistence
+- **`Ipam/`** — IPAM overlay, windows, tables, lifecycle, and UI logic
+- **`Patches/`** — Harmony patches
+- **`Input/`** — input suppression while overlays are open
+- **`Diagnostics/`** — debug and Melon logging
+- **`docs/SOURCE_LAYOUT.md`** — detailed source layout
+
+## Community & Support
+
+Questions, feedback, testing, and modding coordination happen on the greg Discord:
+
+- [discord.gg/greg](https://discord.gg/greg)
+
+## Sponsors & Thanks
+
+- **[@tobiasreichel](https://github.com/tobiasreichel)** — main sponsor
+
+## Contributing
+
+Contributions are welcome. Useful starting points:
+
+- report bugs or regressions as issues
+- provide reproducible test cases for network / IPAM flows
+- discuss roadmap items
+- keep pull requests small and easy to review
+
+## License
+
+This project is licensed under the **Apache License 2.0**. See [`LICENSE`](./LICENSE).
 
 ---
 
-## Contributors & Thanks
-
-### Code & Development
-- **mleem97** — Lead Developer
-- **mochimus** — Co-Developer
-
-### Discord Community
-**Thanks to:**
-- **Noootry**
-- **TheSlickers**
-- **Jarvis**
-- **Kirei**
-- **TeamWaseku** (ModernSamurai, GamerFrankstar, Ultra, Zyn)
-
-### Testing
-- **Joniii11** ([GitHub](https://github.com/Joniii11))
-- **Baker**, **Sharpy1o1**, **MachineFreak**
-
-### Sponsors
-- **@tobiasreichel** — Haupt-Sponsor
-- **SQ8** — Infrastructure Hosting
-
----
-*gregMod.IPAM — Powered by the Community!*
+**gregFramework — powered by the community.**
