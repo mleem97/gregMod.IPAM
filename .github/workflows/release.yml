@@ -19,10 +19,20 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+      - name: Find DLL
+        id: dll
+        run: |
+          if [ -f "dist/gregMod.IPAM.dll" ]; then
+            echo "FILE=dist/gregMod.IPAM.dll" >> $GITHUB_OUTPUT
+          elif [ -f "dist/DHCP and IPAM.dll" ]; then
+            echo "FILE=dist/DHCP and IPAM.dll" >> $GITHUB_OUTPUT
+          else
+            echo "FILE=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ steps.version.outputs.VERSION }}
           generate_release_notes: true
-          files: |
-            dist/gregMod.IPAM.dll
+          files: ${{ steps.dll.outputs.FILE }}
