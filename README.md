@@ -124,6 +124,13 @@ Questions, feedback, testing, and modding coordination happen on the greg Discor
 
 - **[@tobiasreichel](https://github.com/tobiasreichel)** — main sponsor
 
+## Credits
+
+| Role | Contributor |
+|------|-------------|
+| **Codebase** | [mleem97](https://github.com/mleem97) ([TeamGreg Modding](https://github.com/teamGregModding)) |
+| **Major Features** | [mleem97](https://github.com/mleem97), [mochimus](https://github.com/mochimus) ([TeamGreg Modding](https://github.com/teamGregModding)) |
+
 ## Contributing
 
 Contributions are welcome. Useful starting points:
