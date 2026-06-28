@@ -211,13 +211,13 @@ public static partial class IPAMOverlay
         return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
     }
 
-    private static Rect _windowRect = new(-1f, -1f, 1200f, 640f);
-    private static Rect _windowRectRestored = new(-1f, -1f, 1200f, 640f);
+    private static Rect _windowRect = new(-1f, -1f, 1440f, 768f);
+    private static Rect _windowRectRestored = new(-1f, -1f, 1440f, 768f);
     private static bool _windowRectCentered;
     private static bool _windowMaximized;
 
     /// <summary>Window height without the edit-object strip (non-maximized); extra height is added while a device is selected.</summary>
-    private static float _ipamWindowBaseHeight = 640f;
+    private static float _ipamWindowBaseHeight = 768f;
 
     private static bool _ipamHadDetailSelectionLastFrame;
     private static Vector2 _scroll = Vector2.zero;
@@ -477,7 +477,7 @@ public static partial class IPAMOverlay
     /// <summary>
     /// IPAM IMGUI font scale (applied when styles are rebuilt). 1.0 = current default.
     /// </summary>
-    private static float _uiFontScale = 1f;
+    private static float _uiFontScale = 1.2f;
 
     internal static float UiFontScale
     {
