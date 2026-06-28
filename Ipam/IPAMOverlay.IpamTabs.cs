@@ -1215,13 +1215,13 @@ public static partial class IPAMOverlay
         y += SectionTitleH + 8f;
         GUI.Label(
             new Rect(x0, y, cardW, 36f),
-            "This guide explains the core features of the IPAM overlay. Press F1 to open/close the overlay at any time.",
+            "This guide explains the core features of the IPAM overlay. Press P to open/close the overlay at any time.",
             _stMuted);
         y += 40f;
 
         // Section 1: IP Assignment
         DrawTutorialSection(x0, ref y, cardW, "1. IP Assignment (Servers)",
-            "Open IPAM (F1) → select a server → use the Octet Editor to set an IP manually, or click \"Next Free IP\" for automatic assignment. " +
+            "Open IPAM (P) → select a server → use the Octet Editor to set an IP manually, or click \"Next Free IP\" for automatic assignment. " +
             "DHCP auto-assign runs when a server is placed without an IP. Use Ctrl+L to assign all servers at once.");
 
         // Section 2: Prefixes
@@ -1262,8 +1262,12 @@ public static partial class IPAMOverlay
             "Escape = Close IPAM + open game pause menu\n" +
             "Ctrl+L = Assign DHCP to all servers\n" +
             "Mouse wheel on octet = Increment/decrement IP\n" +
+            ". (Period) or , (Comma) = Advance to next octet\n" +
+            "Backspace = Delete last digit in active octet\n" +
+            "0–9 = Type digits into active octet\n" +
             "Ctrl+Click = Multi-select rows\n" +
-            "Shift+Click = Range-select rows");
+            "Shift+Click = Range-select rows\n" +
+            "Tab = Cycle through form fields");
 
         // Section 9: Troubleshooting
         DrawTutorialSection(x0, ref y, cardW, "9. Troubleshooting",

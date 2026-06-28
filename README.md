@@ -68,8 +68,12 @@ See [`ROADMAP.md`](./ROADMAP.md) for details. Main development tracks include:
 | **Escape** | Close IPAM + open game pause menu |
 | **Ctrl+L** | Assign DHCP to all servers |
 | **Mouse wheel** | Increment/decrement IP octet |
+| **.** or **,** | Advance to next octet |
+| **Backspace** | Delete last digit in active octet |
+| **0–9** | Type digits into active octet |
 | **Ctrl+Click** | Multi-select rows |
 | **Shift+Click** | Range-select rows |
+| **Tab** | Cycle through form fields |
 
 ## Dependencies
 
