@@ -294,8 +294,11 @@ public static partial class IPAMOverlay
         // ── Customers ──
         DrawNavEntryWithIcon(new Rect(navX, navStartY + navRowH, navW, navRowH), NavSection.Customers, "Customers", "customers", iconSize, iconPad);
 
+        // ── Racks ──
+        DrawNavEntryWithIcon(new Rect(navX, navStartY + navRowH * 2, navW, navRowH), NavSection.Racks, "Racks", "rack", iconSize, iconPad);
+
         // ── Assets (category header) ──
-        var assetsY = navStartY + navRowH * 2;
+        var assetsY = navStartY + navRowH * 3;
         var assetsChevronTex = NavIcons.Get(_devicesSidebarExpanded ? "chevron_d" : "chevron_r");
         DrawCategoryHeader(new Rect(navX, assetsY, navW, navRowH), "ASSETS", assetsChevronTex, iconSize, iconPad,
             _navSection == NavSection.Devices, ref _devicesSidebarExpanded);
@@ -317,13 +320,9 @@ public static partial class IPAMOverlay
             navAfterAssets = assetsY + navRowH;
         }
 
-        // ── Racks ──
-        DrawNavEntryWithIcon(new Rect(navX, navAfterAssets, navW, navRowH), NavSection.Racks, "Racks", "rack", iconSize, iconPad);
-        var racksEndY = navAfterAssets + navRowH;
-
         // ── Network (category header) ──
         var networkChevronTex = NavIcons.Get(_ipamSidebarExpanded ? "chevron_d" : "chevron_r");
-        DrawCategoryHeader(new Rect(navX, racksEndY, navW, navRowH), "NETWORK", networkChevronTex, iconSize, iconPad,
+        DrawCategoryHeader(new Rect(navX, navAfterAssets, navW, navRowH), "NETWORK", networkChevronTex, iconSize, iconPad,
             _navSection == NavSection.Ipam, ref _ipamSidebarExpanded);
 
         float navAfterNetwork;
@@ -331,7 +330,7 @@ public static partial class IPAMOverlay
         {
             var subIndent = Sp(14f);
             var subNavW = navW - subIndent;
-            var subBaseY = racksEndY + navRowH;
+            var subBaseY = navAfterAssets + navRowH;
             DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY, subNavW, navRowH), IpamSubSection.IpAddresses, "IP addresses", "ip", 9050, iconSize, iconPad);
             DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH, subNavW, navRowH), IpamSubSection.Prefixes, "Prefixes", "prefix", 9051, iconSize, iconPad);
             DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 2, subNavW, navRowH), IpamSubSection.Vlans, "VLANs", "vlan", 9052, iconSize, iconPad);
@@ -340,7 +339,7 @@ public static partial class IPAMOverlay
         }
         else
         {
-            navAfterNetwork = racksEndY + navRowH;
+            navAfterNetwork = navAfterAssets + navRowH;
         }
 
         // ── Tutorial ──
