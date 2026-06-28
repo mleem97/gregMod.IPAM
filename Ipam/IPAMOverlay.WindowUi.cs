@@ -2133,10 +2133,23 @@ public static partial class IPAMOverlay
         var legendRowH = Mathf.Max(18f, Mathf.Round(22f * UiFontScale));
         var sceneCardH = Mathf.Max(58f, Mathf.Round(68f * UiFontScale));
 
+        // Network Health Score
+        var healthScore = NetworkHealthScore.ComputeScore();
+        var healthLabel = NetworkHealthScore.GetScoreLabel(healthScore);
+        var healthColor = NetworkHealthScore.GetScoreColor(healthScore);
+
         GUI.Label(new Rect(x0, y - 2, w, SectionTitleH), "Organization  /  Dashboard", _stBreadcrumb);
         y += SectionTitleH + 2f;
         GUI.DrawTexture(new Rect(x0, y, w, 1f), _texTableHeader);
         y += 6f;
+
+        // Health bar
+        var healthBarRect = new Rect(x0, y, w, 28f);
+        DrawTintedRect(healthBarRect, new Color(0.06f, 0.08f, 0.10f, 0.7f));
+        var healthFillW = (w - 4f) * (healthScore / 100f);
+        DrawTintedRect(new Rect(x0 + 2f, y + 2f, healthFillW, 24f), healthColor);
+        GUI.Label(new Rect(x0 + 8f, y + 4f, w - 16f, 20f), $"Network Health: {healthScore}/100 — {healthLabel}", _stSectionTitle);
+        y += 34f + sectionGap;
 
         var half = (w - heroGap) * 0.5f;
         DrawDashboardHeroCard(
@@ -3403,6 +3416,61 @@ public static partial class IPAMOverlay
             {
                 GUI.Label(new Rect(px, py, iw, 36f), DHCPManager.LastSetIpError, _stError);
                 py += 40f;
+            }
+
+            // Tenancy Mode
+            py += 4f;
+            DrawTintedRect(new Rect(px, py, iw, 22f), new Color(0.08f, 0.10f, 0.14f, 0.7f));
+            GUI.Label(new Rect(px + 8f, py, iw - 16f, 22f), "Server Mode", _stSectionTitle);
+            py += 26f;
+
+            var tenancy = IpamDataStore.GetTenancyForServer(srv.GetInstanceID());
+            var currentMode = tenancy?.Mode ?? "Dedicated";
+            var isDedicated = currentMode == "Dedicated";
+
+            if (ImguiButtonOnce(new Rect(px, py, 80f, 22f), "Dedicated", 55, isDedicated ? _stPrimaryBtn : _stMutedBtn))
+            {
+                IpamDataStore.TrySetServerMode(srv.GetInstanceID(), "Dedicated", 1, out _);
+            }
+
+            if (ImguiButtonOnce(new Rect(px + 88f, py, 80f, 22f), "Shared", 56, !isDedicated ? _stPrimaryBtn : _stMutedBtn))
+            {
+                IpamDataStore.TrySetServerMode(srv.GetInstanceID(), "Shared", 4, out _);
+            }
+
+            GUI.Label(new Rect(px + 176f, py + 2f, iw - 180f, 20f),
+                isDedicated ? "1 customer per server" : "Multiple customers can share this server",
+                _stHint);
+            py += 28f;
+
+            // Tenant list (only for Shared mode)
+            if (!isDedicated)
+            {
+                var tenants = tenancy?.Tenants ?? new List<TenantAllocation>();
+                GUI.Label(new Rect(px, py, iw, 22f), $"Allocated Tenants ({tenants.Count}/{tenancy?.MaxTenants ?? 4})", _stSectionTitle);
+                py += 24f;
+
+                if (tenants.Count == 0)
+                {
+                    GUI.Label(new Rect(px, py, iw, 22f), "No tenants allocated. Use the Customers tab to assign.", _stMuted);
+                    py += 24f;
+                }
+                else
+                {
+                    for (var ti = 0; ti < tenants.Count; ti++)
+                    {
+                        var t = tenants[ti];
+                        DrawTintedRect(new Rect(px, py, iw, 20f), ti % 2 == 0 ? new Color(0.05f, 0.06f, 0.08f, 0.4f) : new Color(0.04f, 0.05f, 0.06f, 0.3f));
+                        GUI.Label(new Rect(px + 4f, py, iw - 80f, 20f), $"{t.CustomerName} (ID: {t.CustomerId})", _stTableCell);
+                        GUI.Label(new Rect(px + iw - 80f, py, 50f, 20f), $"{t.AllocatedIps}/{t.MaxIps} IP", _stTableCell);
+                        if (ImguiButtonOnce(new Rect(px + iw - 24f, py + 1f, 22f, 18f), "×", 57 + ti, _stMutedBtn))
+                        {
+                            IpamDataStore.TryRemoveTenant(srv.GetInstanceID(), t.CustomerId, out _);
+                        }
+
+                        py += 22f;
+                    }
+                }
             }
         }
     }

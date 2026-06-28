@@ -364,4 +364,33 @@ public static class RouteMath
 
         return a0 <= b1 && b0 <= a1;
     }
+
+    /// <summary>True if <paramref name="ip"/> falls within <paramref name="cidr"/>.</summary>
+    public static bool IsIpInCidr(string ip, string cidr)
+    {
+        if (string.IsNullOrWhiteSpace(ip) || string.IsNullOrWhiteSpace(cidr))
+        {
+            return false;
+        }
+
+        if (!TryParseIpv4Cidr(cidr, out var netBe, out var prefixLen))
+        {
+            return false;
+        }
+
+        if (!IPAddress.TryParse(ip.Trim(), out var addr))
+        {
+            return false;
+        }
+
+        var ipBytes = addr.GetAddressBytes();
+        if (ipBytes.Length != 4)
+        {
+            return false;
+        }
+
+        var ipBe = (uint)(ipBytes[0] << 24 | ipBytes[1] << 16 | ipBytes[2] << 8 | ipBytes[3]);
+        var mask = prefixLen == 0 ? 0u : 0xFFFFFFFF << (32 - prefixLen);
+        return (ipBe & mask) == (netBe & mask);
+    }
 }

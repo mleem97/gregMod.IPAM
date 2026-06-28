@@ -142,19 +142,19 @@ Build a **gamified IPAM and network operations layer** for Data Center with:
 
 ---
 
-## R3 — Shared Infrastructure Gameplay `[NOT STARTED]` → **v0.6.0**
+## R3 — Shared Infrastructure Gameplay `[DONE]` → **v0.6.0**
 
 **Target:** remove strict 1-server-per-customer limitation.
 
-- [ ] Deliver Epic E (shared server model v1)
-- [ ] Add compatibility checks with DHCP/VLAN rules
-- [ ] Introduce basic scoring hooks (Epic G starter)
+- [x] Deliver Epic E (shared server model v1) *(ServerTenancyEntry with Dedicated/Shared mode)*
+- [x] Add compatibility checks with DHCP/VLAN rules *(tenant allocation validation)*
+- [x] Introduce basic scoring hooks (Epic G starter) *(NetworkHealthScore with deductions)*
 
 **Exit Criteria**
 
-- [ ] Shared server assignment is stable and understandable
-- [ ] No invalid customer routing from shared mappings
-- [ ] Player can inspect tenant allocation in UI
+- [x] Shared server assignment is stable and understandable *(Dedicated/Shared toggle in server edit)*
+- [x] No invalid customer routing from shared mappings *(max tenants, duplicate check)*
+- [x] Player can inspect tenant allocation in UI *(tenant list with remove button)*
 
 ---
 

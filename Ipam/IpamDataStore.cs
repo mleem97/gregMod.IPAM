@@ -42,6 +42,7 @@ internal static class IpamDataStore
             Prefixes = new List<IpamPrefixEntry>(),
             Vlans = new List<IpamVlanEntry>(),
             DhcpScopes = new List<DhcpScopeEntry>(),
+            ServerTenancies = new List<ServerTenancyEntry>(),
         };
     }
 
@@ -585,6 +586,128 @@ internal static class IpamDataStore
         return null;
     }
 
+    internal static IReadOnlyList<ServerTenancyEntry> GetServerTenancies()
+    {
+        return EnsureLoaded().ServerTenancies ?? new List<ServerTenancyEntry>();
+    }
+
+    internal static ServerTenancyEntry GetTenancyForServer(int serverInstanceId)
+    {
+        var root = EnsureLoaded();
+        if (root.ServerTenancies == null)
+        {
+            return null;
+        }
+
+        return root.ServerTenancies.FirstOrDefault(t => t.ServerInstanceId == serverInstanceId);
+    }
+
+    internal static bool TrySetServerMode(int serverInstanceId, string mode, int maxTenants, out string error)
+    {
+        error = null;
+        if (mode != "Dedicated" && mode != "Shared")
+        {
+            error = "Mode must be 'Dedicated' or 'Shared'.";
+            return false;
+        }
+
+        var root = EnsureLoaded();
+        root.ServerTenancies ??= new List<ServerTenancyEntry>();
+        var existing = root.ServerTenancies.FirstOrDefault(t => t.ServerInstanceId == serverInstanceId);
+        if (existing != null)
+        {
+            existing.Mode = mode;
+            existing.MaxTenants = mode == "Dedicated" ? 1 : maxTenants;
+            if (mode == "Dedicated")
+            {
+                existing.Tenants.Clear();
+            }
+        }
+        else
+        {
+            root.ServerTenancies.Add(new ServerTenancyEntry
+            {
+                Id = Guid.NewGuid().ToString("D"),
+                ServerInstanceId = serverInstanceId,
+                Mode = mode,
+                MaxTenants = mode == "Dedicated" ? 1 : maxTenants,
+            });
+        }
+
+        Save();
+        return true;
+    }
+
+    internal static bool TryAddTenant(int serverInstanceId, int customerId, string customerName, int maxIps, out string error)
+    {
+        error = null;
+        var root = EnsureLoaded();
+        root.ServerTenancies ??= new List<ServerTenancyEntry>();
+        var tenancy = root.ServerTenancies.FirstOrDefault(t => t.ServerInstanceId == serverInstanceId);
+        if (tenancy == null)
+        {
+            error = "Server has no tenancy configuration. Set mode first.";
+            return false;
+        }
+
+        if (tenancy.Mode != "Shared")
+        {
+            error = "Cannot add tenants to a Dedicated server.";
+            return false;
+        }
+
+        if (tenancy.Tenants.Count >= tenancy.MaxTenants)
+        {
+            error = $"Max tenants ({tenancy.MaxTenants}) reached.";
+            return false;
+        }
+
+        if (tenancy.Tenants.Any(t => t.CustomerId == customerId))
+        {
+            error = "Customer already allocated to this server.";
+            return false;
+        }
+
+        tenancy.Tenants.Add(new TenantAllocation
+        {
+            CustomerId = customerId,
+            CustomerName = customerName,
+            AllocatedIps = 0,
+            MaxIps = maxIps,
+        });
+
+        Save();
+        return true;
+    }
+
+    internal static bool TryRemoveTenant(int serverInstanceId, int customerId, out string error)
+    {
+        error = null;
+        var root = EnsureLoaded();
+        if (root.ServerTenancies == null)
+        {
+            error = "No tenancy data.";
+            return false;
+        }
+
+        var tenancy = root.ServerTenancies.FirstOrDefault(t => t.ServerInstanceId == serverInstanceId);
+        if (tenancy == null)
+        {
+            error = "Server has no tenancy configuration.";
+            return false;
+        }
+
+        var n = tenancy.Tenants.RemoveAll(t => t.CustomerId == customerId);
+        if (n == 0)
+        {
+            error = "Customer not found on this server.";
+            return false;
+        }
+
+        Save();
+        return true;
+    }
+
     /// <summary>Bumped whenever prefix/VLAN data is saved — used to invalidate IMGUI pick-list caches.</summary>
     internal static int DataRevision { get; private set; }
 
@@ -616,6 +739,7 @@ internal sealed class IpamPersistedRoot
     public List<IpamPrefixEntry> Prefixes { get; set; }
     public List<IpamVlanEntry> Vlans { get; set; }
     public List<DhcpScopeEntry> DhcpScopes { get; set; }
+    public List<ServerTenancyEntry> ServerTenancies { get; set; }
 }
 
 internal sealed class IpamPrefixEntry
@@ -646,4 +770,21 @@ internal sealed class DhcpScopeEntry
     public string SwitchKey { get; set; }
     public int? VlanId { get; set; }
     public int Priority { get; set; }
+}
+
+internal sealed class ServerTenancyEntry
+{
+    public string Id { get; set; }
+    public int ServerInstanceId { get; set; }
+    public string Mode { get; set; } = "Dedicated";
+    public List<TenantAllocation> Tenants { get; set; } = new();
+    public int MaxTenants { get; set; } = 1;
+}
+
+internal sealed class TenantAllocation
+{
+    public int CustomerId { get; set; }
+    public string CustomerName { get; set; }
+    public int AllocatedIps { get; set; }
+    public int MaxIps { get; set; } = 10;
 }

@@ -1,1 +1,1 @@
-gregMod.IPAM.dll — Release 0.5.0 (MelonLoader). Copy into the game Mods folder.
+gregMod.IPAM.dll — Release 0.6.0 (MelonLoader). Copy into the game Mods folder.
