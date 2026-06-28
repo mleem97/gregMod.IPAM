@@ -689,8 +689,8 @@ public static partial class IPAMOverlay
         }
 
         var crumb = _customersTabScreen == CustomersTabScreen.CustomerList
-            ? "Organization  /  Customers"
-            : $"Organization  /  Customers  /  {GetCustomersTabDrillBreadcrumbTitle()}";
+            ? "Organization / Customers"
+            : $"Organization / Customers  /  {GetCustomersTabDrillBreadcrumbTitle()}";
         GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), crumb, _stBreadcrumb);
         y += SectionTitleH + 2f;
         GUI.DrawTexture(new Rect(x0, y, cardW, 1f), _texTableHeader);

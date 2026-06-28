@@ -291,39 +291,42 @@ public static partial class IPAMOverlay
         // ── Dashboard ──
         DrawNavEntryWithIcon(new Rect(navX, navStartY, navW, navRowH), NavSection.Dashboard, "Dashboard", "dashboard", iconSize, iconPad);
 
-        // ── Devices (category header) ──
-        var devicesY = navStartY + navRowH;
-        var devicesChevronTex = NavIcons.Get(_devicesSidebarExpanded ? "chevron_d" : "chevron_r");
-        DrawCategoryHeader(new Rect(navX, devicesY, navW, navRowH), "DEVICES", devicesChevronTex, iconSize, iconPad,
+        // ── Customers ──
+        DrawNavEntryWithIcon(new Rect(navX, navStartY + navRowH, navW, navRowH), NavSection.Customers, "Customers", "customers", iconSize, iconPad);
+
+        // ── Assets (category header) ──
+        var assetsY = navStartY + navRowH * 2;
+        var assetsChevronTex = NavIcons.Get(_devicesSidebarExpanded ? "chevron_d" : "chevron_r");
+        DrawCategoryHeader(new Rect(navX, assetsY, navW, navRowH), "ASSETS", assetsChevronTex, iconSize, iconPad,
             _navSection == NavSection.Devices, ref _devicesSidebarExpanded);
 
-        float navAfterDevices;
+        float navAfterAssets;
         if (_devicesSidebarExpanded)
         {
             var subIndent = Sp(14f);
             var subNavW = navW - subIndent;
-            var subBaseY = devicesY + navRowH;
+            var subBaseY = assetsY + navRowH;
             DrawSubNavWithIcon(new Rect(navX + subIndent, subBaseY, subNavW, navRowH), DevicesSubSection.Switches, "Switches", "switch", 9060, iconSize, iconPad);
             DrawSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH, subNavW, navRowH), DevicesSubSection.Routers, "Routers", "router", 9061, iconSize, iconPad);
             DrawSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 2, subNavW, navRowH), DevicesSubSection.Firewall, "Firewall", "firewall", 9062, iconSize, iconPad);
             DrawSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 3, subNavW, navRowH), DevicesSubSection.Servers, "Servers", "server", 9063, iconSize, iconPad);
-            navAfterDevices = subBaseY + navRowH * 4;
+            navAfterAssets = subBaseY + navRowH * 4;
         }
         else
         {
-            navAfterDevices = devicesY + navRowH;
+            navAfterAssets = assetsY + navRowH;
         }
 
         // ── Racks ──
-        DrawNavEntryWithIcon(new Rect(navX, navAfterDevices, navW, navRowH), NavSection.Racks, "Racks", "rack", iconSize, iconPad);
-        var racksEndY = navAfterDevices + navRowH;
+        DrawNavEntryWithIcon(new Rect(navX, navAfterAssets, navW, navRowH), NavSection.Racks, "Racks", "rack", iconSize, iconPad);
+        var racksEndY = navAfterAssets + navRowH;
 
-        // ── IPAM (category header) ──
-        var ipamChevronTex = NavIcons.Get(_ipamSidebarExpanded ? "chevron_d" : "chevron_r");
-        DrawCategoryHeader(new Rect(navX, racksEndY, navW, navRowH), "IPAM", ipamChevronTex, iconSize, iconPad,
+        // ── Network (category header) ──
+        var networkChevronTex = NavIcons.Get(_ipamSidebarExpanded ? "chevron_d" : "chevron_r");
+        DrawCategoryHeader(new Rect(navX, racksEndY, navW, navRowH), "NETWORK", networkChevronTex, iconSize, iconPad,
             _navSection == NavSection.Ipam, ref _ipamSidebarExpanded);
 
-        float navAfterIpam;
+        float navAfterNetwork;
         if (_ipamSidebarExpanded)
         {
             var subIndent = Sp(14f);
@@ -333,18 +336,19 @@ public static partial class IPAMOverlay
             DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH, subNavW, navRowH), IpamSubSection.Prefixes, "Prefixes", "prefix", 9051, iconSize, iconPad);
             DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 2, subNavW, navRowH), IpamSubSection.Vlans, "VLANs", "vlan", 9052, iconSize, iconPad);
             DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 3, subNavW, navRowH), IpamSubSection.DhcpScopes, "DHCP Scopes", "dhcp", 9053, iconSize, iconPad);
-            DrawIpamSubNavWithIcon(new Rect(navX + subIndent, subBaseY + navRowH * 4, subNavW, navRowH), IpamSubSection.Tutorial, "Tutorial", "tutorial", 9054, iconSize, iconPad);
-            navAfterIpam = subBaseY + navRowH * 5;
+            navAfterNetwork = subBaseY + navRowH * 4;
         }
         else
         {
-            navAfterIpam = racksEndY + navRowH;
+            navAfterNetwork = racksEndY + navRowH;
         }
 
-        // ── Customers + Settings ──
-        DrawNavEntryWithIcon(new Rect(navX, navAfterIpam, navW, navRowH), NavSection.Customers, "Customers", "customers", iconSize, iconPad);
-        DrawNavEntryWithIcon(new Rect(navX, navAfterIpam + navRowH, navW, navRowH), NavSection.Settings, "Settings", "settings", iconSize, iconPad);
-        var tipY = navAfterIpam + navRowH * 2 + Sp(6f);
+        // ── Tutorial ──
+        DrawIpamSubNavWithIcon(new Rect(navX, navAfterNetwork, navW, navRowH), IpamSubSection.Tutorial, "Tutorial", "tutorial", 9054, iconSize, iconPad);
+
+        // ── Settings ──
+        DrawNavEntryWithIcon(new Rect(navX, navAfterNetwork + navRowH, navW, navRowH), NavSection.Settings, "Settings", "settings", iconSize, iconPad);
+        var tipY = navAfterNetwork + navRowH * 2 + Sp(6f);
         var tipH = Mathf.Max(36f, bodyTop + bodyH - tipY - 8f);
         GUI.Label(
             new Rect(8, tipY, SidebarW - 12, tipH),
@@ -357,7 +361,7 @@ public static partial class IPAMOverlay
         if (!ipamUnlocked)
         {
             GUI.DrawTexture(new Rect(contentX, bodyTop + 8, contentW, bodyH - 16), _texCard);
-            GUI.Label(new Rect(contentX + CardPad, bodyTop + 24, contentW - CardPad * 2, 40), "Organization  /  Devices", _stBreadcrumb);
+            GUI.Label(new Rect(contentX + CardPad, bodyTop + 24, contentW - CardPad * 2, 40), "Organization / Assets", _stBreadcrumb);
             GUI.Label(
                 new Rect(contentX + CardPad, bodyTop + 56, contentW - CardPad * 2, 60),
                 "IPAM license not unlocked.\nUse the IPAM: locked button in the title bar to unlock.",
@@ -374,7 +378,7 @@ public static partial class IPAMOverlay
             GUI.DrawTexture(new Rect(contentX + 2, pauseTop + 2, contentW - 4, pauseH - 4), _texCard);
             GUI.Label(
                 new Rect(contentX + CardPad, pauseTop + CardPad, contentW - CardPad * 2, 40f),
-                "Organization  /  Inventory (paused)",
+                "Organization / Inventory (paused)",
                 _stBreadcrumb);
             var pauseMsg = _iopsCalculatorOpen
                 ? "IOPS sizing is open.\n\nDevice tables are not redrawn while it is open (smoother typing). Close the sizing window (Esc, Close, or click outside) to use the list and detail panel again."
@@ -1430,7 +1434,7 @@ public static partial class IPAMOverlay
         var y = CardPad;
         var cardW = innerW - CardPad * 2f;
 
-        GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), "Organization  /  Settings", _stBreadcrumb);
+        GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), "Organization / Settings", _stBreadcrumb);
         y += SectionTitleH + 2f;
         GUI.DrawTexture(new Rect(x0, y, cardW, 1f), _texTableHeader);
         y += 10f;
@@ -1557,7 +1561,7 @@ public static partial class IPAMOverlay
 
         GUI.Label(
             new Rect(x0, y - 2, cardW, SectionTitleH),
-            $"Organization  /  Devices  /  {DevicesSubBreadcrumbLabel()}",
+            $"Organization / Assets  /  {DevicesSubBreadcrumbLabel()}",
             _stBreadcrumb);
         y += SectionTitleH + 2f;
 
@@ -2222,7 +2226,7 @@ public static partial class IPAMOverlay
         var healthLabel = NetworkHealthScore.GetScoreLabel(healthScore);
         var healthColor = NetworkHealthScore.GetScoreColor(healthScore);
 
-        GUI.Label(new Rect(x0, y - 2, w, SectionTitleH), "Organization  /  Dashboard", _stBreadcrumb);
+        GUI.Label(new Rect(x0, y - 2, w, SectionTitleH), "Organization / Dashboard", _stBreadcrumb);
         y += SectionTitleH + 2f;
         GUI.DrawTexture(new Rect(x0, y, w, 1f), _texTableHeader);
         y += 6f;
@@ -2404,7 +2408,7 @@ public static partial class IPAMOverlay
             _tableColumnsAutoFitPending = false;
         }
 
-        GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), "Organization  /  IPAM  /  IP addresses", _stBreadcrumb);
+        GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), "Organization / Network  /  IP addresses", _stBreadcrumb);
         y += SectionTitleH + 2f;
         GUI.DrawTexture(new Rect(x0, y, cardW, 1f), _texTableHeader);
         y += 6f;

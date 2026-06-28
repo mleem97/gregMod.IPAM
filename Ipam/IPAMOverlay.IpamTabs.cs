@@ -279,7 +279,7 @@ public static partial class IPAMOverlay
         var cardW = innerW - CardPad * 2f;
         _lastInventoryCardWidth = cardW;
 
-        GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), "Organization  /  IPAM  /  Prefixes", _stBreadcrumb);
+        GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), "Organization / Network  /  Prefixes", _stBreadcrumb);
         y += SectionTitleH + 2f;
         GUI.DrawTexture(new Rect(x0, y, cardW, 1f), _texTableHeader);
         y += 8f;
@@ -822,7 +822,7 @@ public static partial class IPAMOverlay
         var cardW = innerW - CardPad * 2f;
         _lastInventoryCardWidth = cardW;
 
-        GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), "Organization  /  IPAM  /  VLANs", _stBreadcrumb);
+        GUI.Label(new Rect(x0, y - 2, cardW, SectionTitleH), "Organization / Network  /  VLANs", _stBreadcrumb);
         y += SectionTitleH + 2f;
         GUI.DrawTexture(new Rect(x0, y, cardW, 1f), _texTableHeader);
         y += 8f;
