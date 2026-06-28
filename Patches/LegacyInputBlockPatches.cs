@@ -18,14 +18,7 @@ internal static class LegacyInputBlockPatches
     {
         var ipam = IPAMOverlay.IsVisible;
 
-        // F1 toggles IPAM; suppress legacy F1 while IPAM is open and on the frame we handled the toggle.
-        if (key == KeyCode.F1
-            && (ipam || Time.frameCount == IPAMOverlay.LegacyF1ConsumedFrame))
-        {
-            return true;
-        }
-
-        // P closes IPAM only (no pause menu); block while IPAM is open.
+        // P toggles IPAM — block while IPAM is open so game does not react to P.
         if (ipam && key == KeyCode.P)
         {
             return true;

@@ -58,15 +58,14 @@ See [`ROADMAP.md`](./ROADMAP.md) for details. Main development tracks include:
    ```
 
 3. Start the game.
-4. Open the IPAM overlay in-game. Default hotkey: **F1**.
+4. Open the IPAM overlay in-game. Default hotkey: **P**.
 
 ## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| **F1** | Toggle IPAM overlay (takes mouse focus) |
+| **P** | Open IPAM overlay (takes mouse focus) |
 | **Escape** | Close IPAM + open game pause menu |
-| **P** | Close IPAM only (no pause menu) |
 | **Ctrl+L** | Assign DHCP to all servers |
 | **Mouse wheel** | Increment/decrement IP octet |
 | **Ctrl+Click** | Multi-select rows |

@@ -1216,9 +1216,8 @@ public static partial class IPAMOverlay
 
         // Section 8: Keyboard Shortcuts
         DrawTutorialSection(x0, ref y, cardW, "8. Keyboard Shortcuts",
-            "F1 = Toggle IPAM overlay (takes mouse focus from game)\n" +
+            "P = Open IPAM overlay (takes mouse focus from game)\n" +
             "Escape = Close IPAM + open game pause menu\n" +
-            "P = Close IPAM only (no pause menu)\n" +
             "Ctrl+L = Assign DHCP to all servers\n" +
             "Mouse wheel on octet = Increment/decrement IP\n" +
             "Ctrl+Click = Multi-select rows\n" +

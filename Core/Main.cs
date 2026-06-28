@@ -124,27 +124,16 @@ public class GregModIPAMMod : MelonMod
         // Melon OnUpdate runs before most Unity behaviours — sync uGUI blocker early so pause menus do not eat the first click under IPAM.
         UiRaycastBlocker.SetBlocking(IPAMOverlay.IsVisible);
 
-        // Run before default Unity script order so F1 / Ctrl+L are handled before many game scripts read the same keys.
+        // Run before default Unity script order so keys are handled before many game scripts read the same keys.
         var kb = Keyboard.current;
         if (kb != null)
         {
-            if (kb.f1Key.wasPressedThisFrame)
+            // P toggles IPAM
+            if (kb.pKey.wasPressedThisFrame && !IPAMOverlay.IsVisible)
             {
-                IPAMOverlay.NotifyF1ToggleHandledThisFrame();
-                var opening = !IPAMOverlay.IsVisible;
-                IPAMOverlay.IsVisible = !IPAMOverlay.IsVisible;
-                if (opening)
-                {
-                    // Take mouse focus from game — show cursor, release lock.
-                    Cursor.lockState = CursorLockMode.None;
-                    Cursor.visible = true;
-                }
-            }
-
-            // P closes IPAM without opening pause menu
-            if (IPAMOverlay.IsVisible && kb.pKey.wasPressedThisFrame)
-            {
-                IPAMOverlay.IsVisible = false;
+                IPAMOverlay.IsVisible = true;
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
             }
 
             if (kb.leftCtrlKey.isPressed && kb.lKey.wasPressedThisFrame)
