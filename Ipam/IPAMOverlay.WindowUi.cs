@@ -490,6 +490,8 @@ public static partial class IPAMOverlay
             DrawWindowResizeGripVisual(gripLocal, gripHover);
         }
 
+        DrawModals(w, h);
+
         // Block pass-through to game UI only when no IMGUI control claimed the click (Il2Cpp Event has no isUsed).
         if (Event.current.type == EventType.MouseDown
             && Event.current.button == 0
@@ -536,6 +538,36 @@ public static partial class IPAMOverlay
 
         return GetWindowResizeGripLocalRect(w, h).Contains(Event.current.mousePosition);
     }
+
+    private static void DrawModals(float winW, float winH)
+    {
+        if (LicenseManager.IsIPAMUnlocked && _iopsCalculatorOpen)
+        {
+            PumpIopsCalculatorKeyboard();
+            DrawInlineModalPanel(winW, winH, "IOPS sizing", (GUI.WindowFunction)DrawIopsStandaloneWindow);
+        }
+
+        if (LicenseManager.IsIPAMUnlocked && _customersTabAddServerWizardOpen)
+        {
+            DrawInlineModalPanel(winW, winH, "Add server", (GUI.WindowFunction)DrawCustomersAddServerWindow);
+        }
+
+        if (LicenseManager.IsIPAMUnlocked && _ipamChildPrefixWizardOpen)
+        {
+            DrawInlineModalPanel(winW, winH, "Prefix", (GUI.WindowFunction)DrawIpamChildPrefixWizardWindow);
+        }
+
+        if (LicenseManager.IsIPAMUnlocked && _ipamPrefixDeleteConfirmOpen)
+        {
+            DrawInlineModalPanel(winW, winH, "Confirm delete", (GUI.WindowFunction)DrawIpamPrefixDeleteConfirmWindow);
+        }
+
+        if (ShouldDrawServerEditPopup())
+        {
+            DrawInlineModalPanel(winW, winH, "Edit object · Server", (GUI.WindowFunction)DrawServerEditPopupWindow);
+        }
+    }
+
     private static bool IsServerRowSelected(Server server)
     {
         return server != null && _selectedServerInstanceIds.Contains(server.GetInstanceID());
@@ -3487,10 +3519,6 @@ public static partial class IPAMOverlay
     private static void DrawServerEditPopupWindow(int windowId)
     {
         _ = windowId;
-        // Leave the top-right clear so “Close” is not covered by the drag strip (DragWindow consumes mouse events).
-        var dragW = Mathf.Max(40f, _serverEditPopupRect.width - 100f);
-        GUI.DragWindow(new Rect(0f, 0f, dragW, 28f));
-
         // Solid shell (same as IOPS modal) — GUI.Window skin can leave a light/semi-transparent client area.
         if (Event.current.type == EventType.Repaint)
         {

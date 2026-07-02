@@ -102,9 +102,6 @@ public static partial class IPAMOverlay
     private static void DrawIpamChildPrefixWizardWindow(int windowId)
     {
         _ = windowId;
-        var w = _ipamChildPrefixWizardRect.width;
-        var dragW = Mathf.Max(40f, w - 92f);
-        GUI.DragWindow(new Rect(0f, 0f, dragW, 28f));
 
         if (Event.current.type == EventType.Repaint)
         {
@@ -118,7 +115,7 @@ public static partial class IPAMOverlay
 
         var px = 12f;
         var py = 28f;
-        var iw = w - 24f;
+        var iw = _ipamChildPrefixWizardRect.width - 24f;
         var createMode = string.IsNullOrEmpty(_ipamChildPrefixWizardEditEntryId);
         GUI.Label(
             new Rect(px, py, iw, 22f),
@@ -172,7 +169,7 @@ public static partial class IPAMOverlay
             CloseIpamChildPrefixWizard();
         }
 
-        if (ImguiButtonOnce(new Rect(w - 84f, 6f, 72f, 22f), "Close", 9142, _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(_ipamChildPrefixWizardRect.width - 84f, 6f, 72f, 22f), "Close", 9142, _stMutedBtn))
         {
             CloseIpamChildPrefixWizard();
         }

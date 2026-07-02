@@ -194,8 +194,6 @@ public static partial class IPAMOverlay
     }
     private static void DrawIopsStandaloneWindow(int id)
     {
-        GUI.DragWindow(new Rect(0f, 0f, 10000f, 24f));
-
         // Solid shell (same pixels as IPAM) — avoids washed-out / tinted chrome from GUI.color or 9-slice gaps.
         if (Event.current.type == EventType.Repaint)
         {

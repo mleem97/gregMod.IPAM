@@ -687,9 +687,15 @@ public static partial class IPAMOverlay
             h = h * 397 ^ (_selectedServerInstanceIds.Count + 1);
             if (h != _serverEditPopupSelectionSig)
             {
+                var wasOpen = !_serverEditPopupDismissed;
                 _serverEditPopupSelectionSig = h;
                 _serverEditPopupDismissed = true;
                 ClearInlineCustomerAssign();
+
+                if (wasOpen && _selectedServerInstanceIds.Count > 0)
+                {
+                    OpenServerEditPopupForSelection();
+                }
             }
         }
     }
@@ -709,6 +715,7 @@ public static partial class IPAMOverlay
             return;
         }
 
+        RefreshServerEditPopupSelectionSignature();
         _serverEditPopupDismissed = false;
         EnsureServerEditPopupFitsScreen();
         _serverEditPopupScroll = Vector2.zero;
@@ -775,19 +782,20 @@ public static partial class IPAMOverlay
     /// Draws a modal panel inline within the main IPAM window instead of as a separate GUI.Window.
     /// The panel is centered within the window with a dimmed background overlay.
     /// </summary>
-    private static void DrawInlineModalPanel(float winX, float winY, float winW, float winH, string title, GUI.WindowFunction drawContent)
+    private static void DrawInlineModalPanel(float winW, float winH, string title, GUI.WindowFunction drawContent)
     {
+        // ── Drawing inside DrawWindow coordinate space (winX=0, winY=0) ──
         // Dim overlay within the main window
         if (Event.current.type == EventType.Repaint)
         {
-            DrawTintedRect(new Rect(winX, winY, winW, winH), new Color(0f, 0f, 0f, 0.5f));
+            DrawTintedRect(new Rect(0, 0, winW, winH), new Color(0f, 0f, 0f, 0.5f));
         }
 
         // Panel dimensions (centered within window, 70% of window size)
-        var panelW = Mathf.Min(winW * 0.85f, 900f);
-        var panelH = Mathf.Min(winH * 0.85f, 700f);
-        var panelX = winX + (winW - panelW) * 0.5f;
-        var panelY = winY + (winH - panelH) * 0.5f;
+        var panelW = Mathf.Min(winW * 0.85f, 950f);
+        var panelH = Mathf.Min(winH * 0.85f, 850f);
+        var panelX = (winW - panelW) * 0.5f;
+        var panelY = (winH - panelH) * 0.5f;
 
         // Panel background
         DrawTintedRect(new Rect(panelX, panelY, panelW, panelH), new Color(0.08f, 0.10f, 0.13f, 0.98f));
@@ -820,6 +828,40 @@ public static partial class IPAMOverlay
         var contentW = panelW - 8f;
         var contentH = panelH - titleH - 8f;
 
+        // Ensure the specific modal rects are updated so the content drawers know the available space
+        if (drawContent == (GUI.WindowFunction)DrawServerEditPopupWindow)
+        {
+            _serverEditPopupRect = new Rect(0, 0, contentW, contentH);
+        }
+        else if (drawContent == (GUI.WindowFunction)DrawIopsStandaloneWindow)
+        {
+            _iopsStandaloneWindowRect = new Rect(0, 0, contentW, contentH);
+        }
+        else if (drawContent == (GUI.WindowFunction)DrawCustomersAddServerWindow)
+        {
+            _customersTabAddServerWindowRect = new Rect(0, 0, contentW, contentH);
+        }
+        else if (drawContent == (GUI.WindowFunction)DrawIpamChildPrefixWizardWindow)
+        {
+            _ipamChildPrefixWizardRect = new Rect(0, 0, contentW, contentH);
+        }
+        else if (drawContent == (GUI.WindowFunction)DrawIpamPrefixDeleteConfirmWindow)
+        {
+            _ipamPrefixDeleteConfirmRect = new Rect(0, 0, contentW, contentH);
+        }
+
+        // Catch and use all mouse events within the dim area to prevent clicks from reaching the main window bg
+        var modalEventRect = new Rect(panelX, panelY, panelW, panelH);
+        var e = Event.current;
+        if (e.isMouse && modalEventRect.Contains(e.mousePosition))
+        {
+            // If it's a click, consume it so the main window doesn't process it as a background click
+            if (e.type == EventType.MouseDown || e.type == EventType.MouseUp)
+            {
+                e.Use();
+            }
+        }
+
         // Use BeginGroup to create an isolated coordinate space
         GUI.BeginGroup(new Rect(contentX, contentY, contentW, contentH));
         // Invoke the original window function — pass 0 as window ID (unused in inline mode)
@@ -847,6 +889,16 @@ public static partial class IPAMOverlay
 
         var oldBg = GUI.backgroundColor;
         var oldContent = GUI.contentColor;
+
+        // Ensure camera/game input is blocked while overlay is visible
+        if (GameInputSuppression.IsActive)
+        {
+            GameInputSuppression.RefreshWhileActive();
+        }
+        else
+        {
+            GameInputSuppression.SetSuppressed(true);
+        }
 
         // Full-screen IMGUI control: absorbs pointer events for IMGUI stacks. Do not disable
         // UnityEngine.EventSystems.EventSystem here — Data Center's UI_SelectedBorder.Update null-refs when it is off.
@@ -894,40 +946,6 @@ public static partial class IPAMOverlay
         {
             var tEnd = Time.realtimeSinceStartupAsDouble;
             RecordIpamPerfDrawMs((tWindow0 - tBackdrop0) * 1000.0, (tEnd - tWindow0) * 1000.0);
-        }
-
-        // ── Inline modals inside the main IPAM window ──
-        // All popups are now drawn as panels within _windowRect instead of separate GUI.Windows.
-        var winX = _windowRect.x;
-        var winY = _windowRect.y;
-        var winW = _windowRect.width;
-        var winH = _windowRect.height;
-
-        if (LicenseManager.IsIPAMUnlocked && _iopsCalculatorOpen)
-        {
-            PumpIopsCalculatorKeyboard();
-            DrawInlineModalPanel(winX, winY, winW, winH, "IOPS sizing", (GUI.WindowFunction)DrawIopsStandaloneWindow);
-        }
-
-        if (LicenseManager.IsIPAMUnlocked && _customersTabAddServerWizardOpen)
-        {
-            DrawInlineModalPanel(winX, winY, winW, winH, "Add server", (GUI.WindowFunction)DrawCustomersAddServerWindow);
-        }
-
-        if (LicenseManager.IsIPAMUnlocked && _ipamChildPrefixWizardOpen)
-        {
-            DrawInlineModalPanel(winX, winY, winW, winH, "Prefix", (GUI.WindowFunction)DrawIpamChildPrefixWizardWindow);
-        }
-
-        if (LicenseManager.IsIPAMUnlocked && _ipamPrefixDeleteConfirmOpen)
-        {
-            DrawInlineModalPanel(winX, winY, winW, winH, "Confirm delete", (GUI.WindowFunction)DrawIpamPrefixDeleteConfirmWindow);
-        }
-
-        var serverEditPopupDraw = ShouldDrawServerEditPopup();
-        if (serverEditPopupDraw)
-        {
-            DrawInlineModalPanel(winX, winY, winW, winH, "Edit object · Server", (GUI.WindowFunction)DrawServerEditPopupWindow);
         }
 
         GUI.backgroundColor = oldBg;

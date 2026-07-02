@@ -125,9 +125,6 @@ public static partial class IPAMOverlay
             return;
         }
 
-        var w = _ipamPrefixDeleteConfirmRect.width;
-        GUI.DragWindow(new Rect(0f, 0f, w - 84f, 24f));
-
         if (Event.current.type == EventType.Repaint)
         {
             var fillW = _ipamPrefixDeleteConfirmRect.width;
@@ -140,7 +137,7 @@ public static partial class IPAMOverlay
 
         var px = 14f;
         var py = 28f;
-        var iw = w - 28f;
+        var iw = _ipamPrefixDeleteConfirmRect.width - 28f;
         GUI.Label(new Rect(px, py, iw, 24f), "Delete parent prefix?", _stSectionTitle);
         py += 28f;
         GUI.Label(new Rect(px, py, iw, 22f), _ipamPrefixDeleteConfirmHeadline, _stError);
@@ -185,7 +182,7 @@ public static partial class IPAMOverlay
             CloseIpamPrefixDeleteConfirm();
         }
 
-        if (ImguiButtonOnce(new Rect(w - 84f, 6f, 72f, 22f), "Close", 9152, _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(_ipamPrefixDeleteConfirmRect.width - 84f, 6f, 72f, 22f), "Close", 9152, _stMutedBtn))
         {
             CloseIpamPrefixDeleteConfirm();
         }

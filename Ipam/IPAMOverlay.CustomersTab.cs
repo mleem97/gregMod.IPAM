@@ -708,7 +708,7 @@ public static partial class IPAMOverlay
 
     private static void DrawCustomersAddServerWindow(int windowId)
     {
-        GUI.DragWindow(new Rect(0f, 0f, 10000f, 24f));
+        _ = windowId;
 
         if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Escape)
         {
