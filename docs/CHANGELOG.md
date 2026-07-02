@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.5
+
+- Fixed inline modal input routing so popup controls receive IMGUI mouse clicks again
+- Blocked click-through from modal buttons into the underlying inventory and detail views
+- Restored server edit popup actions including customer selection, DHCP/IP actions, and close/apply/cancel flows
+- Moved server edit popup controls to a dedicated IMGUI control-ID range to avoid collisions with main-window navigation
+
 ## v0.6.6
 
 - Per-save data binding (`ModSaveScope`): IPAM prefixes, racks, and related JSON scoped to active playthrough

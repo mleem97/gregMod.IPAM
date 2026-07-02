@@ -369,8 +369,12 @@ public static partial class IPAMOverlay
             return;
         }
 
-        // IOPS sizing / Add-server wizard are separate GUI.Window on top. Skip heavy inventory while open.
-        if (_iopsCalculatorOpen || _customersTabAddServerWizardOpen)
+        var inlineModalOpen = _ipamChildPrefixWizardOpen
+                              || _ipamPrefixDeleteConfirmOpen
+                              || ShouldDrawServerEditPopup();
+
+        // Modal flows pause the inventory/body so background controls cannot consume the same click first.
+        if (_iopsCalculatorOpen || _customersTabAddServerWizardOpen || inlineModalOpen)
         {
             var pauseTop = bodyTop + 8f;
             var pauseH = bodyH - 16f;
@@ -381,13 +385,16 @@ public static partial class IPAMOverlay
                 _stBreadcrumb);
             var pauseMsg = _iopsCalculatorOpen
                 ? "IOPS sizing is open.\n\nDevice tables are not redrawn while it is open (smoother typing). Close the sizing window (Esc, Close, or click outside) to use the list and detail panel again."
-                : "Add server is open in a separate window. Close it (Esc, Close, or the window button) to return here.";
+                : _customersTabAddServerWizardOpen
+                    ? "Add server is open in a separate window. Close it (Esc, Close, or the window button) to return here."
+                    : "A modal dialog is open. Close or apply it to return to the inventory and detail panel.";
             GUI.Label(
                 new Rect(contentX + CardPad, pauseTop + CardPad + 48f, contentW - CardPad * 2, 140f),
                 pauseMsg,
                 _stMuted);
             GUI.enabled = true;
             GUI.DragWindow(new Rect(0, 0, w, TitleBarH + ToolbarH));
+            DrawModals(w, h);
             if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
             {
                 Event.current.Use();
@@ -3230,7 +3237,7 @@ public static partial class IPAMOverlay
             summary = GetCustomerDropdownSummaryLabel() + "  ▾";
         }
 
-        if (CustomerPickBuffer.Count > 0 && ImguiButtonOnce(dropBtnRect, summary, 8811, _stMutedBtn))
+        if (CustomerPickBuffer.Count > 0 && ImguiButtonOnce(dropBtnRect, summary, 940110, _stMutedBtn))
         {
             _customerDropdownOpen = !_customerDropdownOpen;
         }
@@ -3255,7 +3262,7 @@ public static partial class IPAMOverlay
             var cb = CustomerPickBuffer[i];
             var nm = cb.customerItem != null ? cb.customerItem.customerName : "";
             var line = $"#{cb.customerID}  {(string.IsNullOrWhiteSpace(nm) ? "—" : nm.Trim())}";
-            if (ImguiButtonOnce(new Rect(4, i * 28f, fieldW - 28, 26), line, 8812 + i, _stMutedBtn))
+            if (ImguiButtonOnce(new Rect(4, i * 28f, fieldW - 28, 26), line, 940200 + i, _stMutedBtn))
             {
                 StartInlineCustomerAssign(cb);
             }
@@ -3294,7 +3301,7 @@ public static partial class IPAMOverlay
         var modeCount = LicenseManager.IsIPAMUnlocked ? 3 : 2;
         var mw = (iw - 60f) / modeCount - 4f;
         var sel0 = _inlineAssignMode == 0;
-        if (ImguiButtonOnce(new Rect(mx, py, mw, 26f), "Contract+DHCP", 9055, sel0 ? _stPrimaryBtn : _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(mx, py, mw, 26f), "Contract+DHCP", 940300, sel0 ? _stPrimaryBtn : _stMutedBtn))
         {
             _inlineAssignMode = 0;
             ResetServerEditPopupScrollForModeChange();
@@ -3306,7 +3313,7 @@ public static partial class IPAMOverlay
             if (ImguiButtonOnce(
                     new Rect(mx, py, mw, 26f),
                     "IPAM prefix",
-                    9056,
+                    940301,
                     _inlineAssignMode == 1 ? _stPrimaryBtn : _stMutedBtn))
             {
                 _inlineAssignMode = 1;
@@ -3319,7 +3326,7 @@ public static partial class IPAMOverlay
         if (ImguiButtonOnce(
                 new Rect(mx, py, mw, 26f),
                 "Naming",
-                9057,
+                940302,
                 _inlineAssignMode == 2 ? _stPrimaryBtn : _stMutedBtn))
         {
             _inlineAssignMode = 2;
@@ -3447,12 +3454,12 @@ public static partial class IPAMOverlay
         }
 
         var btnY = py;
-        if (ImguiButtonOnce(new Rect(px, btnY, 120f, 30f), "Apply", 9060, _stPrimaryBtn))
+        if (ImguiButtonOnce(new Rect(px, btnY, 120f, 30f), "Apply", 940303, _stPrimaryBtn))
         {
             ApplyInlineCustomerAssign();
         }
 
-        if (ImguiButtonOnce(new Rect(px + 130f, btnY, 120f, 30f), "Cancel", 9061, _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(px + 130f, btnY, 120f, 30f), "Cancel", 940304, _stMutedBtn))
         {
             ClearInlineCustomerAssign();
         }
@@ -3564,7 +3571,7 @@ public static partial class IPAMOverlay
             GUI.Label(new Rect(px, h - 36f, w - 24f, 30f), err, _stError);
         }
 
-        if (ImguiButtonOnce(new Rect(w - 84f, 6f, 72f, 22f), "Close", 9051, _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(w - 84f, 6f, 72f, 22f), "Close", 940305, _stMutedBtn))
         {
             _serverEditPopupDismissed = true;
             ClearInlineCustomerAssign();
@@ -3630,7 +3637,7 @@ public static partial class IPAMOverlay
         if (n > 1)
         {
             var ox = px;
-            if (ImguiButtonOnce(new Rect(ox, py, 148, 26), "DHCP all selected", 50, _stPrimaryBtn))
+            if (ImguiButtonOnce(new Rect(ox, py, 148, 26), "DHCP all selected", 940306, _stPrimaryBtn))
             {
                 ModDebugLog.Bootstrap();
                 ModDebugLog.WriteDhcpAssign(
@@ -3640,7 +3647,7 @@ public static partial class IPAMOverlay
             }
 
             ox += 156f;
-            if (ImguiButtonOnce(new Rect(ox, py, 118, 26), "Clear all IPs", 51, _stMutedBtn))
+            if (ImguiButtonOnce(new Rect(ox, py, 118, 26), "Clear all IPs", 940307, _stMutedBtn))
             {
                 foreach (var srv in SelectedServersScratch)
                 {
@@ -3652,7 +3659,7 @@ public static partial class IPAMOverlay
             }
 
             ox += 126f;
-            if (ImguiButtonOnce(new Rect(ox, py, 100, 26), "Deselect", 52, _stMutedBtn))
+            if (ImguiButtonOnce(new Rect(ox, py, 100, 26), "Deselect", 940308, _stMutedBtn))
             {
                 _selectedServerInstanceIds.Clear();
                 _autoPrefixCidr = null;
@@ -3723,7 +3730,7 @@ public static partial class IPAMOverlay
 
             // Apply IP + Next Free Buttons
             var bx = px;
-            if (ImguiButtonOnce(new Rect(bx, py, 100, 26), "Apply IP", 53, _stPrimaryBtn))
+            if (ImguiButtonOnce(new Rect(bx, py, 100, 26), "Apply IP", 940309, _stPrimaryBtn))
             {
                 var ip = $"{_oct0}.{_oct1}.{_oct2}.{_oct3}";
                 if (DHCPManager.SetServerIP(srv, ip))
@@ -3738,7 +3745,7 @@ public static partial class IPAMOverlay
             }
 
             bx += 108f;
-            if (ImguiButtonOnce(new Rect(bx, py, 120, 26), "Next Free IP", 54, _stMutedBtn))
+            if (ImguiButtonOnce(new Rect(bx, py, 120, 26), "Next Free IP", 940310, _stMutedBtn))
             {
                 var nextIp = DHCPManager.GetNextFreeIpForServer(srv);
                 if (!string.IsNullOrEmpty(nextIp))
@@ -3771,12 +3778,12 @@ public static partial class IPAMOverlay
             var currentMode = tenancy?.Mode ?? "Dedicated";
             var isDedicated = currentMode == "Dedicated";
 
-            if (ImguiButtonOnce(new Rect(px, py, 80f, 22f), "Dedicated", 55, isDedicated ? _stPrimaryBtn : _stMutedBtn))
+            if (ImguiButtonOnce(new Rect(px, py, 80f, 22f), "Dedicated", 940311, isDedicated ? _stPrimaryBtn : _stMutedBtn))
             {
                 IpamDataStore.TrySetServerMode(srv.GetInstanceID(), "Dedicated", 1, out _);
             }
 
-            if (ImguiButtonOnce(new Rect(px + 88f, py, 80f, 22f), "Shared", 56, !isDedicated ? _stPrimaryBtn : _stMutedBtn))
+            if (ImguiButtonOnce(new Rect(px + 88f, py, 80f, 22f), "Shared", 940312, !isDedicated ? _stPrimaryBtn : _stMutedBtn))
             {
                 IpamDataStore.TrySetServerMode(srv.GetInstanceID(), "Shared", 4, out _);
             }

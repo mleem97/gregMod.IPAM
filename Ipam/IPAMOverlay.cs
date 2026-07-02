@@ -850,16 +850,14 @@ public static partial class IPAMOverlay
             _ipamPrefixDeleteConfirmRect = new Rect(0, 0, contentW, contentH);
         }
 
-        // Catch and use all mouse events within the dim area to prevent clicks from reaching the main window bg
+        // Swallow clicks on the dimmed backdrop, but let the popup content receive its own IMGUI events.
         var modalEventRect = new Rect(panelX, panelY, panelW, panelH);
         var e = Event.current;
-        if (e.isMouse && modalEventRect.Contains(e.mousePosition))
+        if (e.isMouse
+            && !modalEventRect.Contains(e.mousePosition)
+            && (e.type == EventType.MouseDown || e.type == EventType.MouseUp))
         {
-            // If it's a click, consume it so the main window doesn't process it as a background click
-            if (e.type == EventType.MouseDown || e.type == EventType.MouseUp)
-            {
-                e.Use();
-            }
+            e.Use();
         }
 
         // Use BeginGroup to create an isolated coordinate space
