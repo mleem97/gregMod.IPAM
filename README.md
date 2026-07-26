@@ -125,10 +125,6 @@ Questions, feedback, testing, and modding coordination happen on the greg Discor
 
 - [discord.gg/greg](https://discord.gg/greg)
 
-## Sponsors & Thanks
-
-- **[@tobiasreichel](https://github.com/tobiasreichel)** — main sponsor
-
 ## Credits
 
 | Role | Contributor |
