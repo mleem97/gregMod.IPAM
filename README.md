@@ -22,7 +22,7 @@
 
 The project is designed as **normal-mode first**: core features should be usable directly in-game without external tools or unnecessary complexity.
 
-## Current Features
+## Features
 
 - IPAM overlay with dashboard, device, and IP views
 - Device inventory via in-game reflection
