@@ -5,9 +5,9 @@
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/greg)
 [![gregFramework](https://img.shields.io/badge/gregFramework-Website-blue?style=for-the-badge)](https://gregframework.eu)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green?style=for-the-badge)](./LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.7.5-orange?style=for-the-badge)](./ROADMAP.md)
+[![Version](https://img.shields.io/badge/Version-0.7.6-orange?style=for-the-badge)](./ROADMAP.md)
 [![GameVersion](https://img.shields.io/badge/Game%20Version-1.1.0-yellow?style=for-the-badge)]()
-[![Unity](https://img.shields.io/badge/Unity-6000.5-black?style=for-the-badge&logo=unity&logoColor=white)]()
+[![Unity](https://img.shields.io/badge/Unity-6000.4.12f1-black?style=for-the-badge&logo=unity&logoColor=white)]()
 
 ## Links
 
@@ -110,13 +110,13 @@ bin/Release/net6.0/gregMod.IPAM.dll
 
 ## Project Structure
 
-- **`Core/`** — MelonLoader entry point, mod info, global helpers
-- **`Networking/`** — DHCP, subnets, reachability, device and customer logic
-- **`Config/`** — device configuration, registry, and persistence
-- **`Ipam/`** — IPAM overlay, windows, tables, lifecycle, and UI logic
-- **`Patches/`** — Harmony patches
-- **`Input/`** — input suppression while overlays are open
-- **`Diagnostics/`** — debug and Melon logging
+- **`src/Core/`** — MelonLoader entry point, mod info, global helpers
+- **`src/Networking/`** — DHCP, subnets, reachability, device and customer logic
+- **`src/Config/`** — device configuration, registry, and persistence
+- **`src/Ipam/`** — IPAM overlay, windows, tables, lifecycle, and UI logic
+- **`src/Patches/`** — Harmony patches
+- **`src/Input/`** — input suppression while overlays are open
+- **`src/Diagnostics/`** — debug and Melon logging
 - **`docs/SOURCE_LAYOUT.md`** — detailed source layout
 
 ## Community & Support

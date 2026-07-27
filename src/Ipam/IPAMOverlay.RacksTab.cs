@@ -1239,13 +1239,18 @@ public static partial class IPAMOverlay
         var topBlock = SectionTitleH + 10f + 76f + 8f;
         ComputeRackFloorGridMetrics(cardW, out _, out _, out _, out _, out var gridTotalH);
         var gridBlock = SectionTitleH + 42f + gridTotalH + 16f;
+        var unified = BuildUnifiedRackList();
 
         if (string.IsNullOrEmpty(_racksTabDrilledUnifiedId))
         {
+            if (unified.Count == 0)
+            {
+                gridBlock += 48f;
+            }
+
             return Mathf.Max(420f, CardPad * 2f + topBlock + gridBlock);
         }
 
-        var unified = BuildUnifiedRackList();
         var drilled = FindDrilledEntry(unified);
         if (drilled == null)
         {
@@ -1275,8 +1280,7 @@ public static partial class IPAMOverlay
 
         GUI.Label(
             new Rect(x0, y, cardW, 76f),
-            "Standard 47 U cabinets on a 16×32 floor grid (rows A–P, columns 1–32). Assign servers (3 U / 7 U), switches and routers (1 U), or patch panels (2 U). "
-            + "Click a slot to open that rack. Scene-detected layouts appear when the game exposes asset lines.",
+            "Select a rack or create one to start placing devices. This view shows standard 47 U cabinets on a 16×32 floor grid and lets you place servers, switches, routers, or patch panels.",
             _stHint);
         y += 80f;
 
@@ -1316,6 +1320,15 @@ public static partial class IPAMOverlay
 
         if (string.IsNullOrEmpty(_racksTabDrilledUnifiedId))
         {
+            if (unified.Count == 0)
+            {
+                GUI.Label(
+                    new Rect(x0, y, cardW, 44f),
+                    "No racks available yet. Click any floor slot to create one, or import a scene-detected rack when the game exposes one.",
+                    _stMuted);
+                y += 48f;
+            }
+
             DrawRackFloorGrid(x0, ref y, cardW, unified, allowOpenOnClick: true);
             return;
         }

@@ -284,6 +284,12 @@ public static partial class IPAMOverlay
         GUI.DrawTexture(new Rect(x0, y, cardW, 1f), _texTableHeader);
         y += 8f;
 
+        GUI.Label(
+            new Rect(x0, y, cardW, 36f),
+            "What is this? Prefixes are your networks and subnets. Auto IPv4 can pull the next free address from them, and the tree helps you organize parent networks and child subnets.",
+            _stHint);
+        y += 40f;
+
         var prefixes = IpamDataStore.GetPrefixes();
         var drillPagingSig = _ipamPrefixesDrillParentId ?? "";
         if (!string.Equals(_ipamPrefixPagingDrillSig, drillPagingSig, StringComparison.Ordinal))
@@ -297,7 +303,7 @@ public static partial class IPAMOverlay
             _ipamPrefixesDrillParentId = null;
         }
 
-        GUI.Label(new Rect(x0, y, cardW, 20f), "Add prefix", _stSectionTitle);
+        GUI.Label(new Rect(x0, y, cardW, 20f), "Add network or subnet", _stSectionTitle);
         y += 22f;
         GUI.Label(new Rect(x0, y, 52f, 22f), "CIDR", _stFormLabel);
         DrawIpamFormTextField(
@@ -332,15 +338,15 @@ public static partial class IPAMOverlay
         string hint;
         if (_ipamPrefixAddAsRoot)
         {
-            hint = "Adds a top-level prefix (ignores selection and auto-parent).";
+            hint = "Creates a top-level network. Use this for your first root network.";
         }
         else if (!string.IsNullOrEmpty(_ipamSelectedPrefixId) && Guid.TryParse(_ipamSelectedPrefixId, out var selForHint))
         {
-            hint = $"New prefix will be a child of the selected row ({selForHint:D}).";
+            hint = "Creates this subnet inside the selected network.";
         }
         else
         {
-            hint = "Parent is chosen automatically: the tightest existing prefix that fully contains your CIDR, or top-level if none fits. Select a row to force a different parent, or use “Add as root”.";
+            hint = "Parent is chosen automatically: the narrowest existing network that contains this subnet. Select a row to force a parent, or use Add as root.";
         }
 
         GUI.Label(new Rect(x0, y, cardW, 36f), hint, _stHint);
@@ -351,7 +357,7 @@ public static partial class IPAMOverlay
             new Rect(x0, y, Mathf.Min(360f, cardW - 8f), 22f),
             _ipamPrefixAddAsRoot,
             9108,
-            new GUIContent("Add as root prefix (sibling / new top-level)"));
+            new GUIContent("Add as root network (new top-level)"));
         if (_ipamPrefixAddAsRoot && !addRootWas)
         {
             _ipamSelectedPrefixId = null;
@@ -360,7 +366,7 @@ public static partial class IPAMOverlay
         y += 26f;
 
         var addRect = new Rect(x0, y, 120f, 26f);
-        if (ImguiButtonOnce(addRect, "Add prefix", 9101, _stPrimaryBtn))
+        if (ImguiButtonOnce(addRect, "Add subnet", 9101, _stPrimaryBtn))
         {
             _ipamPrefixFormError = "";
             if (!IpamDataStore.TryAddPrefix(_ipamPrefixFormCidr, _ipamPrefixFormName, null, addMode, explicitParentId, out var err))
@@ -396,7 +402,7 @@ public static partial class IPAMOverlay
             var scopeLabel = ipamDrilledScope == null
                 ? "prefix"
                 : $"{(ipamDrilledScope.Cidr ?? "").Trim()}{(string.IsNullOrEmpty(ipamDrilledScope.Name) ? "" : $"  ({ipamDrilledScope.Name})")}";
-            GUI.Label(new Rect(x0, y, cardW - 268f, SectionTitleH), $"Inside: {scopeLabel}", _stSectionTitle);
+            GUI.Label(new Rect(x0, y, cardW - 268f, SectionTitleH), $"Subnets inside: {scopeLabel}", _stSectionTitle);
             var editFolderRect = new Rect(x0 + cardW - 260f, y, 128f, SectionTitleH);
             var backRect = new Rect(x0 + cardW - 126f, y, 118f, SectionTitleH);
             if (ImguiButtonOnce(editFolderRect, "Edit this prefix", 9107, _stMutedBtn))
@@ -415,14 +421,14 @@ public static partial class IPAMOverlay
             y += SectionTitleH + 2f;
         }
 
-        var listTitle = string.IsNullOrEmpty(_ipamPrefixesDrillParentId) ? "All prefixes" : "Prefixes in this folder";
+        var listTitle = string.IsNullOrEmpty(_ipamPrefixesDrillParentId) ? "All networks" : "Subnets inside this network";
         GUI.Label(new Rect(x0, y, cardW, SectionTitleH), listTitle, _stSectionTitle);
         y += SectionTitleH + 2f;
         if (prefixes.Count > 0)
         {
             GUI.Label(
                 new Rect(x0, y, cardW - 100f, 20f),
-                "Tip: double-click any column on a row (except Actions) to open that prefix and list only its children.",
+                "Tip: double-click a row to focus that network and show only the subnets inside it.",
                 _stHint);
             if (ImguiButtonOnce(new Rect(x0 + cardW - 96f, y, 92f, 20f), "Deselect row", 9106, _stMutedBtn))
             {
@@ -432,7 +438,7 @@ public static partial class IPAMOverlay
             y += 22f;
             GUI.Label(
                 new Rect(x0, y, cardW, 36f),
-                "Utilization: each server is counted only on the narrowest prefix in this table that contains its IP (so overlapping ranges do not double-count). Sibling /24s only show servers in their own octet.",
+                "Utilization shows how many servers currently use addresses from each network. Servers are counted only once on the narrowest matching subnet in this table.",
                 _stHint);
             y += 38f;
         }
@@ -444,7 +450,7 @@ public static partial class IPAMOverlay
 
         if (prefixes.Count == 0)
         {
-            GUI.Label(new Rect(x0, y, cardW, 28f), "No prefixes yet. Add a root CIDR above (e.g. 10.0.0.0/8), then add children (e.g. 10.0.1.0/24 under 10.0.0.0/8).", _stMuted);
+            GUI.Label(new Rect(x0, y, cardW, 44f), "No networks yet. Start with a root CIDR above, such as 10.0.0.0/8, then add smaller subnets inside it such as 10.0.1.0/24.", _stMuted);
             return;
         }
 
@@ -457,7 +463,7 @@ public static partial class IPAMOverlay
             {
                 GUI.Label(
                     new Rect(x0, y, cardW, 44f),
-                    "No child prefixes or visible free splits in this folder yet. Use Add prefix above, or open the parent prefix to create from Available rows.",
+                    "No child subnets or visible free blocks here yet. Add a subnet above, or open the parent network and create one from an Available row.",
                     _stMuted);
                 y += 48f;
                 skipPrefixTreeBody = true;
@@ -652,6 +658,7 @@ public static partial class IPAMOverlay
 
     private static float ComputeIpamPrefixesContentHeight()
     {
+        const float introBlock = 40f;
         var formBlock = 108f + 40f + 38f + 26f;
         if (!string.IsNullOrEmpty(_ipamPrefixFormError))
         {
@@ -711,7 +718,7 @@ public static partial class IPAMOverlay
         }
 
         var rows = Mathf.Max(1, CountPrefixTreeRowsForHeight());
-        return CardPad * 2f + SectionTitleH + 10f + formBlock + SectionTitleH + 4f + TableHeaderH + rows * TableRowH + drilledIpBlockH + prefixPagingBar + 28f;
+        return CardPad * 2f + SectionTitleH + 10f + introBlock + formBlock + SectionTitleH + 4f + TableHeaderH + rows * TableRowH + drilledIpBlockH + prefixPagingBar + 28f;
     }
 
     private static bool ShouldShowDrilledPrefixIpv4Section(IpamPrefixEntry scope)
@@ -927,6 +934,31 @@ public static partial class IPAMOverlay
     private static string _scopeRangeAnchorId;
     private static bool _scopeAddFormOpen;
 
+    private static string DescribeDhcpScopeMatch(DhcpScopeEntry scope)
+    {
+        if (scope == null)
+        {
+            return "Applies to matching servers.";
+        }
+
+        var level = (scope.Level ?? "Global").Trim();
+        if (string.Equals(level, "VLAN", StringComparison.OrdinalIgnoreCase))
+        {
+            return scope.VlanId.HasValue
+                ? $"Applies only to servers on VLAN {scope.VlanId.Value}."
+                : "Applies only to servers on the selected VLAN.";
+        }
+
+        if (string.Equals(level, "Switch", StringComparison.OrdinalIgnoreCase))
+        {
+            return !string.IsNullOrWhiteSpace(scope.SwitchKey)
+                ? $"Applies only to servers on switch {scope.SwitchKey}."
+                : "Applies only to servers on the selected switch.";
+        }
+
+        return "Applies to all servers.";
+    }
+
     private static void DrawIpamDhcpScopesView(float innerW)
     {
         var x0 = CardPad;
@@ -938,7 +970,7 @@ public static partial class IPAMOverlay
         y += SectionTitleH + 4f;
         GUI.Label(
             new Rect(x0, y, cardW, 44f),
-            "Scopes override the default contract-based DHCP CIDR. Higher priority (lower number) wins. Level determines which servers match: Global = all, VLAN = servers on that VLAN, Switch = servers on that rack device.",
+            "What is this? Scopes let you override the default auto-IPv4 subnet. Lower priority numbers win first. Global applies to all servers, VLAN only to one VLAN, and Switch only to servers on one switch.",
             _stHint);
         y += 50f;
 
@@ -1074,7 +1106,7 @@ public static partial class IPAMOverlay
 
         if (scopes.Count == 0)
         {
-            GUI.Label(new Rect(x0, y, cardW, 28f), "No scopes configured yet. Click \"+ Add new scope\" above to create one.", _stMuted);
+            GUI.Label(new Rect(x0, y, cardW, 44f), "No scopes configured yet. Add one above if you want a subnet rule that beats the default customer subnet for some servers.", _stMuted);
             return;
         }
 
@@ -1149,7 +1181,7 @@ public static partial class IPAMOverlay
 
             GUI.Label(new Rect(x0 + 4f, y, colPriority - 4f, TableRowH), s.Priority.ToString(CultureInfo.InvariantCulture), _stTableCell);
             GUI.Label(new Rect(x0 + colPriority, y, colLevel, TableRowH), s.Level ?? "", _stTableCell);
-            GUI.Label(new Rect(x0 + colPriority + colLevel, y, colName, TableRowH), s.Name ?? "", _stTableCell);
+            GUI.Label(new Rect(x0 + colPriority + colLevel, y, colName, TableRowH), $"{s.Name ?? ""}  ·  {DescribeDhcpScopeMatch(s)}", _stTableCell);
             GUI.Label(new Rect(x0 + colPriority + colLevel + colName, y, colCidr, TableRowH), s.Cidr ?? "", _stTableCell);
 
             _stTableCell.normal.textColor = prevColor;
@@ -1211,50 +1243,41 @@ public static partial class IPAMOverlay
         var y = CardPad;
         var cardW = innerW - CardPad * 2f;
 
-        GUI.Label(new Rect(x0, y, cardW, SectionTitleH), "How to use gregMod.IPAM", _stSectionTitle);
+        GUI.Label(new Rect(x0, y, cardW, SectionTitleH), "Help and quick explanations", _stSectionTitle);
         y += SectionTitleH + 8f;
         GUI.Label(
             new Rect(x0, y, cardW, 36f),
-            "This guide explains the core features of the IPAM overlay. Press P to open/close the overlay at any time.",
+            "Use this as backup reference. The main workflows now explain themselves in-place, so you should not need to read this before assigning a server.",
             _stMuted);
         y += 40f;
 
         // Section 1: IP Assignment
         DrawTutorialSection(x0, ref y, cardW, "1. IP Assignment (Servers)",
-            "Open IPAM (P) → select a server → use the Octet Editor to set an IP manually, or click \"Next Free IP\" for automatic assignment. " +
-            "DHCP auto-assign runs when a server is placed without an IP. Use Ctrl+L to assign all servers at once.");
+            "Beginner path: Customers → open a customer → Add server → Customer + auto IPv4. Manual IP editing and Next Free IP remain available in the server editor.");
 
         // Section 2: Prefixes
         DrawTutorialSection(x0, ref y, cardW, "2. IPAM Prefixes",
-            "Prefixes define your network segments (e.g. 10.0.1.0/24). Create a prefix tree to organize subnets. " +
-            "The utilization bar shows how many IPs are assigned. Prefixes are persisted in UserData/gregMod.IPAM/ipam_data.json.");
+            "Prefixes are your networks and subnets, such as 10.0.1.0/24. Use them when you want manual control over where IPv4 addresses come from.");
 
         // Section 3: VLANs
         DrawTutorialSection(x0, ref y, cardW, "3. VLANs",
-            "Define VLAN IDs and names. VLANs can be used to segment network traffic. " +
-            "DHCP scopes can be bound to specific VLANs so servers on that VLAN get IPs from the matching scope.");
+            "VLANs label traffic segments. They mainly matter when you want advanced DHCP scope rules for only one VLAN.");
 
         // Section 4: DHCP Scopes
         DrawTutorialSection(x0, ref y, cardW, "4. DHCP Scopes",
-            "Scopes override the default contract-based DHCP CIDR. Set a priority (lower = higher precedence). " +
-            "Level options: Global (all servers), VLAN (servers on that VLAN), Switch (servers on that rack device). " +
-            "Use Ctrl+Click for multi-select, Shift+Click for range select.");
+            "Scopes override the default customer subnet. Global applies to all servers, VLAN only to one VLAN, and Switch only to servers on one switch or rack device.");
 
         // Section 5: Racks
         DrawTutorialSection(x0, ref y, cardW, "5. Rack Management",
-            "The Racks tab shows your physical rack layout. Drag devices from the pick list into rack slots. " +
-            "Patch panels can be labeled. The rack diagram visualizes U-height and device placement.");
+            "Racks show physical placement. Start by selecting a rack on the floor plan or creating/importing one, then place servers, switches, routers, or patch panels.");
 
         // Section 6: Naming Templates
         DrawTutorialSection(x0, ref y, cardW, "6. Naming Templates",
-            "Bulk-name devices using patterns like {customer}-{seq} or {row}{col}. " +
-            "Tokens: {customer}, {ip}, {octet}, {prefix}, {rack}, {role}, {color}, {seq}, {letter}. " +
-            "Preview names before applying. Conventions can be saved and reused.");
+            "Bulk-name devices with patterns like {customer}-{seq} or {row}{col}. This is optional and kept separate from the recommended assign flow.");
 
         // Section 7: Customers
         DrawTutorialSection(x0, ref y, cardW, "7. Customer Management",
-            "The Customers tab shows all customers and their assigned servers. " +
-            "Assign servers to customers, configure DHCP, and manage multi-tenant setups.");
+            "Customers is the main onboarding flow. Open a customer, add a server, and assign IPv4 there before moving into advanced edits elsewhere.");
 
         // Section 8: Keyboard Shortcuts
         DrawTutorialSection(x0, ref y, cardW, "8. Keyboard Shortcuts",
@@ -1271,14 +1294,12 @@ public static partial class IPAMOverlay
 
         // Section 9: Troubleshooting
         DrawTutorialSection(x0, ref y, cardW, "9. Troubleshooting",
-            "If DHCP fails: check that the server is on a customer contract with a valid subnet. " +
-            "If IPs collide: the overlay prevents duplicate assignments. " +
-            "Check UserData/gregMod.IPAM/ for persisted data. Debug logs: gregModIPAM-debug.log beside _Data folder.");
+            "If auto IPv4 fails: check that the server has a customer, that the customer or scope has a valid subnet, and that the subnet still has free usable addresses.");
 
         y += 8f;
         GUI.Label(
             new Rect(x0, y, cardW, 22f),
-            "gregMod.IPAM v0.5.0 — TeamGreg Modding (mleem97 & mochimus)",
+            "gregMod.IPAM v0.7.6 — TeamGreg Modding (mleem97 & mochimus)",
             _stMuted);
     }
 

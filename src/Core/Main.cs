@@ -21,9 +21,12 @@ public class GregModIPAMMod : MelonMod
     private const string PrefCategoryId = "gregMod.IPAM";
     private const string PrefCategoryName = "gregMod.IPAM";
     private const string PrefUiFontScaleKey = "IpamUiFontScale";
+    private const float PrefSaveDebounceSeconds = 0.35f;
 
     private static MelonPreferences_Category _prefs;
     private static MelonPreferences_Entry<float> _prefUiFontScale;
+    private static bool _prefSavePending;
+    private static float _prefSaveDueAtRealtime;
 
     private static int _modSaveScopeSceneHandle = -1;
 
@@ -115,8 +118,15 @@ public class GregModIPAMMod : MelonMod
             return;
         }
 
+        // Keep the live UI responsive, but avoid writing preferences on every slider tick while dragging.
+        if (Mathf.Abs(_prefUiFontScale.Value - newScale) < 0.0001f)
+        {
+            return;
+        }
+
         _prefUiFontScale.Value = newScale;
-        MelonPreferences.Save();
+        _prefSavePending = true;
+        _prefSaveDueAtRealtime = Time.unscaledTime + PrefSaveDebounceSeconds;
     }
 
     public override void OnUpdate()
@@ -157,6 +167,7 @@ public class GregModIPAMMod : MelonMod
 
         if (!IPAMOverlay.IsVisible)
         {
+            FlushPendingPreferencesIfDue();
             return;
         }
 
@@ -166,6 +177,18 @@ public class GregModIPAMMod : MelonMod
         Cursor.visible = true;
 
         IPAMOverlay.TickIpamGameInputSuppression();
+        FlushPendingPreferencesIfDue();
+    }
+
+    private static void FlushPendingPreferencesIfDue()
+    {
+        if (!_prefSavePending || Time.unscaledTime < _prefSaveDueAtRealtime)
+        {
+            return;
+        }
+
+        _prefSavePending = false;
+        MelonPreferences.Save();
     }
 
     public override void OnSceneWasLoaded(int buildIndex, string sceneName)

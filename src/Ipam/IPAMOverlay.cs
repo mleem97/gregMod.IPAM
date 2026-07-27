@@ -387,6 +387,8 @@ public static partial class IPAMOverlay
     private static CustomerBase _inlineAssignCustomer;
     /// <summary>0 = Contract+DHCP batch; 1 = pick IPAM prefix; 2 = naming convention.</summary>
     private static int _inlineAssignMode;
+    /// <summary>Single-server editor: hides tenancy and other expert controls until explicitly expanded.</summary>
+    private static bool _serverDetailAdvancedOpen;
     private static string _inlineIpamPrefixPickKey = "";
     private static string _inlineIpamPrefixSearchBuf = "";
     /// <summary>Maximal Available row CIDR from the pick list (resize cannot exceed this block).</summary>
@@ -717,6 +719,7 @@ public static partial class IPAMOverlay
 
         RefreshServerEditPopupSelectionSignature();
         _serverEditPopupDismissed = false;
+        _serverDetailAdvancedOpen = false;
         EnsureServerEditPopupFitsScreen();
         _serverEditPopupScroll = Vector2.zero;
         _serverEditPopupContentH = EstimateServerEditPopupContentHeight();
@@ -814,12 +817,7 @@ public static partial class IPAMOverlay
         var closeBtnW = 60f;
         if (ImguiButtonOnce(new Rect(panelX + panelW - closeBtnW - 8f, panelY + 3f, closeBtnW, 22f), "Close", 99999, _stMutedBtn))
         {
-            // Close the appropriate popup
-            if (_iopsCalculatorOpen) { CloseIopsCalculatorModal("inline close"); }
-            else if (_customersTabAddServerWizardOpen) { _customersTabAddServerWizardOpen = false; }
-            else if (_ipamChildPrefixWizardOpen) { CloseIpamChildPrefixWizard(); }
-            else if (_ipamPrefixDeleteConfirmOpen) { CloseIpamPrefixDeleteConfirm(); }
-            else { _serverEditPopupDismissed = true; }
+            CloseInlineModal(drawContent);
         }
 
         // Content area — set GUI.matrix to offset into the panel
@@ -865,6 +863,40 @@ public static partial class IPAMOverlay
         // Invoke the original window function — pass 0 as window ID (unused in inline mode)
         drawContent.Invoke(0);
         GUI.EndGroup();
+    }
+
+    private static void CloseInlineModal(GUI.WindowFunction drawContent)
+    {
+        if (drawContent == (GUI.WindowFunction)DrawIopsStandaloneWindow)
+        {
+            CloseIopsCalculatorModal("inline close");
+            return;
+        }
+
+        if (drawContent == (GUI.WindowFunction)DrawCustomersAddServerWindow)
+        {
+            _customersTabAddServerWizardOpen = false;
+            _customersTabAddServerSelectedInstanceId = -1;
+            return;
+        }
+
+        if (drawContent == (GUI.WindowFunction)DrawIpamChildPrefixWizardWindow)
+        {
+            CloseIpamChildPrefixWizard();
+            return;
+        }
+
+        if (drawContent == (GUI.WindowFunction)DrawIpamPrefixDeleteConfirmWindow)
+        {
+            CloseIpamPrefixDeleteConfirm();
+            return;
+        }
+
+        if (drawContent == (GUI.WindowFunction)DrawServerEditPopupWindow)
+        {
+            _serverEditPopupDismissed = true;
+            ClearInlineCustomerAssign();
+        }
     }
 
     public static void Draw()

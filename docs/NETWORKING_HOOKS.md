@@ -13,7 +13,7 @@ The mod still links **`Assembly-CSharp.dll`** from MelonLoader’s interop folde
 
 - **Assembly:** game scripts live in `Assembly-CSharp.dll` (MelonLoader `Il2CppAssemblies` after codegen).
 - **`NetworkSwitch`:** used by the mod via Il2Cpp stubs; **model / SKU strings are not compiled into this repo**. At runtime, the mod treats devices as switches.
-- **`CustomerBase.AddAppPerformance`:** already patched by [`DHCPManager.FlowPausePatch`](../Networking/DHCPManager.cs) (flow pause). This is treated as the **primary choke point** for “application traffic / performance” ticks toward customers.
+- **`CustomerBase.AddAppPerformance`:** already patched by [`DHCPManager.FlowPausePatch`](../src/Networking/DHCPManager.cs) (flow pause). This is treated as the **primary choke point** for “application traffic / performance” ticks toward customers.
 - **Server context:** `AddAppPerformance` is currently patched with a **parameterless** `Prefix`; game signature appears to take **no parameters** (or only implicit `this`). Therefore, the patch uses the `CustomerBase.customerID` of `__instance`.
 
 ## Patch strategy
@@ -25,12 +25,12 @@ The mod still links **`Assembly-CSharp.dll`** from MelonLoader’s interop folde
 ## Failure modes
 
 - If the game adds overloads of `AddAppPerformance`, `AccessTools.Method(customerType, "AddAppPerformance")` may become ambiguous — switch to `DeclaredMethod` with explicit parameter types.
-- If performance is driven by additional code paths (e.g. per-server methods), add Harmony targets alongside [`DHCPManager.FlowPausePatch`](../Networking/DHCPManager.cs) after identifying symbols in ILSpy.
+- If performance is driven by additional code paths (e.g. per-server methods), add Harmony targets alongside [`DHCPManager.FlowPausePatch`](../src/Networking/DHCPManager.cs) after identifying symbols in ILSpy.
 
 ## Input: IPAM hotkey vs game Inventory
 
 - In **`InputController`** (generated / decompiled), **`UIActions.Inventory`** is an `InputAction` the game uses for inventory UI.
-- IPAM toggles on **`Keyboard.current.f1Key`** (`GregModIPAMBehaviour.Update` in [`Main.cs`](../Core/Main.cs)). **`PlayerInput` is only suspended while the device CLI is open** (`GameInputSuppression`); IPAM stays overlay-only so gameplay / pause menus are not forced closed by the old **I**-key + inventory conflict.
+- IPAM toggles on **`Keyboard.current.f1Key`** (`GregModIPAMBehaviour.Update` in [`Main.cs`](../src/Core/Main.cs)). **`PlayerInput` is only suspended while the device CLI is open** (`GameInputSuppression`); IPAM stays overlay-only so gameplay / pause menus are not forced closed by the old **I**-key + inventory conflict.
 
 ## Future work
 

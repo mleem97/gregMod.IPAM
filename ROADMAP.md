@@ -10,13 +10,13 @@
 
 - [x] Mouse-wheel increment/decrement on last IPv4 octet. *(scroll handler in `DrawOctetEditor`, `IPAMOverlay.WindowUi.cs:3500`)*
 - [ ] Smart paste flow (`192.168.0.` then scroll/append).
-- [x] `Assign Next Free` action. *(`DHCPManager.GetNextFreeIpForServer()` in `Networking/DHCPManager.cs:658`)*
-- [x] Collision prevention and subnet validation feedback. *(`DHCPManager.IsIpUsedByAnotherServer()` in `Networking/DHCPManager.cs:472`)*
+- [x] `Assign Next Free` action. *(`DHCPManager.GetNextFreeIpForServer()` in `src/Networking/DHCPManager.cs:658`)*
+- [x] Collision prevention and subnet validation feedback. *(`DHCPManager.IsIpUsedByAnotherServer()` in `src/Networking/DHCPManager.cs:472`)*
 - [x] Auto-detect customer prefix on assignment. *(shows "Contract subnet: x.x.x.x/nn" in octet editor)*
 
 ### Epic B — DHCP Scope Management
 
-- [x] DHCP scopes configurable. *(`DhcpScopeEntry` in `Ipam/IpamDataStore.cs`, CRUD UI in `IPAMOverlay.IpamTabs.cs`)*
+- [x] DHCP scopes configurable. *(`DhcpScopeEntry` in `src/Ipam/IpamDataStore.cs`, CRUD UI in `src/Ipam/IPAMOverlay.IpamTabs.cs`)*
 - [x] Clear precedence model. *(Global → VLAN → Switch priority in `IpamDataStore.FindScopeForServer()`)*
 - [ ] Reservations and exclusion ranges.
 - [x] Scope exhaustion warnings. *(color-coded utilization bars: green/yellow/red in `IPAMOverlay.IpamPrefixTree.cs`)*
@@ -31,12 +31,12 @@
 ### Epic D — Patch-Port Labeling
 
 - [~] Label per patch panel port. *(`PatchLabel` field in `RackDataStore.cs:363`)*
-- [x] Bulk naming templates. *(`NamingTemplateEngine` in `Ipam/NamingTemplateEngine.cs`)*
+- [x] Bulk naming templates. *(`NamingTemplateEngine` in `src/Ipam/NamingTemplateEngine.cs`)*
 - [~] Labels visible in relevant UIs. *(rack UI shows labels in `IPAMOverlay.RacksTab.cs:826`)*
 
 ### Epic E — Shared Server Model
 
-- [x] Server modes: `Dedicated` vs `Shared`. *(`ServerTenancyEntry` in `Ipam/IpamDataStore.cs`, toggle in server edit)*
+- [x] Server modes: `Dedicated` vs `Shared`. *(`ServerTenancyEntry` in `src/Ipam/IpamDataStore.cs`, toggle in server edit)*
 - [x] Multi-tenant mapping of customer workloads. *(`TenantAllocation` with customer name, IP count)*
 - [ ] Capacity/quota model for shared services.
 - [ ] Basic isolation rules to avoid impossible mappings.
@@ -51,7 +51,7 @@
 
 ### Epic G — Gamified IPAM Layer
 
-- [x] Subnet utilization, conflict feed, health score. *(`NetworkHealthScore` in `Networking/NetworkHealthScore.cs`, utilization bars in prefix tree)*
+- [x] Subnet utilization, conflict feed, health score. *(`NetworkHealthScore` in `src/Networking/NetworkHealthScore.cs`, utilization bars in prefix tree)*
 - [ ] Objective-style tasks for clean network operation.
 - [ ] Reward/penalty hooks tied to network quality.
 

@@ -10,6 +10,70 @@ namespace GregModIPAM;
 /// </summary>
 internal static class ServerPowerController
 {
+    internal static bool TryFindRackMountForServer(int serverInstanceId, out string rackId, out RackMountRecord mount)
+    {
+        rackId = null;
+        mount = null;
+        if (serverInstanceId == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            var racks = RackDataStore.GetRacks();
+            if (racks == null)
+            {
+                return false;
+            }
+
+            foreach (var rack in racks)
+            {
+                if (rack?.Mounts == null || string.IsNullOrEmpty(rack.Id))
+                {
+                    continue;
+                }
+
+                foreach (var m in rack.Mounts)
+                {
+                    if (m == null
+                        || !string.Equals(m.DeviceType, RackDeviceTypes.Server, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (m.SceneInstanceId != serverInstanceId && m.ServerInstanceId != serverInstanceId)
+                    {
+                        continue;
+                    }
+
+                    rackId = rack.Id;
+                    mount = m;
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            // ignore lookup failures and fall back to non-rack behavior
+        }
+
+        return false;
+    }
+
+    internal static bool? TryGetTrackedServerPowerState(int serverInstanceId)
+    {
+        return TryFindRackMountForServer(serverInstanceId, out var rackId, out var mount)
+            ? CablingDataStore.IsPoweredOn(rackId, mount.EntryId)
+            : null;
+    }
+
+    internal static bool TryToggleServerByInstanceId(int serverInstanceId)
+    {
+        return TryFindRackMountForServer(serverInstanceId, out var rackId, out var mount)
+            && TryTogglePower(rackId, mount);
+    }
+
     /// <summary>Turns a server on via game API and updates mod state.</summary>
     internal static bool TryPowerOn(string rackId, RackMountRecord mount)
     {

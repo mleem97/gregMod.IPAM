@@ -372,7 +372,7 @@ public static partial class IPAMOverlay
                         new Rect(px + 16f, py, iw - 16f, 22f),
                         _inlineNamingAutoApplyAfterAssign,
                         9079,
-                        new GUIContent("Auto-apply after Contract+DHCP / IPAM assign"));
+                        new GUIContent("Auto-apply after customer + IPv4 assign"));
                     py += 24f;
                 }
             }

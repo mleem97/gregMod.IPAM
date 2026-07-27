@@ -289,7 +289,7 @@ public static partial class IPAMOverlay
         var iconPad = 6f;
 
         // ── Dashboard ──
-        DrawNavEntryWithIcon(new Rect(navX, navStartY, navW, navRowH), NavSection.Dashboard, "Dashboard", "dashboard", iconSize, iconPad);
+        DrawNavEntryWithIcon(new Rect(navX, navStartY, navW, navRowH), NavSection.Dashboard, "Overview", "dashboard", iconSize, iconPad);
 
         // ── Customers ──
         DrawNavEntryWithIcon(new Rect(navX, navStartY + navRowH, navW, navRowH), NavSection.Customers, "Customers", "customers", iconSize, iconPad);
@@ -297,10 +297,10 @@ public static partial class IPAMOverlay
         // ── Racks ──
         DrawNavEntryWithIcon(new Rect(navX, navStartY + navRowH * 2, navW, navRowH), NavSection.Racks, "Racks", "rack", iconSize, iconPad);
 
-        // ── Assets (category header) ──
+        // ── Servers & Devices (category header) ──
         var assetsY = navStartY + navRowH * 3;
         var assetsChevronTex = NavIcons.Get(_devicesSidebarExpanded ? "chevron_d" : "chevron_r");
-        DrawCategoryHeader(new Rect(navX, assetsY, navW, navRowH), "ASSETS", assetsChevronTex, iconSize, iconPad,
+        DrawCategoryHeader(new Rect(navX, assetsY, navW, navRowH), "SERVERS & DEVICES", assetsChevronTex, iconSize, iconPad,
             _navSection == NavSection.Devices, ref _devicesSidebarExpanded);
 
         float navAfterAssets;
@@ -342,8 +342,8 @@ public static partial class IPAMOverlay
             navAfterNetwork = navAfterAssets + navRowH;
         }
 
-        // ── Tutorial ──
-        DrawIpamSubNavWithIcon(new Rect(navX, navAfterNetwork, navW, navRowH), IpamSubSection.Tutorial, "Tutorial", "tutorial", 9054, iconSize, iconPad);
+        // ── Help ──
+        DrawIpamSubNavWithIcon(new Rect(navX, navAfterNetwork, navW, navRowH), IpamSubSection.Tutorial, "Help", "tutorial", 9054, iconSize, iconPad);
 
         // ── Settings ──
         DrawNavEntryWithIcon(new Rect(navX, navAfterNetwork + navRowH, navW, navRowH), NavSection.Settings, "Settings", "settings", iconSize, iconPad);
@@ -360,7 +360,7 @@ public static partial class IPAMOverlay
         if (!ipamUnlocked)
         {
             GUI.DrawTexture(new Rect(contentX, bodyTop + 8, contentW, bodyH - 16), _texCard);
-            GUI.Label(new Rect(contentX + CardPad, bodyTop + 24, contentW - CardPad * 2, 40), "Organization / Assets", _stBreadcrumb);
+            GUI.Label(new Rect(contentX + CardPad, bodyTop + 24, contentW - CardPad * 2, 40), "Organization / Servers & Devices", _stBreadcrumb);
             GUI.Label(
                 new Rect(contentX + CardPad, bodyTop + 56, contentW - CardPad * 2, 60),
                 "IPAM license not unlocked.\nUse the IPAM: locked button in the title bar to unlock.",
@@ -381,7 +381,7 @@ public static partial class IPAMOverlay
             GUI.DrawTexture(new Rect(contentX + 2, pauseTop + 2, contentW - 4, pauseH - 4), _texCard);
             GUI.Label(
                 new Rect(contentX + CardPad, pauseTop + CardPad, contentW - CardPad * 2, 40f),
-                "Organization / Inventory (paused)",
+                "Organization / Servers & Devices (paused)",
                 _stBreadcrumb);
             var pauseMsg = _iopsCalculatorOpen
                 ? "IOPS sizing is open.\n\nDevice tables are not redrawn while it is open (smoother typing). Close the sizing window (Esc, Close, or click outside) to use the list and detail panel again."
@@ -1245,7 +1245,7 @@ public static partial class IPAMOverlay
         }
 
         var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
-        return DeviceInventoryReflection.InventorySearchQueryMatches(query, hasIp ? "Assigned" : "No address");
+        return DeviceInventoryReflection.InventorySearchQueryMatches(query, GetIpv4AssignmentStatusLabel(ip));
     }
 
     private static void BuildFilteredDeviceSwitchRowIndices(
@@ -1603,7 +1603,7 @@ public static partial class IPAMOverlay
 
         GUI.Label(
             new Rect(x0, y - 2, cardW, SectionTitleH),
-            $"Organization / Assets  /  {DevicesSubBreadcrumbLabel()}",
+            $"Organization / Servers & Devices  /  {DevicesSubBreadcrumbLabel()}",
             _stBreadcrumb);
         y += SectionTitleH + 2f;
 
@@ -1793,6 +1793,7 @@ public static partial class IPAMOverlay
             }
 
             var sortedIdx = sw != null ? FindSortedSwitchIndex(sw.GetInstanceID()) : rowIdx;
+            var toggleRect = sw != null ? GetDeviceToggleRect(r) : default;
             if (TableDataRowClick(
                     r,
                     StableRowHint(rowHintSection, sw, rowIdx),
@@ -1805,7 +1806,8 @@ public static partial class IPAMOverlay
                     eolCol,
                     statusCol,
                     tableW,
-                    menuBlocksRowPointer))
+                    menuBlocksRowPointer,
+                    sw != null ? toggleRect : null))
             {
                 HandleSwitchRowClick(sw, sortedIdx >= 0 ? sortedIdx : rowIdx);
             }
@@ -1967,6 +1969,7 @@ public static partial class IPAMOverlay
             }
 
             var ip = DHCPManager.GetServerIP(server);
+            var toggleRectSv = GetDeviceToggleRect(r);
             string dispName;
             string cust;
             string typeCol;
@@ -1979,7 +1982,7 @@ public static partial class IPAMOverlay
                 var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
                 var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
                 ipCol = CellTextForCol(3, ipRaw, tableW);
-                status = CellTextForCol(5, hasIp ? "Assigned" : "No address", tableW);
+                status = CellTextForCol(5, GetIpv4AssignmentStatusLabel(ip), tableW);
                 cust = CellTextForCol(1, GetCustomerDisplayName(server), tableW);
                 eolCol = TableEolCellDisplay(server, tableW);
                 var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
@@ -2008,17 +2011,18 @@ public static partial class IPAMOverlay
                     eolCol,
                     status,
                     tableW,
-                    menuBlocksRowPointerSv))
+                    menuBlocksRowPointerSv,
+                    toggleRectSv))
             {
                 HandleServerRowClick(server, rowIdx, ip, SortedServersBuffer);
             }
 
             // Toggle button
             var toggleKeySv = 96000 + Mathf.Abs(server.GetInstanceID()) % 10000;
-            var isActiveSv = IsDeviceActive(server);
+            var isActiveSv = IsServerRemotePowerActive(server);
             if (DrawDeviceToggle(r, isActiveSv, toggleKeySv))
             {
-                ToggleDevice(server);
+                ToggleServerFromInventory(server);
                 ModReleaseLog.Info($"Server toggle: {DeviceInventoryReflection.GetDisplayName(server)} -> {(isActiveSv ? "OFF" : "ON")}");
             }
 
@@ -2181,15 +2185,19 @@ public static partial class IPAMOverlay
 
     private static bool DrawDeviceToggle(Rect rowRect, bool isActive, int dedupeKey)
     {
-        var btnW = 64f;
-        var btnH = Mathf.Max(20f, rowRect.height - 6f);
-        var btnRect = new Rect(rowRect.xMax - btnW - 8f, rowRect.y + (rowRect.height - btnH) * 0.5f, btnW, btnH);
-
+        var btnRect = GetDeviceToggleRect(rowRect);
         var label = isActive ? "⏻ ON" : "⏻ OFF";
         var style = isActive ? _stToggleOn : _stToggleOff;
         if (style == null) style = _stMutedBtn;
 
         return ImguiButtonOnce(btnRect, label, dedupeKey, style);
+    }
+
+    private static Rect GetDeviceToggleRect(Rect rowRect)
+    {
+        var btnW = 64f;
+        var btnH = Mathf.Max(20f, rowRect.height - 6f);
+        return new Rect(rowRect.xMax - btnW - 8f, rowRect.y + (rowRect.height - btnH) * 0.5f, btnW, btnH);
     }
 
     private static bool IsDeviceActive(UnityEngine.Object obj)
@@ -2202,6 +2210,33 @@ public static partial class IPAMOverlay
         }
         catch { }
         return true;
+    }
+
+    private static bool IsServerRemotePowerActive(Server server)
+    {
+        if (server == null)
+        {
+            return false;
+        }
+
+        var tracked = ServerPowerController.TryGetTrackedServerPowerState(server.GetInstanceID());
+        return tracked ?? IsDeviceActive(server);
+    }
+
+    private static void ToggleServerFromInventory(Server server)
+    {
+        if (server == null)
+        {
+            return;
+        }
+
+        if (ServerPowerController.TryToggleServerByInstanceId(server.GetInstanceID()))
+        {
+            RecomputeContentHeight();
+            return;
+        }
+
+        ToggleDevice(server);
     }
 
     private static void ToggleDevice(UnityEngine.Object obj)
@@ -2335,7 +2370,7 @@ public static partial class IPAMOverlay
         var colGap = 12f;
 
         // ── Header ──
-        GUI.Label(new Rect(x0, y - 2, w, SectionTitleH), "Organization / Dashboard", _stBreadcrumb);
+        GUI.Label(new Rect(x0, y - 2, w, SectionTitleH), "Organization / Overview", _stBreadcrumb);
         y += SectionTitleH + 2f;
         GUI.DrawTexture(new Rect(x0, y, w, 1f), _texTableHeader);
         y += 6f;
@@ -2482,7 +2517,7 @@ public static partial class IPAMOverlay
         DrawTintedRect(infoRect, new Color(0.06f, 0.08f, 0.10f, 0.5f));
         GUI.Label(
             new Rect(x0 + 10f, y + 6f, w - 20f, 36f),
-            "IOPS totals use the same mod constants as the IOPS sizing calculator. Open Assets or Customers for full tables; assign IPs from the bottom panel.",
+            "IOPS totals use the same mod constants as the IOPS sizing calculator. Open Servers & Devices or Customers for full tables; assign IPs from the bottom panel.",
             _stHint);
     }
 
@@ -2688,7 +2723,7 @@ public static partial class IPAMOverlay
                 var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
                 var ipRaw = FormatServerIpWithContainingPrefix(ip);
                 ipCol = CellTextForCol(3, ipRaw, tableW);
-                status = CellTextForCol(5, hasIp ? "Assigned" : "No address", tableW);
+                status = CellTextForCol(5, GetIpv4AssignmentStatusLabel(ip), tableW);
                 cust = CellTextForCol(1, GetCustomerDisplayName(server), tableW);
                 eolCol = TableEolCellDisplay(server, tableW);
                 var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
@@ -2813,6 +2848,11 @@ public static partial class IPAMOverlay
         }
 
         return s.Length <= max ? s : s.Substring(0, max - 1) + "…";
+    }
+
+    private static string GetIpv4AssignmentStatusLabel(string ip)
+    {
+        return !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0" ? "IPv4 assigned" : "Needs IPv4";
     }
 
     private static string GetCustomerDropdownSummaryLabel()
@@ -3280,7 +3320,7 @@ public static partial class IPAMOverlay
         CollectSelectedServersIntoScratch();
         var n = SelectedServersScratch.Count;
 
-        GUI.Label(new Rect(px, py, iw, 22f), "Assign + address / Naming", _stSectionTitle);
+        GUI.Label(new Rect(px, py, iw, 22f), "Assign customer, IPv4, or naming", _stSectionTitle);
         py += 26f;
 
         if (cust != null && _inlineAssignMode != 2)
@@ -3293,7 +3333,7 @@ public static partial class IPAMOverlay
             py += 24f;
         }
 
-        GUI.Label(new Rect(px, py, iw, 20f), $"{n} server(s) selected.", _stMuted);
+        GUI.Label(new Rect(px, py, iw, 20f), $"{n} server(s) selected. Recommended path: choose a customer, then auto-assign IPv4.", _stMuted);
         py += 24f;
 
         GUI.Label(new Rect(px, py + 3, 52f, 22f), "Mode", _stFormLabel);
@@ -3301,7 +3341,7 @@ public static partial class IPAMOverlay
         var modeCount = LicenseManager.IsIPAMUnlocked ? 3 : 2;
         var mw = (iw - 60f) / modeCount - 4f;
         var sel0 = _inlineAssignMode == 0;
-        if (ImguiButtonOnce(new Rect(mx, py, mw, 26f), "Contract+DHCP", 940300, sel0 ? _stPrimaryBtn : _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(mx, py, mw, 26f), "Customer + auto IPv4", 940300, sel0 ? _stPrimaryBtn : _stMutedBtn))
         {
             _inlineAssignMode = 0;
             ResetServerEditPopupScrollForModeChange();
@@ -3312,7 +3352,7 @@ public static partial class IPAMOverlay
         {
             if (ImguiButtonOnce(
                     new Rect(mx, py, mw, 26f),
-                    "IPAM prefix",
+                    "Manual subnet",
                     940301,
                     _inlineAssignMode == 1 ? _stPrimaryBtn : _stMutedBtn))
             {
@@ -3343,7 +3383,7 @@ public static partial class IPAMOverlay
         {
             GUI.Label(
                 new Rect(px, py, iw, 44f),
-                "Choose a customer above for Contract+DHCP or IPAM prefix. Naming mode works without a customer.",
+                "Choose a customer above to use the recommended path or a manual subnet. Naming works without a customer.",
                 _stHint);
             py += 48f;
         }
@@ -3351,17 +3391,17 @@ public static partial class IPAMOverlay
         {
             GUI.Label(
                 new Rect(px, py, iw, 48f),
-                "Sets customer on each selected server, then runs batch DHCP when DHCP is unlocked (same as legacy assign).",
+                "Recommended: assigns the selected customer, then gives each server the next free IPv4 from that customer setup when auto IPv4 is available.",
                 _stHint);
             py += 52f;
         }
         else if (LicenseManager.IsIPAMUnlocked)
         {
             GUI.Label(
-                new Rect(px, py, iw, 36f),
-                "Created prefixes and Available free blocks (shows used/free). First free usable IPv4 in the chosen CIDR is assigned to each server.",
+                new Rect(px, py, iw, 44f),
+                "Advanced: choose the subnet yourself. Each selected server gets the first free usable IPv4 from the subnet or free block you pick here.",
                 _stHint);
-            py += 40f;
+            py += 48f;
 
             GUI.Label(new Rect(px, py, 72f, 22f), "Search", _stFormLabel);
             DrawIpamFormTextField(
@@ -3403,6 +3443,12 @@ public static partial class IPAMOverlay
 
             if (IsInlineAvailableBlockSelected())
             {
+                GUI.Label(
+                    new Rect(px, py, iw, 28f),
+                    $"Will assign the first free usable IPv4 from {_inlineIpamAvailableCidrBuf} to {n} selected server(s).",
+                    _stHint);
+                py += 32f;
+
                 GUI.Label(new Rect(px, py, iw, 20f), "Resize Available block", _stSectionTitle);
                 py += 24f;
 
@@ -3502,7 +3548,7 @@ public static partial class IPAMOverlay
             h += 72f + plist.Count * 26f;
             if (IsInlineAvailableBlockSelected())
             {
-                h += 120f;
+                h += 152f;
             }
         }
         else
@@ -3518,6 +3564,21 @@ public static partial class IPAMOverlay
         else
         {
             h += 52f;
+            if (_serverDetailAdvancedOpen)
+            {
+                h += 64f;
+                var srv = SelectedServersScratch.Count > 0 ? SelectedServersScratch[0] : null;
+                if (srv != null)
+                {
+                    var tenancy = IpamDataStore.GetTenancyForServer(srv.GetInstanceID());
+                    var isDedicated = string.Equals(tenancy?.Mode ?? "Dedicated", "Dedicated", StringComparison.Ordinal);
+                    if (!isDedicated)
+                    {
+                        var tenants = tenancy?.Tenants ?? new List<TenantAllocation>();
+                        h += 24f + (tenants.Count == 0 ? 24f : tenants.Count * 22f);
+                    }
+                }
+            }
         }
 
         return h;
@@ -3565,6 +3626,9 @@ public static partial class IPAMOverlay
         _serverEditPopupContentH = Mathf.Max(_serverEditPopupContentH, contentPy + 16f);
         _serverEditPopupScroll = SafeConsumeManualScrollPosition(_serverEditPopupScroll);
         SafeEndScrollView();
+
+        // Some IL2CPP IMGUI paths leave GUI.enabled false after nested scroll / control draws.
+        GUI.enabled = true;
 
         if (!string.IsNullOrEmpty(err))
         {
@@ -3710,7 +3774,7 @@ public static partial class IPAMOverlay
             // Prefix info line
             if (!string.IsNullOrEmpty(cidr))
             {
-                GUI.Label(new Rect(px, py, iw, 18f), $"Contract subnet:  {cidr}", _stHint);
+                GUI.Label(new Rect(px, py, iw, 18f), $"Customer subnet:  {cidr}", _stHint);
                 py += 20f;
             }
 
@@ -3768,57 +3832,73 @@ public static partial class IPAMOverlay
                 py += 40f;
             }
 
-            // Tenancy Mode
+            // Advanced server options
             py += 4f;
-            DrawTintedRect(new Rect(px, py, iw, 22f), new Color(0.08f, 0.10f, 0.14f, 0.7f));
-            GUI.Label(new Rect(px + 8f, py, iw - 16f, 22f), "Server Mode", _stSectionTitle);
-            py += 26f;
-
             var tenancy = IpamDataStore.GetTenancyForServer(srv.GetInstanceID());
             var currentMode = tenancy?.Mode ?? "Dedicated";
             var isDedicated = currentMode == "Dedicated";
-
-            if (ImguiButtonOnce(new Rect(px, py, 80f, 22f), "Dedicated", 940311, isDedicated ? _stPrimaryBtn : _stMutedBtn))
+            var advancedRect = new Rect(px, py, iw, 22f);
+            DrawTintedRect(advancedRect, new Color(0.08f, 0.10f, 0.14f, 0.7f));
+            var advancedTitle = _serverDetailAdvancedOpen
+                ? "Advanced server options ▾"
+                : $"Advanced server options ▸  ({(isDedicated ? "1 customer per server" : "shared between customers")})";
+            GUI.Label(new Rect(px + 8f, py, iw - 16f, 22f), advancedTitle, _stSectionTitle);
+            if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && advancedRect.Contains(Event.current.mousePosition))
             {
-                IpamDataStore.TrySetServerMode(srv.GetInstanceID(), "Dedicated", 1, out _);
+                _serverDetailAdvancedOpen = !_serverDetailAdvancedOpen;
+                _serverEditPopupContentH = EstimateServerEditPopupContentHeight();
+                Event.current.Use();
             }
 
-            if (ImguiButtonOnce(new Rect(px + 88f, py, 80f, 22f), "Shared", 940312, !isDedicated ? _stPrimaryBtn : _stMutedBtn))
+            py += 26f;
+            if (!_serverDetailAdvancedOpen)
             {
-                IpamDataStore.TrySetServerMode(srv.GetInstanceID(), "Shared", 4, out _);
+                GUI.Label(new Rect(px, py, iw, 22f), "Open this only if you need shared-tenancy behavior or tenant-level cleanup.", _stHint);
+                py += 26f;
             }
-
-            GUI.Label(new Rect(px + 176f, py + 2f, iw - 180f, 20f),
-                isDedicated ? "1 customer per server" : "Multiple customers can share this server",
-                _stHint);
-            py += 28f;
-
-            // Tenant list (only for Shared mode)
-            if (!isDedicated)
+            else
             {
-                var tenants = tenancy?.Tenants ?? new List<TenantAllocation>();
-                GUI.Label(new Rect(px, py, iw, 22f), $"Allocated Tenants ({tenants.Count}/{tenancy?.MaxTenants ?? 4})", _stSectionTitle);
-                py += 24f;
-
-                if (tenants.Count == 0)
+                if (ImguiButtonOnce(new Rect(px, py, 80f, 22f), "Dedicated", 940311, isDedicated ? _stPrimaryBtn : _stMutedBtn))
                 {
-                    GUI.Label(new Rect(px, py, iw, 22f), "No tenants allocated. Use the Customers tab to assign.", _stMuted);
-                    py += 24f;
+                    IpamDataStore.TrySetServerMode(srv.GetInstanceID(), "Dedicated", 1, out _);
                 }
-                else
-                {
-                    for (var ti = 0; ti < tenants.Count; ti++)
-                    {
-                        var t = tenants[ti];
-                        DrawTintedRect(new Rect(px, py, iw, 20f), ti % 2 == 0 ? new Color(0.05f, 0.06f, 0.08f, 0.4f) : new Color(0.04f, 0.05f, 0.06f, 0.3f));
-                        GUI.Label(new Rect(px + 4f, py, iw - 80f, 20f), $"{t.CustomerName} (ID: {t.CustomerId})", _stTableCell);
-                        GUI.Label(new Rect(px + iw - 80f, py, 50f, 20f), $"{t.AllocatedIps}/{t.MaxIps} IP", _stTableCell);
-                        if (ImguiButtonOnce(new Rect(px + iw - 24f, py + 1f, 22f, 18f), "×", 57 + ti, _stMutedBtn))
-                        {
-                            IpamDataStore.TryRemoveTenant(srv.GetInstanceID(), t.CustomerId, out _);
-                        }
 
-                        py += 22f;
+                if (ImguiButtonOnce(new Rect(px + 88f, py, 80f, 22f), "Shared", 940312, !isDedicated ? _stPrimaryBtn : _stMutedBtn))
+                {
+                    IpamDataStore.TrySetServerMode(srv.GetInstanceID(), "Shared", 4, out _);
+                }
+
+                GUI.Label(new Rect(px + 176f, py + 2f, iw - 180f, 20f),
+                    isDedicated ? "1 customer per server" : "Multiple customers can share this server",
+                    _stHint);
+                py += 28f;
+
+                if (!isDedicated)
+                {
+                    var tenants = tenancy?.Tenants ?? new List<TenantAllocation>();
+                    GUI.Label(new Rect(px, py, iw, 22f), $"Allocated tenants ({tenants.Count}/{tenancy?.MaxTenants ?? 4})", _stSectionTitle);
+                    py += 24f;
+
+                    if (tenants.Count == 0)
+                    {
+                        GUI.Label(new Rect(px, py, iw, 22f), "No tenants allocated. Use the Customers tab to assign them.", _stMuted);
+                        py += 24f;
+                    }
+                    else
+                    {
+                        for (var ti = 0; ti < tenants.Count; ti++)
+                        {
+                            var t = tenants[ti];
+                            DrawTintedRect(new Rect(px, py, iw, 20f), ti % 2 == 0 ? new Color(0.05f, 0.06f, 0.08f, 0.4f) : new Color(0.04f, 0.05f, 0.06f, 0.3f));
+                            GUI.Label(new Rect(px + 4f, py, iw - 80f, 20f), $"{t.CustomerName} (ID: {t.CustomerId})", _stTableCell);
+                            GUI.Label(new Rect(px + iw - 80f, py, 50f, 20f), $"{t.AllocatedIps}/{t.MaxIps} IP", _stTableCell);
+                            if (ImguiButtonOnce(new Rect(px + iw - 24f, py + 1f, 22f, 18f), "×", 57 + ti, _stMutedBtn))
+                            {
+                                IpamDataStore.TryRemoveTenant(srv.GetInstanceID(), t.CustomerId, out _);
+                            }
+
+                            py += 22f;
+                        }
                     }
                 }
             }

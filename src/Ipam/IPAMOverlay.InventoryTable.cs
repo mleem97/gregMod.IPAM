@@ -553,8 +553,7 @@ public static partial class IPAMOverlay
                 BumpCell(4, eolS);
             }
 
-            var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
-            BumpCell(5, hasIp ? "Assigned" : "No address");
+            BumpCell(5, GetIpv4AssignmentStatusLabel(ip));
         }
 
         for (var i = 0; i < 6; i++)
@@ -630,17 +629,19 @@ public static partial class IPAMOverlay
         string col5,
         string col6,
         float cardWidth,
-        bool suppressPointer = false)
+        bool suppressPointer = false,
+        Rect? blockedClickRect = null)
     {
         var id = GUIUtility.GetControlID(controlHint, FocusType.Passive, rowRect);
         var e = Event.current;
         var bgBase = altStripe ? _texRowB : _texRowA;
         GetTableColumnWidths(cardWidth, out var w0, out var w1, out var w2, out var w3, out var w4, out var w5);
+        var blocksClick = blockedClickRect.HasValue && blockedClickRect.Value.Contains(e.mousePosition);
 
         switch (e.GetTypeForControl(id))
         {
             case EventType.MouseDown:
-                if (!suppressPointer && e.button == 0 && rowRect.Contains(e.mousePosition))
+                if (!suppressPointer && !blocksClick && e.button == 0 && rowRect.Contains(e.mousePosition))
                 {
                     GUIUtility.hotControl = id;
                     e.Use();
@@ -655,7 +656,7 @@ public static partial class IPAMOverlay
 
                 GUIUtility.hotControl = 0;
                 e.Use();
-                if (!suppressPointer && rowRect.Contains(e.mousePosition))
+                if (!suppressPointer && !blocksClick && rowRect.Contains(e.mousePosition))
                 {
                     return true;
                 }

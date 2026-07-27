@@ -173,6 +173,11 @@ public static partial class IPAMOverlay
     {
         var y = CardPad;
         y += SectionTitleH + 2f + 7f;
+        if (rowCount == 0)
+        {
+            y += 48f;
+        }
+
         y += SectionTitleH + 4f + TableHeaderH + rowCount * TableRowH + 48f + CardPad;
         return Mathf.Max(280f, y);
     }
@@ -488,6 +493,15 @@ public static partial class IPAMOverlay
 
         EnsureCustomersTabCustomerListRows();
         var rows = CustomersTabCustomerListRows;
+        if (rows.Count == 0)
+        {
+            GUI.Label(
+                new Rect(x0, y, cardW, 44f),
+                "No customers with contract-linked servers yet. Start by opening a customer and using Add server to place one on the recommended onboarding path.",
+                _stMuted);
+            y += 48f;
+        }
+
         for (var i = 0; i < rows.Count; i++)
         {
             var entry = rows[i];
@@ -540,7 +554,7 @@ public static partial class IPAMOverlay
         y += 8f;
         GUI.Label(
             new Rect(x0, y, cardW, 44f),
-            "Click a customer to open its server list. Use Add server to attach an unplaced / unassigned server from the scene, then configure IPv4 in the bottom panel.",
+            "Click a customer to open its servers. Recommended path: Add server, assign it to that customer, then let the bottom panel auto-assign IPv4.",
             _stHint);
         y += 48f;
     }
@@ -624,7 +638,7 @@ public static partial class IPAMOverlay
                 var hasIp = !string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0";
                 var ipRaw = string.IsNullOrWhiteSpace(ip) ? "—" : ip;
                 ipCol = CellTextForCol(3, ipRaw, cardW);
-                status = CellTextForCol(5, hasIp ? "Assigned" : "No address", cardW);
+                status = CellTextForCol(5, GetIpv4AssignmentStatusLabel(ip), cardW);
                 cust = CellTextForCol(1, GetCustomerDisplayName(server), cardW);
                 eolCol = TableEolCellDisplay(server, cardW);
                 var dispRaw = DeviceInventoryReflection.GetDisplayName(server);
@@ -662,7 +676,7 @@ public static partial class IPAMOverlay
 
         GUI.Label(
             new Rect(x0, y, cardW, 44f),
-            "Select servers here, then use the bottom panel to assign IPv4 (and customer, if needed). Add server opens a picker for servers that are not on a contract yet.",
+            "This is the beginner-friendly assignment flow. Select servers here, then use the bottom panel for auto IPv4 or manual subnet work. Add server is the recommended first step for servers without a customer yet.",
             _stHint);
         y += 48f;
     }
@@ -733,7 +747,7 @@ public static partial class IPAMOverlay
 
         var cb = GameSubnetHelper.FindCustomerBaseByCustomerId(_customersTabAddServerTargetCustomerId);
         var hdr = cb != null
-            ? $"Choose a server, then assign it to customer #{_customersTabAddServerTargetCustomerId} — {Trunc(GetCustomerName(cb), 40)}"
+            ? $"Recommended path: choose a server, then assign it to customer #{_customersTabAddServerTargetCustomerId} — {Trunc(GetCustomerName(cb), 40)}"
             : $"Choose a server for customer #{_customersTabAddServerTargetCustomerId}";
         GUI.Label(new Rect(x, y + 28f, innerW, 48f), hdr, _stMuted);
         y += 82f;
@@ -743,13 +757,13 @@ public static partial class IPAMOverlay
         {
             GUI.Label(
                 new Rect(x, y, innerW, 80f),
-                "No eligible servers in the scene (every server already appears on a customer contract, or the game has not exposed any unassigned rack servers yet).\n\nPlace a server in the rack first, then try again.",
+                "No eligible servers in the scene yet.\n\nEither every server already belongs to a customer, or no unassigned rack server is available. Place a server in a rack first, then try again.",
                 _stHint);
             y += 88f;
         }
         else
         {
-            GUI.Label(new Rect(x, y, innerW, 22f), "Unassigned servers (scene)", _stSectionTitle);
+            GUI.Label(new Rect(x, y, innerW, 22f), "Servers without customer assignment", _stSectionTitle);
             y += 26f;
 
             var listH = Mathf.Max(220f, _customersTabAddServerWindowRect.height - y - 96f);
@@ -792,7 +806,7 @@ public static partial class IPAMOverlay
                         && cb != null
                         && CustomersTabAddServerCandidateBuffer.Count > 0;
         GUI.enabled = canAssign;
-        if (ImguiButtonOnce(new Rect(x, assignY, assignW, 32f), "Assign & configure", 92302, _stPrimaryBtn))
+        if (ImguiButtonOnce(new Rect(x, assignY, assignW, 32f), "Assign + auto IPv4", 92302, _stPrimaryBtn))
         {
             var sel = FindServerByInstanceId(_customersTabAddServerSelectedInstanceId);
             if (sel != null && cb != null && TrySetServerCustomer(sel, cb))

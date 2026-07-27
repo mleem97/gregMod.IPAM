@@ -26,8 +26,8 @@ internal static class InputSystemMouseBlockPatches
         applied += TryPatchProperty(harmonyInstance, typeof(ButtonControl), "wasReleasedThisFrame", typeof(MouseWasReleasedPatch));
         applied += TryPatchProperty(harmonyInstance, typeof(ButtonControl), "isPressed", typeof(MouseIsPressedPatch));
 
-        // Delta patch (Vector2Control.ReadValue — may not resolve on all IL2CPP builds)
-        var deltaPatched = TryPatchMethod(harmonyInstance, typeof(Vector2Control), "ReadValue", typeof(MouseDeltaStripPatch));
+        // Delta patch: patch the declared generic base implementation rather than an inherited wrapper on Vector2Control.
+        var deltaPatched = TryPatchMethod(harmonyInstance, typeof(InputControl<Vector2>), "ReadValue", typeof(MouseDeltaStripPatch));
         if (deltaPatched) applied++; else skipped++;
 
         ModReleaseLog.HarmonyPatch($"InputSystemMouseBlockPatches: {applied} applied, {skipped} skipped (optional)", true);
@@ -66,7 +66,7 @@ internal static class InputSystemMouseBlockPatches
     {
         try
         {
-            var method = targetType.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+            var method = AccessTools.DeclaredMethod(targetType, methodName);
             if (method == null)
             {
                 ModReleaseLog.Warning($"InputSystemMouseBlockPatches: {targetType.Name}.{methodName}() not found, skipping (optional delta blocker)");

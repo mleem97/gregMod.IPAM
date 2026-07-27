@@ -6,17 +6,17 @@ All compilation units use the root namespace **`GregModIPAM`** (see `gregMod.IPA
 
 | Folder | Role |
 |--------|------|
-| **`Core/`** | MelonLoader entry (`MelonMod`, `MelonModInfo`), injected `MonoBehaviour`, save scope, global usings, nullable shims. |
-| **`Networking/`** | DHCP + Harmony on `SetIP`, flow gate, game subnet/customer caches, IPv4 helpers, server-customer binding, reachability, route math, rack helpers, network health. |
-| **`Config/`** | Per-device config model, registry, disk persistence, stable device IDs. |
-| **`Ipam/`** | IPAM IMGUI overlay (`IPAMOverlay` partials), device display reflection, menu occlusion, license toggles, naming engine, nav icons, data stores. |
-| **`Patches/`** | Standalone Harmony patches (legacy input block, UI cancel / Input System, escape/mouse block, SetIP keypad DHCP button). |
-| **`Input/`** | Suspend game `PlayerInput` while overlays are open, legacy axis reset, IMGUI raycast blocking. |
-| **`Diagnostics/`** | File + Melon logging helpers (debug log, release log). |
+| **`src/Core/`** | MelonLoader entry (`MelonMod`, `MelonModInfo`), injected `MonoBehaviour`, save scope, global usings, nullable shims. |
+| **`src/Networking/`** | DHCP + Harmony on `SetIP`, flow gate, game subnet/customer caches, IPv4 helpers, server-customer binding, reachability, route math, rack helpers, network health. |
+| **`src/Config/`** | Per-device config model, registry, disk persistence, stable device IDs. |
+| **`src/Ipam/`** | IPAM IMGUI overlay (`IPAMOverlay` partials), device display reflection, menu occlusion, license toggles, naming engine, nav icons, data stores. |
+| **`src/Patches/`** | Standalone Harmony patches (legacy input block, UI cancel / Input System, escape/mouse block, SetIP keypad DHCP button). |
+| **`src/Input/`** | Suspend game `PlayerInput` while overlays are open, legacy axis reset, IMGUI raycast blocking. |
+| **`src/Diagnostics/`** | File + Melon logging helpers (debug log, release log). |
 
 ## File map
 
-### Core/
+### src/Core/
 | File | Role |
 |------|------|
 | `Main.cs` | MelonLoader entry point (`GregModIPAMMod`), IL2CPP type registration, Harmony patching, keyboard shortcuts (P, Ctrl+L), injected `GregModIPAMBehaviour` MonoBehaviour. |
@@ -25,7 +25,7 @@ All compilation units use the root namespace **`GregModIPAM`** (see `gregMod.IPA
 | `Il2CppGlobalUsings.cs` | Global using directives for Il2Cpp interop. |
 | `NullableAttributes.cs` | Polyfill nullable attributes for .NET 6. |
 
-### Networking/
+### src/Networking/
 | File | Role |
 |------|------|
 | `DHCPManager.cs` | DHCP auto-assign: Harmony patches on `SetIP` (server) and flow pause gate. Assigns IPs from scope. |
@@ -43,7 +43,7 @@ All compilation units use the root namespace **`GregModIPAM`** (see `gregMod.IPA
 | `IpamFreeSpace.cs` | Free IP space calculation within prefixes. |
 | `IpamPrefixAvailability.cs` | Prefix availability checking. |
 
-### Config/
+### src/Config/
 | File | Role |
 |------|------|
 | `DeviceConfigModels.cs` | Data models for per-device router/switch config. |
@@ -51,7 +51,7 @@ All compilation units use the root namespace **`GregModIPAM`** (see `gregMod.IPA
 | `DeviceConfigPersistence.cs` | JSON read/write for device config files. |
 | `DeviceStableId.cs` | Stable device ID generation (survives scene reloads). |
 
-### Ipam/
+### src/Ipam/
 | File | Role |
 |------|------|
 | `IPAMOverlay.cs` | Hub: all static fields, layout constants, `IsVisible`, `Draw()` (modal blocker → main window → IOPS window). |
@@ -80,7 +80,7 @@ All compilation units use the root namespace **`GregModIPAM`** (see `gregMod.IPA
 | `IpamDataStore.cs` | In-memory IPAM prefix/assignment data. |
 | `RackDataStore.cs` | In-memory rack placement data. |
 
-### Patches/
+### src/Patches/
 | File | Role |
 |------|------|
 | `LegacyInputBlockPatches.cs` | Blocks legacy input axes while IPAM is open. |
@@ -89,7 +89,7 @@ All compilation units use the root namespace **`GregModIPAM`** (see `gregMod.IPA
 | `InputSystemMouseBlockPatches.cs` | Blocks mouse input propagation while IPAM is open. |
 | `SetIpKeypadDhcpButton.cs` | Adds DHCP button to SetIP keypad UI. |
 
-### Input/
+### src/Input/
 | File | Role |
 |------|------|
 | `GameInputSuppression.cs` | Suspends game `PlayerInput` actions while overlays are open. |
@@ -97,7 +97,7 @@ All compilation units use the root namespace **`GregModIPAM`** (see `gregMod.IPA
 | `LegacyInputAxes.cs` | Resets legacy input axes to zero. |
 | `UiRaycastBlocker.cs` | Blocks IMGUI raycasts so game UI doesn't eat clicks under IPAM. |
 
-### Diagnostics/
+### src/Diagnostics/
 | File | Role |
 |------|------|
 | `ModDebugLog.cs` | Writes debug log (`gregModIPAM-debug.log`) next to MelonLoader's `Latest.log`. |

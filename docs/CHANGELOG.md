@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.6
+
+- Updated game interop references for Data Center on Unity 6000.4.12f1 / game version 1.1.0
+- Updated the in-game tutorial version label
+
 ## v0.7.5
 
 - Fixed inline modal input routing so popup controls receive IMGUI mouse clicks again
