@@ -25,6 +25,8 @@ public class GregModIPAMMod : MelonMod
 
     private static MelonPreferences_Category _prefs;
     private static MelonPreferences_Entry<float> _prefUiFontScale;
+    private static MelonPreferences_Entry<string> _prefToggleKey;
+    private static Key _toggleKey = Key.P;
     private static bool _prefSavePending;
     private static float _prefSaveDueAtRealtime;
 
@@ -39,14 +41,35 @@ public class GregModIPAMMod : MelonMod
             ModReleaseLog.Bootstrap();
 
             ModReleaseLog.Info("gregMod.IPAM initializing...");
+            if (GregHost.HasCore)
+            {
+                try
+                {
+                    CoreRegisterMenu();
+                }
+                catch (System.Exception ex) { ModLogging.Warning($"IPAM menu registry failed: {ex.Message}"); }
+                try
+                {
+                    CoreRegisterExtras();
+                }
+                catch (System.Exception ex) { ModLogging.Warning($"IPAM hub registration failed: {ex.Message}"); }
+            }
             ModReleaseLog.Config("ModGuid", ModGuid);
             ModReleaseLog.Config("PrefCategoryId", PrefCategoryId);
             ModReleaseLog.Config("PrefCategoryName", PrefCategoryName);
 
             DeviceConfigRegistry.BootstrapLoadDisk();
-
             _prefs = MelonPreferences.CreateCategory(PrefCategoryId, PrefCategoryName);
             _prefUiFontScale = _prefs.CreateEntry(PrefUiFontScaleKey, 1f, "IPAM UI font scale");
+            _prefToggleKey = _prefs.CreateEntry("ToggleKey", "P", "Hotkey to open/close the IPAM window");
+            try
+            {
+                if (System.Enum.TryParse<Key>(_prefToggleKey.Value, true, out var k) && k != Key.None)
+                    _toggleKey = k;
+                else
+                    ModLogging.Warning($"IPAM: Unknown ToggleKey '{_prefToggleKey.Value}', defaulting to P.");
+            }
+            catch { }
             IPAMOverlay.UiFontScale = _prefUiFontScale.Value;
             IPAMOverlay.UiFontScaleChanged += OnUiFontScaleChanged;
             ModReleaseLog.Pref("UiFontScale", _prefUiFontScale.Value.ToString("F2"));
@@ -79,7 +102,7 @@ public class GregModIPAMMod : MelonMod
             ModReleaseLog.Feature("Network Health Score", "Available");
 
             LoggerInstance.Msg(
-                "gregMod.IPAM loaded. P = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles.");
+                $"gregMod.IPAM loaded. {_toggleKey} = IPAM, Ctrl+L = assign all servers, title bar DHCP/IPAM toggles.");
             ModReleaseLog.Info("gregMod.IPAM loaded successfully");
 
             if (!string.IsNullOrEmpty(ModDebugLog.DiagnosticLogPath))
@@ -129,30 +152,81 @@ public class GregModIPAMMod : MelonMod
         _prefSaveDueAtRealtime = Time.unscaledTime + PrefSaveDebounceSeconds;
     }
 
+    private static void CoreRegisterMenu()
+    {
+        gregCore.UI.GregMenuRegistry.RegisterMenu("ipam",
+            new gregCore.UI.GregMenuOptions
+            {
+                LockCamera = true,
+                LockMovement = true,
+                LockInteract = true,
+                ShowCursor = true,
+            });
+    }
+
+    private static void CoreSetOpen(bool open)
+    {
+        gregCore.UI.GregMenuRegistry.SetOpen("ipam", open);
+    }
+
+    // Mod-Vertrag + Tasten-HUD + Oeffner fuers F1-Hub. Nur mit gregCore
+    // aufrufen (eigene Methode wegen JIT-Trennung ohne gregCore-DLL).
+    private static void CoreRegisterExtras()
+    {
+        gregCore.Core.Mods.GregModRegistry.Register(
+            "gregMod.IPAM", "IPAM", "0.7.6",
+            new string[] { "ipam" });
+        gregCore.UI.GregHudRegistry.Register("ipam", _toggleKey.ToString(), "IPAM");
+        gregCore.UI.GregMenuRegistry.RegisterOpener("ipam", () =>
+        {
+            try { IPAMOverlay.IsVisible = !IPAMOverlay.IsVisible; } catch { }
+        });
+    }
+
+    internal static void SetMenuOpen(bool open)
+    {
+        // Zentral (gregCore) oder lokal (standalone) — nie beides.
+        if (GregHost.HasCore)
+        {
+            try { CoreSetOpen(open); } catch { }
+        }
+        else
+        {
+            try { ModLocalGuard.SetLocked(open); } catch { }
+        }
+    }
+
     public override void OnUpdate()
     {
         // Melon OnUpdate runs before most Unity behaviours — sync uGUI blocker early so pause menus do not eat the first click under IPAM.
         UiRaycastBlocker.SetBlocking(IPAMOverlay.IsVisible);
 
-        // Keep input suppression active for a short window after overlay closes via Escape
-        // so the game does not see the same Escape press and open the pause menu.
-        if (!IPAMOverlay.IsVisible && IPAMOverlay.IsInEscapeCooldown())
+        // Keep the central input lock held for a short window after overlay
+        // closes via Escape so the game does not see the same Escape press
+        // and open the pause menu. Standalone: lokaler Guard.
+        if (!IPAMOverlay.IsVisible)
         {
-            GameInputSuppression.SetSuppressed(true);
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
+            try
+            {
+                if (GregHost.HasCore)
+                    CoreSetOpen(IPAMOverlay.IsInEscapeCooldown());
+                else
+                    ModLocalGuard.SetLocked(IPAMOverlay.IsInEscapeCooldown());
+            }
+            catch { }
         }
-        else if (!IPAMOverlay.IsVisible && GameInputSuppression.IsActive)
+        else if (!GregHost.HasCore)
         {
-            GameInputSuppression.SetSuppressed(false);
+            try { ModLocalGuard.Tick(); } catch { }
         }
 
         // Run before default Unity script order so keys are handled before many game scripts read the same keys.
         var kb = Keyboard.current;
+        // Toggle-Key oeffnet IPAM — aber NICHT wenn das Pause-Menue aktiv ist
         if (kb != null)
         {
             // P toggles IPAM — but NOT while pause menu is active
-            if (kb.pKey.wasPressedThisFrame && !IPAMOverlay.IsVisible && !IPAMOverlay.IsPauseMenuActive())
+            if (kb[_toggleKey].wasPressedThisFrame && !IPAMOverlay.IsVisible && !IPAMOverlay.IsPauseMenuActive())
             {
                 IPAMOverlay.IsVisible = true;
                 Cursor.lockState = CursorLockMode.None;
@@ -171,17 +245,10 @@ public class GregModIPAMMod : MelonMod
             return;
         }
 
-        // Force cursor visible and unlocked every frame while IPAM is open
-        // (game may override cursor state in its own Update/LateUpdate).
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
-
-        IPAMOverlay.TickIpamGameInputSuppression();
         FlushPendingPreferencesIfDue();
     }
 
-    private static void FlushPendingPreferencesIfDue()
-    {
+    private static void FlushPendingPreferencesIfDue()    {
         if (!_prefSavePending || Time.unscaledTime < _prefSaveDueAtRealtime)
         {
             return;
