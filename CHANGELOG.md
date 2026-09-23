@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/). Version: siehe
 
 ### Added
 
+- Techniker-Dispatch: „Tech“-Button an defekten Servern + Bulk-Panel („Send to all broken devices“, Queue-Status) — nutzt die Vanilla-Dispatch-Pfade.
 - Router-Verwaltung (Devices → Routers): Subnetze/Routen ansehen, hinzufügen, entfernen, Reapply, Same-ASN-Sync.
 - Firewall-Verwaltung (Devices → Firewall): Regeln ansehen, hinzufügen, entfernen, Cluster-Sync/Broadcast, Traffic-Test.
 - Harte Vergabe-Sperren: Netzwerk- (.0) und Broadcast-Adresse (.255) werden nie vergeben (alle Pfade) + `ExcludeIps`-Pref für eigene Ausschlüsse.

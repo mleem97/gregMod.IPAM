@@ -1548,7 +1548,11 @@ public static partial class IPAMOverlay
                 const float devicesPaginationBarH = 28f;
                 var yd = CardPad + SectionTitleH + 2f + 7f + SectionTitleH + 4f + DevicesTabSearchBarH + TableHeaderH
                     + bodyRows * TableRowH + devicesPaginationBarH + CardPad;
-                if (_devicesSub == DevicesSubSection.Routers)
+                if (_devicesSub == DevicesSubSection.Servers)
+                {
+                    yd += 8f + TechnicianPanelHeight();
+                }
+                else if (_devicesSub == DevicesSubSection.Routers)
                 {
                     yd += RouterDetailHeight();
                 }
@@ -2128,6 +2132,9 @@ public static partial class IPAMOverlay
                 ModReleaseLog.Info($"Server toggle: {DeviceInventoryReflection.GetDisplayName(server)} -> {(isActiveSv ? "OFF" : "ON")}");
             }
 
+            // Technician dispatch (only when the device needs work).
+            DrawServerTechButton(r, server);
+
             y += TableRowH;
         }
 
@@ -2184,6 +2191,9 @@ public static partial class IPAMOverlay
         y += 28f;
 
         DrawInventoryPageSizePopup(menuDropRectSv, ref _ipamDevicesServerPageMenuOpen, 9214, 9215, 9216);
+
+        y += 8f;
+        DrawTechnicianPanel(ref y, x0, cardW);
     }
 
     private static void CollectDashboardStats(
