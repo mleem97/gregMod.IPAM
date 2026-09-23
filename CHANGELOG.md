@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/). Version: siehe
 
 ### Added
 
+- Server-Auswahl: Ctrl+A (Cmd+A) wählt alle angezeigten Server (Devices-, IP- und Kunden-Liste, aktuelle Seite); Shift-Klick-Bereich startet jetzt am zuletzt per Ctrl gewählten Server.
+- Naming: „Reset saved seq counter“-Button (persistierte Zähler zurücksetzen).
 - `ExcludeGateway`-Pref (Default an) + Toggle in DHCP Scopes: DHCP vergibt nie .1 auf /24 oder kürzer, auch in privaten Netzen.
 - Konfigurierbarer Toggle-Hotkey (`ToggleKey`-Pref, Default P), Tasten-HUD-Eintrag und Oeffner fuers F1-Hub (nur mit gregCore).
 - Einheitliches Open-Source-Layout (README, Docs, Badges) nach gregCore-Vorbild.

@@ -473,6 +473,32 @@ internal static class NamingConventionStore
         Save();
     }
 
+    /// <summary>Removes all persisted seq counters ("seq:*"). Returns the removed count.</summary>
+    internal static int ResetSeqCounters()
+    {
+        var root = EnsureLoaded();
+        var doomed = new System.Collections.Generic.List<string>();
+        foreach (var kv in root.CounterState)
+        {
+            if (kv.Key != null && kv.Key.StartsWith("seq:", System.StringComparison.Ordinal))
+            {
+                doomed.Add(kv.Key);
+            }
+        }
+
+        foreach (var key in doomed)
+        {
+            root.CounterState.Remove(key);
+        }
+
+        if (doomed.Count > 0)
+        {
+            Save();
+        }
+
+        return doomed.Count;
+    }
+
     internal static NamingCounterScope ParseScope(string s)
     {
         return (s ?? "").Trim().ToLowerInvariant() switch

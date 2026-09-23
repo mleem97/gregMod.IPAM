@@ -823,6 +823,7 @@ public static partial class IPAMOverlay
         if (ctrl)
         {
             ActivateServerRow(server, true);
+            _serverRangeAnchorInstanceId = server.GetInstanceID();
             DHCPManager.ClearLastSetIpError();
             if (_selectedServerInstanceIds.Count == 1)
             {
@@ -849,6 +850,93 @@ public static partial class IPAMOverlay
                 break;
             }
         }
+    }
+
+    /// <summary>Builds the displayed page rows from an index scratch list.</summary>
+    private static List<Server> BuildServerPageRowList(List<int> scratch, List<Server> buffer, int pageStart, int pageEnd)
+    {
+        var rows = new List<Server>();
+        if (scratch == null || buffer == null)
+        {
+            return rows;
+        }
+
+        for (var pi = pageStart; pi < pageEnd && pi < scratch.Count; pi++)
+        {
+            var rowIdx = scratch[pi];
+            if (rowIdx >= 0 && rowIdx < buffer.Count)
+            {
+                var server = buffer[rowIdx];
+                if (server != null)
+                {
+                    rows.Add(server);
+                }
+            }
+        }
+
+        return rows;
+    }
+
+    /// <summary>Page-slice overload (buffer is already the full row list).</summary>
+    private static void HandleServerListSelectAllKey(List<Server> buffer, int pageStart, int pageEnd)
+    {
+        var rows = new List<Server>();
+        if (buffer != null)
+        {
+            for (var i = pageStart; i < pageEnd && i < buffer.Count; i++)
+            {
+                var server = buffer[i];
+                if (server != null)
+                {
+                    rows.Add(server);
+                }
+            }
+        }
+
+        HandleServerListSelectAllKey(rows);
+    }
+
+    /// <summary>
+    /// Ctrl+A (or Cmd+A): select all rows of the currently displayed server
+    /// list. Skipped while a text field has focus (their own Ctrl+A wins).
+    /// Call once per drawn list, before its row loop.
+    /// </summary>
+    private static void HandleServerListSelectAllKey(List<Server> displayedRows)
+    {
+        var e = Event.current;
+        if (e == null || e.type != EventType.KeyDown)
+        {
+            return;
+        }
+
+        if (!(e.control || e.command) || e.keyCode != KeyCode.A)
+        {
+            return;
+        }
+
+        if (_ipamFormFieldFocus != IpamFormFocusNone)
+        {
+            return;
+        }
+
+        if (displayedRows == null || displayedRows.Count == 0)
+        {
+            return;
+        }
+
+        ClearSwitchSelection();
+        _selectedServerInstanceIds.Clear();
+        foreach (var s in displayedRows)
+        {
+            if (s != null)
+            {
+                _selectedServerInstanceIds.Add(s.GetInstanceID());
+            }
+        }
+
+        UpdateAnchorServerForDetail();
+        DHCPManager.ClearLastSetIpError();
+        e.Use();
     }
 
     /// <summary>
@@ -1942,6 +2030,9 @@ public static partial class IPAMOverlay
         var svPageStart = _ipamDevicesServerPageIndex * ps;
         var svPageEnd = totalSv == 0 ? 0 : Mathf.Min(totalSv, svPageStart + ps);
 
+        HandleServerListSelectAllKey(BuildServerPageRowList(
+            DeviceTabFilteredRowScratch, SortedServersBuffer, svPageStart, svPageEnd));
+
         for (var pi = svPageStart; pi < svPageEnd; pi++)
         {
             var rowIdx = DeviceTabFilteredRowScratch[pi];
@@ -2684,6 +2775,8 @@ public static partial class IPAMOverlay
         ClampIpamIpAddressPagingState(totalRows);
         var pageStart = _ipamIpAddressPageIndex * _ipamIpAddressPageSize;
         var pageEnd = totalRows == 0 ? 0 : Mathf.Min(totalRows, pageStart + _ipamIpAddressPageSize);
+
+        HandleServerListSelectAllKey(ipViewRows, pageStart, pageEnd);
 
         for (var pageI = pageStart; pageI < pageEnd; pageI++)
         {

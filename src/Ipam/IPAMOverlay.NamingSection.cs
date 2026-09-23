@@ -320,6 +320,16 @@ public static partial class IPAMOverlay
             _stHint);
         py += 34f;
 
+        if (ImguiButtonOnce(new Rect(px, py, 190f, 22f), "Reset saved seq counter", 9087, _stMutedBtn))
+        {
+            var removed = NamingConventionStore.ResetSeqCounters();
+            _inlineAssignError = removed > 0
+                ? $"Saved seq counter reset ({removed} scope(s)) — next batch starts at Seq again."
+                : "No saved seq counter — next batch already starts at Seq.";
+        }
+
+        py += 26f;
+
         _inlineNamingDryRun = ImguiToggleOnce(
             new Rect(px, py, 160f, 22f),
             _inlineNamingDryRun,

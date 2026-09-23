@@ -604,6 +604,8 @@ public static partial class IPAMOverlay
             true);
         y += TableHeaderH;
 
+        HandleServerListSelectAllKey(CustomersTabServersBuffer);
+
         for (var i = 0; i < CustomersTabServersBuffer.Count; i++)
         {
             var server = CustomersTabServersBuffer[i];
