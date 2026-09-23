@@ -628,9 +628,209 @@ internal static class IpamWebServer
                 return;
             }
 
+            case "/racks/mounts":
+            {
+                var result = EnqueueMainThread(() =>
+                {
+                    var list = new List<Dictionary<string, object>>();
+                    RackMount[] all = null;
+                    try { all = UnityEngine.Object.FindObjectsOfType<RackMount>(); } catch { }
+                    if (all == null) return (object)list;
+                    foreach (var m in all)
+                    {
+                        if (m == null) continue;
+                        try
+                        {
+                            var go = m.gameObject;
+                            if (go == null || !go.scene.IsValid() || !go.scene.isLoaded) continue;
+                            var row = new Dictionary<string, object>();
+                            try { row["id"] = m.GetInstanceID(); } catch { continue; }
+                            try { row["template"] = m.rackTemplateId ?? ""; } catch { row["template"] = ""; }
+                            try { row["instantiated"] = m.isRackInstantiated; } catch { row["instantiated"] = false; }
+                            try
+                            {
+                                var p = go.transform.position;
+                                row["x"] = Math.Round(p.x, 1);
+                                row["y"] = Math.Round(p.y, 1);
+                                row["z"] = Math.Round(p.z, 1);
+                            }
+                            catch { row["x"] = 0; row["y"] = 0; row["z"] = 0; }
+                            list.Add(row);
+                        }
+                        catch { }
+                    }
+
+                    return (object)list;
+                }, out string error12);
+                if (error12 != null) { WriteJson(res, 503, new { ok = false, error = error12 }); return; }
+                WriteJson(res, 200, result);
+                return;
+            }
+
+            case "/racks/install":
+            {
+                if (method != "POST") { WriteJson(res, 405, new { ok = false, error = "POST required" }); return; }
+                if (body == null || !body.TryGetValue("id", out var idRaw5) || !int.TryParse(idRaw5, out var mountId))
+                {
+                    WriteJson(res, 400, new { ok = false, error = "id required" });
+                    return;
+                }
+
+                body.TryGetValue("cheat", out var cheatRaw);
+                bool.TryParse(cheatRaw, out var cheat);
+                var result = EnqueueMainThread(() =>
+                {
+                    RackMount mount = null;
+                    try
+                    {
+                        foreach (var m in UnityEngine.Object.FindObjectsOfType<RackMount>())
+                        {
+                            if (m == null) continue;
+                            try { if (m.GetInstanceID() == mountId) { mount = m; break; } } catch { }
+                        }
+                    }
+                    catch (Exception ex) { return (object)new { ok = false, error = ex.GetBaseException().Message }; }
+                    if (mount == null) return (object)new { ok = false, error = "mount not found" };
+                    try
+                    {
+                        var routine = mount.InstallRack(cheat, 0, false);
+                        if (routine == null) return (object)new { ok = false, error = "no routine" };
+                        MelonCoroutines.Start(PumpRoutine(routine));
+                        PushLog($"Rack-Aufbau via WebUI (mount {mountId}{(cheat ? ", cheat" : "")})");
+                    }
+                    catch (Exception ex) { return (object)new { ok = false, error = ex.GetBaseException().Message }; }
+                    return (object)new { ok = true };
+                }, out string error13);
+                if (error13 != null) { WriteJson(res, 503, new { ok = false, error = error13 }); return; }
+                WriteJson(res, 200, result);
+                return;
+            }
+
+            case "/racks/list":
+            {
+                var result = EnqueueMainThread(() =>
+                {
+                    var list = new List<Dictionary<string, object>>();
+                    Rack[] all = null;
+                    try { all = UnityEngine.Object.FindObjectsOfType<Rack>(); } catch { }
+                    if (all == null) return (object)list;
+                    foreach (var r in all)
+                    {
+                        if (r == null) continue;
+                        try
+                        {
+                            var go = r.gameObject;
+                            if (go == null || !go.scene.IsValid() || !go.scene.isLoaded) continue;
+                            var row = new Dictionary<string, object>();
+                            try { row["id"] = r.GetInstanceID(); } catch { continue; }
+                            try { row["name"] = go.name ?? ""; } catch { row["name"] = ""; }
+                            try
+                            {
+                                var p = go.transform.position;
+                                row["x"] = Math.Round(p.x, 1);
+                                row["z"] = Math.Round(p.z, 1);
+                            }
+                            catch { row["x"] = 0; row["z"] = 0; }
+                            list.Add(row);
+                        }
+                        catch { }
+                    }
+
+                    return (object)list;
+                }, out string error14);
+                if (error14 != null) { WriteJson(res, 503, new { ok = false, error = error14 }); return; }
+                WriteJson(res, 200, result);
+                return;
+            }
+
+            case "/racks/templates":
+            {
+                var result = EnqueueMainThread(() =>
+                {
+                    var list = new List<Dictionary<string, object>>();
+                    try
+                    {
+                        var templates = RackTemplateStore.LoadAll();
+                        if (templates == null) return (object)list;
+                        foreach (var t in templates)
+                        {
+                            if (t == null) continue;
+                            try
+                            {
+                                list.Add(new Dictionary<string, object>
+                                {
+                                    { "id", t.templateId ?? "" },
+                                    { "price", t.price },
+                                });
+                            }
+                            catch { }
+                        }
+                    }
+                    catch (Exception ex) { return (object)new { ok = false, error = ex.GetBaseException().Message }; }
+                    return (object)list;
+                }, out string error15);
+                if (error15 != null) { WriteJson(res, 503, new { ok = false, error = error15 }); return; }
+                WriteJson(res, 200, result);
+                return;
+            }
+
+            case "/racks/apply-template":
+            {
+                if (method != "POST") { WriteJson(res, 405, new { ok = false, error = "POST required" }); return; }
+                if (body == null || !body.TryGetValue("rackId", out var rackIdRaw) || !int.TryParse(rackIdRaw, out var rackId)
+                    || !body.TryGetValue("templateId", out var templateId) || string.IsNullOrWhiteSpace(templateId))
+                {
+                    WriteJson(res, 400, new { ok = false, error = "rackId + templateId required" });
+                    return;
+                }
+
+                var result = EnqueueMainThread(() =>
+                {
+                    Rack rack = null;
+                    try
+                    {
+                        foreach (var r in UnityEngine.Object.FindObjectsOfType<Rack>())
+                        {
+                            if (r == null) continue;
+                            try { if (r.GetInstanceID() == rackId) { rack = r; break; } } catch { }
+                        }
+                    }
+                    catch (Exception ex) { return (object)new { ok = false, error = ex.GetBaseException().Message }; }
+                    if (rack == null) return (object)new { ok = false, error = "rack not found" };
+                    RackTemplate template = null;
+                    try { template = RackTemplateStore.Load(templateId.Trim()); } catch (Exception ex) { return (object)new { ok = false, error = ex.GetBaseException().Message }; }
+                    if (template == null) return (object)new { ok = false, error = "template not found" };
+                    try
+                    {
+                        var routine = RackTemplateApplier.Apply(rack, template);
+                        if (routine == null) return (object)new { ok = false, error = "no routine" };
+                        MelonCoroutines.Start(PumpRoutine(routine));
+                        PushLog($"Template via WebUI: {templateId.Trim()}");
+                    }
+                    catch (Exception ex) { return (object)new { ok = false, error = ex.GetBaseException().Message }; }
+                    return (object)new { ok = true };
+                }, out string error16);
+                if (error16 != null) { WriteJson(res, 503, new { ok = false, error = error16 }); return; }
+                WriteJson(res, 200, result);
+                return;
+            }
+
             default:
                 WriteJson(res, 404, new { ok = false, error = "unknown api route" });
                 return;
+        }
+    }
+
+    // Il2Cpp-Coroutine über verwaltete Pumpe starten (MoveNext pro Frame).
+    private static System.Collections.IEnumerator PumpRoutine(Il2CppSystem.Collections.IEnumerator routine)
+    {
+        while (true)
+        {
+            bool more = false;
+            try { more = routine.MoveNext(); }
+            catch { yield break; }
+            if (!more) yield break;
+            yield return null;
         }
     }
 }

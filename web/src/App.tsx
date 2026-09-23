@@ -23,7 +23,7 @@ function usePoll<T>(fn: () => Promise<T>, ms: number, deps: unknown[] = []): T |
 }
 
 export default function App() {
-  const [tab, setTab] = useState<'dash' | 'servers' | 'dhcp' | 'logs'>('dash')
+  const [tab, setTab] = useState<'dash' | 'servers' | 'dhcp' | 'racks' | 'logs'>('dash')
   const status = usePoll<Status>(() => api('/api/status'), 3000)
 
   return (
@@ -39,9 +39,9 @@ export default function App() {
           {status && <span className={status.dhcpUnlocked ? 'chip ok' : 'chip'}>DHCP {status.dhcpUnlocked ? 'an' : 'aus'}</span>}
         </div>
         <nav>
-          {(['dash', 'servers', 'dhcp', 'logs'] as const).map((t) => (
+          {(['dash', 'servers', 'dhcp', 'racks', 'logs'] as const).map((t) => (
             <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
-              {{ dash: 'Dashboard', servers: 'Server', dhcp: 'DHCP', logs: 'Logs' }[t]}
+              {{ dash: 'Dashboard', servers: 'Server', dhcp: 'DHCP', racks: 'Racks', logs: 'Logs' }[t]}
             </button>
           ))}
         </nav>
@@ -50,6 +50,7 @@ export default function App() {
         {tab === 'dash' && <Dashboard status={status} />}
         {tab === 'servers' && <Servers />}
         {tab === 'dhcp' && <Dhcp />}
+        {tab === 'racks' && <Racks />}
         {tab === 'logs' && <Logs />}
       </main>
     </div>
@@ -182,6 +183,82 @@ function Dhcp() {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+type Mount = { id: number; template: string; instantiated: boolean; x: number; y: number; z: number }
+type Rack = { id: number; name: string; x: number; z: number }
+type Template = { id: string; price: number }
+
+function Racks() {
+  const [mounts, setMounts] = useState<Mount[]>([])
+  const [racks, setRacks] = useState<Rack[]>([])
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [rackSel, setRackSel] = useState('')
+  const [tplSel, setTplSel] = useState('')
+  const [cheat, setCheat] = useState(false)
+  const [msg, setMsg] = useState('')
+  const reload = useCallback(async () => {
+    try {
+      const [m, r, t] = await Promise.all([
+        api<Mount[]>('/api/racks/mounts'),
+        api<Rack[]>('/api/racks/list'),
+        api<Template[]>('/api/racks/templates'),
+      ])
+      setMounts(m); setRacks(r); setTemplates(t)
+    } catch { /* offline */ }
+  }, [])
+  useEffect(() => { reload(); const t = setInterval(reload, 5000); return () => clearInterval(t) }, [reload])
+
+  const install = async (id: number) => {
+    const r = await api<{ ok: boolean; error?: string }>('/api/racks/install', {
+      method: 'POST', body: JSON.stringify({ id, cheat }),
+    })
+    setMsg(r.ok ? `Aufbau gestartet (Mount ${id})` : r.error ?? 'Fehler')
+    setTimeout(reload, 3000)
+  }
+  const applyTpl = async () => {
+    if (!rackSel || !tplSel) { setMsg('Rack + Template wählen'); return }
+    const r = await api<{ ok: boolean; error?: string }>('/api/racks/apply-template', {
+      method: 'POST', body: JSON.stringify({ rackId: Number(rackSel), templateId: tplSel }),
+    })
+    setMsg(r.ok ? 'Template wird angewendet' : r.error ?? 'Fehler')
+  }
+  const open = mounts.filter((m) => !m.instantiated)
+  return (
+    <div>
+      <div className="toolbar">
+        <label><input type="checkbox" checked={cheat} onChange={(e) => setCheat(e.target.checked)} /> Cheat (ohne Kosten)</label>
+        <button onClick={reload}>Neu laden</button>
+        {msg && <span className="muted">{msg}</span>}
+      </div>
+      <h3>Mounts ({mounts.length}, offen: {open.length})</h3>
+      <table>
+        <thead><tr><th>Position</th><th>Template</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {mounts.map((m) => (
+            <tr key={m.id}>
+              <td>{m.x}, {m.z}</td>
+              <td>{m.template || '—'}</td>
+              <td>{m.instantiated ? 'aufgebaut' : 'offen'}</td>
+              <td>{!m.instantiated && <button onClick={() => install(m.id)}>Aufbauen</button>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <h3>Template anwenden</h3>
+      <div className="toolbar">
+        <select value={rackSel} onChange={(e) => setRackSel(e.target.value)}>
+          <option value="">Rack wählen …</option>
+          {racks.map((r) => <option key={r.id} value={r.id}>{r.name || r.id} ({r.x}, {r.z})</option>)}
+        </select>
+        <select value={tplSel} onChange={(e) => setTplSel(e.target.value)}>
+          <option value="">Template wählen …</option>
+          {templates.map((t) => <option key={t.id} value={t.id}>{t.id} ({t.price})</option>)}
+        </select>
+        <button onClick={applyTpl}>Anwenden</button>
+      </div>
     </div>
   )
 }
