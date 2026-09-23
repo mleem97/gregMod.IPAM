@@ -496,6 +496,41 @@ public static class DHCPManager
         return exclude && RouteMath.IsShortPrefixForGatewayReservation(cidr);
     }
 
+    /// <summary>
+    /// Harte Vergabe-Sperren (immer, unabhängig von Quelle und Config):
+    /// Netzwerk- und Broadcast-Adresse des Bereichs sowie konfigurierte
+    /// ExcludeIps. DHCP darf erste/letzte Adresse nie vergeben.
+    /// </summary>
+    private static bool IsHardReservedForPick(string candidate, string cidr)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return true;
+        }
+
+        var trimmed = candidate.Trim();
+        try
+        {
+            if (RouteMath.IsNetworkOrBroadcastAddress(trimmed, cidr ?? ""))
+            {
+                return true;
+            }
+        }
+        catch { }
+
+        try
+        {
+            var excluded = GregModIPAMMod.ExcludedDhcpIps;
+            if (excluded != null && excluded.Contains(trimmed))
+            {
+                return true;
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
     private static bool IsIpUsedByAnotherServer(Server self, string ip, Server[] allServers)
     {
         if (string.IsNullOrWhiteSpace(ip) || allServers == null)
@@ -543,6 +578,7 @@ public static class DHCPManager
         var nInAssigned = 0;
         var nOtherServer = 0;
         var nGatewaySkip = 0;
+        var nReserved = 0;
         var ownIp = GetServerIP(server);
 
         for (var i = 0; i < usable.Length; i++)
@@ -554,6 +590,17 @@ public static class DHCPManager
                 if (logEachReject)
                 {
                     ModDebugLog.WriteDhcpTrace($"PickFromUsableArray cidr={cidrForLog} idx={i}: empty candidate");
+                }
+
+                continue;
+            }
+
+            if (IsHardReservedForPick(candidate, cidrForLog))
+            {
+                nReserved++;
+                if (logEachReject)
+                {
+                    ModDebugLog.WriteDhcpTrace($"PickFromUsableArray cidr={cidrForLog} idx={i}: skip {candidate} (network/broadcast/excluded)");
                 }
 
                 continue;
@@ -596,7 +643,7 @@ public static class DHCPManager
             if (logStep)
             {
                 ModDebugLog.WriteDhcpStep(
-                    $"PickFromUsableArray cidr={cidrForLog}: chose {candidate} idx={i} stats empty={nEmpty} inAssignedPool={nInAssigned} otherServer={nOtherServer} gatewaySkip={nGatewaySkip} totalLen={usable.Length}");
+                    $"PickFromUsableArray cidr={cidrForLog}: chose {candidate} idx={i} stats empty={nEmpty} inAssignedPool={nInAssigned} otherServer={nOtherServer} gatewaySkip={nGatewaySkip} reserved={nReserved} totalLen={usable.Length}");
             }
 
             return candidate;
@@ -605,7 +652,7 @@ public static class DHCPManager
         if (logStep)
         {
             ModDebugLog.WriteDhcpStep(
-                $"PickFromUsableArray cidr={cidrForLog}: no candidate totalLen={usable.Length} empty={nEmpty} inAssignedPool={nInAssigned} otherServer={nOtherServer} gatewaySkip={nGatewaySkip}");
+                $"PickFromUsableArray cidr={cidrForLog}: no candidate totalLen={usable.Length} empty={nEmpty} inAssignedPool={nInAssigned} otherServer={nOtherServer} gatewaySkip={nGatewaySkip} reserved={nReserved}");
         }
 
         return null;
@@ -633,6 +680,7 @@ public static class DHCPManager
             && current != "0.0.0.0"
             && RouteMath.IsIpv4InCidr(current.Trim(), trimmed)
             && !IsIpUsedByAnotherServer(server, current.Trim(), allServers)
+            && !IsHardReservedForPick(current.Trim(), trimmed)
             && !ShouldSkipGatewayForPick(current.Trim(), trimmed, applyGatewaySkip))
         {
             ip = current.Trim();
@@ -664,6 +712,11 @@ public static class DHCPManager
         foreach (var candidate in CustomerPrivateSubnetRegistry.EnumerateDhcpCandidates(privateCidr, skipGateway))
         {
             if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            if (IsHardReservedForPick(candidate, privateCidr))
             {
                 continue;
             }

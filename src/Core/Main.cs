@@ -27,6 +27,7 @@ public class GregModIPAMMod : MelonMod
     private static MelonPreferences_Entry<float> _prefUiFontScale;
     private static MelonPreferences_Entry<string> _prefToggleKey;
     private static MelonPreferences_Entry<bool> _prefExcludeGateway;
+    private static MelonPreferences_Entry<string> _prefExcludeIps;
     private static MelonPreferences_Entry<bool> _prefWebEnabled;
     private static MelonPreferences_Entry<int> _prefWebPort;
     private static Key _toggleKey = Key.P;
@@ -67,6 +68,8 @@ public class GregModIPAMMod : MelonMod
             _prefToggleKey = _prefs.CreateEntry("ToggleKey", "P", "Hotkey to open/close the IPAM window");
             _prefExcludeGateway = _prefs.CreateEntry("ExcludeGateway", true,
                 "DHCP never assigns the typical gateway (.1 on /24-or-shorter), including private subnets");
+            _prefExcludeIps = _prefs.CreateEntry("ExcludeIps", "",
+                "Extra IPs DHCP must never assign (comma/semicolon/space separated)");
             _prefWebEnabled = _prefs.CreateEntry("WebEnabled", true, "Run the React WebUI backend (http://127.0.0.1:port/)");
             _prefWebPort = _prefs.CreateEntry("WebPort", 8177, "Port for the React WebUI backend (127.0.0.1 only)");
             try
@@ -190,6 +193,10 @@ public class GregModIPAMMod : MelonMod
         {
             try { IPAMOverlay.IsVisible = !IPAMOverlay.IsVisible; } catch { }
         });
+        gregCore.UI.GregMenuRegistry.RegisterCloser("ipam", () =>
+        {
+            try { if (IPAMOverlay.IsVisible) IPAMOverlay.IsVisible = false; } catch { }
+        });
     }
 
     internal static void SetMenuOpen(bool open)
@@ -223,6 +230,27 @@ public class GregModIPAMMod : MelonMod
                 _prefSaveDueAtRealtime = Time.unscaledTime + PrefSaveDebounceSeconds;
             }
             catch { }
+        }
+    }
+
+    internal static System.Collections.Generic.HashSet<string> ExcludedDhcpIps
+    {
+        get
+        {
+            var set = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                if (_prefExcludeIps == null) return set;
+                var raw = _prefExcludeIps.Value ?? "";
+                foreach (var part in raw.Split(new[] { ',', ';', ' ', '\t', '\n', '\r' },
+                    System.StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var ip = part.Trim();
+                    if (ip.Length > 0) set.Add(ip);
+                }
+            }
+            catch { }
+            return set;
         }
     }
 

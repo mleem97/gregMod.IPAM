@@ -104,6 +104,39 @@ public static class RouteMath
         return TryParseIpv4Cidr(cidr, out _, out var prefixLen) && prefixLen <= 24;
     }
 
+    /// <summary>
+    /// True when ip is the network address (.0) or broadcast (.255) of the
+    /// CIDR. DHCP must never assign these, regardless of source array.
+    /// /31 and /32 have no broadcast concept (false).
+    /// </summary>
+    public static bool IsNetworkOrBroadcastAddress(string ip, string cidr)
+    {
+        if (string.IsNullOrWhiteSpace(ip) || string.IsNullOrWhiteSpace(cidr))
+        {
+            return false;
+        }
+
+        if (!TryParseIpv4Cidr(cidr, out var networkBe, out var prefixLen))
+        {
+            return false;
+        }
+
+        if (prefixLen >= 31)
+        {
+            return false;
+        }
+
+        if (!TryIpv4StringToUint(ip.Trim(), out var be))
+        {
+            return false;
+        }
+
+        var hostBits = 32 - prefixLen;
+        var numHosts = 1u << hostBits;
+        var broadcast = networkBe | (numHosts - 1);
+        return be == networkBe || be == broadcast;
+    }
+
     /// <summary>Usable host count for IPAM display and assignment (subnet-calculator semantics on private space).</summary>
     public static int CountIpamUsableHosts(string cidr)
     {

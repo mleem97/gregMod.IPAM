@@ -60,7 +60,13 @@ public static partial class IPAMOverlay
                 _iopsToolbarRectWindowLocal = default;
                 _iopsToolbarScreenRect = default;
                 _iopsToolbarRectLogHash = 0;
-                _nextEolSnapshotRefreshTime = 0f;
+                // Teurer Full-EOL-Snapshot nur beim allerersten Öffnen (leerer
+                // Cache) — danach reicht inkrementell (neue Geräte) + 60s-Takt.
+                // Das war der Hauptanteil des mehrsekündigen Open-Freezes.
+                if (_eolDisplayByInstanceId.Count == 0)
+                {
+                    _nextEolSnapshotRefreshTime = 0f;
+                }
                 _focusIpamWindowOnNextFrame = true;
                 UiRaycastBlocker.SetBlocking(true);
                 // Zentral (gregCore) oder lokal (standalone) — nie beides.

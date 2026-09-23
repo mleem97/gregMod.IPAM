@@ -43,6 +43,89 @@ internal static class DeviceInventoryReflection
 
     private static readonly Dictionary<Type, (PropertyInfo[] Props, FieldInfo[] Fields)> EolMemberScanCache = new();
 
+    // Auflösungs-Cache für Namens-Hinweis-Lookups: Der Hierarchie-Walk mit
+    // GetProperty/GetField pro Device pro Refresh ist auf IL2CPP der
+    // Hauptgrund für mehrsekündige Freezes beim Öffnen (133+ Geräte ×
+    // Dutzende Namen × Ebenen). Nach dem ersten Treffer kostet ein Lookup
+    // nur noch einen Dictionary-Zugriff; Werte werden weiterhin live gelesen.
+    private sealed class ResolvedMember
+    {
+        public PropertyInfo Prop;
+        public FieldInfo Field;
+    }
+
+    private static readonly Dictionary<(Type, string), ResolvedMember> MemberResolveCache = new();
+    private static readonly object MemberResolveLock = new object();
+
+    internal static bool TryResolveMember(Type type, string name, out PropertyInfo prop, out FieldInfo field)
+    {
+        prop = null;
+        field = null;
+        if (type == null || string.IsNullOrEmpty(name))
+        {
+            return false;
+        }
+
+        var key = (type, name);
+        lock (MemberResolveLock)
+        {
+            if (MemberResolveCache.TryGetValue(key, out var hit) && hit != null)
+            {
+                prop = hit.Prop;
+                field = hit.Field;
+                return true;
+            }
+        }
+
+        PropertyInfo foundProp = null;
+        FieldInfo foundField = null;
+        try
+        {
+            // Gleiche Präzedenz wie früher: pro Ebene erst Property, dann Feld.
+            for (var bt = type; bt != null && bt != typeof(object); bt = bt.BaseType)
+            {
+                try
+                {
+                    foundProp = bt.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (foundProp != null)
+                    {
+                        break;
+                    }
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
+
+                try
+                {
+                    foundField = bt.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (foundField != null)
+                    {
+                        break;
+                    }
+                }
+                catch
+                {
+                    // Il2Cpp
+                }
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        lock (MemberResolveLock)
+        {
+            MemberResolveCache[key] = new ResolvedMember { Prop = foundProp, Field = foundField };
+        }
+
+        prop = foundProp;
+        field = foundField;
+        return true;
+    }
+
     /// <summary>Exact names only for technician — broad heuristics were invoking unrelated &quot;service&quot; / EOL helpers.</summary>
     private static readonly string[] TechnicianMethods =
     {
@@ -400,26 +483,33 @@ internal static class DeviceInventoryReflection
             return false;
         }
 
-        for (var bt = o.GetType(); bt != null && bt != typeof(object); bt = bt.BaseType)
+        if (!TryResolveMember(o.GetType(), memberName, out var p, out var f))
         {
-            try
-            {
-                var p = bt.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (p != null && p.CanRead && TryConvertToInt32(p.GetValue(o), out value))
-                {
-                    return true;
-                }
+            return false;
+        }
 
-                var f = bt.GetField(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (f != null && TryConvertToInt32(f.GetValue(o), out value))
-                {
-                    return true;
-                }
-            }
-            catch
+        try
+        {
+            if (p != null && p.CanRead && TryConvertToInt32(p.GetValue(o), out value))
             {
-                // Il2Cpp
+                return true;
             }
+        }
+        catch
+        {
+            // Il2Cpp
+        }
+
+        try
+        {
+            if (f != null && TryConvertToInt32(f.GetValue(o), out value))
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Il2Cpp
         }
 
         return false;
@@ -507,33 +597,41 @@ internal static class DeviceInventoryReflection
     private static bool TryReadBoolMember(object o, string[] names, out bool value)
     {
         value = false;
-        if (o == null)
+        if (o == null || names == null)
         {
             return false;
         }
 
-        for (var bt = o.GetType(); bt != null && bt != typeof(object); bt = bt.BaseType)
+        var t = o.GetType();
+        foreach (var name in names)
         {
-            foreach (var name in names)
+            if (!TryResolveMember(t, name, out var p, out var f))
             {
-                try
-                {
-                    var p = bt.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (p != null && p.CanRead && TryConvertToBool(p.GetValue(o), out value))
-                    {
-                        return true;
-                    }
+                continue;
+            }
 
-                    var f = bt.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (f != null && TryConvertToBool(f.GetValue(o), out value))
-                    {
-                        return true;
-                    }
-                }
-                catch
+            try
+            {
+                if (p != null && p.CanRead && TryConvertToBool(p.GetValue(o), out value))
                 {
-                    // Il2Cpp
+                    return true;
                 }
+            }
+            catch
+            {
+                // Il2Cpp
+            }
+
+            try
+            {
+                if (f != null && TryConvertToBool(f.GetValue(o), out value))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // Il2Cpp
             }
         }
 
@@ -1835,31 +1933,43 @@ internal static class DeviceInventoryReflection
     internal static bool TryReadStringMember(object o, string[] names, out string value)
     {
         value = null;
-        var t = o.GetType();
-        for (var bt = t; bt != null; bt = bt.BaseType)
+        if (o == null || names == null)
         {
-            foreach (var name in names)
-            {
-                try
-                {
-                    var p = bt.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (p?.GetValue(o) is string s)
-                    {
-                        value = s;
-                        return true;
-                    }
+            return false;
+        }
 
-                    var f = bt.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (f?.GetValue(o) is string s2)
-                    {
-                        value = s2;
-                        return true;
-                    }
-                }
-                catch
+        var t = o.GetType();
+        foreach (var name in names)
+        {
+            if (!TryResolveMember(t, name, out var p, out var f))
+            {
+                continue;
+            }
+
+            try
+            {
+                if (p?.GetValue(o) is string s)
                 {
-                    // Il2Cpp
+                    value = s;
+                    return true;
                 }
+            }
+            catch
+            {
+                // Il2Cpp
+            }
+
+            try
+            {
+                if (f?.GetValue(o) is string s2)
+                {
+                    value = s2;
+                    return true;
+                }
+            }
+            catch
+            {
+                // Il2Cpp
             }
         }
 
@@ -1869,31 +1979,43 @@ internal static class DeviceInventoryReflection
     private static bool TryReadTimeSpanMember(object o, string[] names, out TimeSpan ts)
     {
         ts = default;
-        var t = o.GetType();
-        for (var bt = t; bt != null; bt = bt.BaseType)
+        if (o == null || names == null)
         {
-            foreach (var name in names)
-            {
-                try
-                {
-                    var p = bt.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    var pv = p?.GetValue(o);
-                    if (pv != null && TryConvertToSystemTimeSpan(pv, out ts))
-                    {
-                        return true;
-                    }
+            return false;
+        }
 
-                    var fld = bt.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    var fv = fld?.GetValue(o);
-                    if (fv != null && TryConvertToSystemTimeSpan(fv, out ts))
-                    {
-                        return true;
-                    }
-                }
-                catch
+        var t = o.GetType();
+        foreach (var name in names)
+        {
+            if (!TryResolveMember(t, name, out var p, out var f))
+            {
+                continue;
+            }
+
+            try
+            {
+                var pv = p?.GetValue(o);
+                if (pv != null && TryConvertToSystemTimeSpan(pv, out ts))
                 {
-                    // ignore
+                    return true;
                 }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            try
+            {
+                var fv = f?.GetValue(o);
+                if (fv != null && TryConvertToSystemTimeSpan(fv, out ts))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // ignore
             }
         }
 
@@ -1903,29 +2025,41 @@ internal static class DeviceInventoryReflection
     private static bool TryReadSingleNumericSeconds(object o, string[] names, out float seconds)
     {
         seconds = 0f;
-        var t = o.GetType();
-        for (var bt = t; bt != null; bt = bt.BaseType)
+        if (o == null || names == null)
         {
-            foreach (var name in names)
-            {
-                try
-                {
-                    var p = bt.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (TryConvertToFloat(p?.GetValue(o), out seconds))
-                    {
-                        return true;
-                    }
+            return false;
+        }
 
-                    var f = bt.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (TryConvertToFloat(f?.GetValue(o), out seconds))
-                    {
-                        return true;
-                    }
-                }
-                catch
+        var t = o.GetType();
+        foreach (var name in names)
+        {
+            if (!TryResolveMember(t, name, out var p, out var f))
+            {
+                continue;
+            }
+
+            try
+            {
+                if (TryConvertToFloat(p?.GetValue(o), out seconds))
                 {
-                    // ignore
+                    return true;
                 }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            try
+            {
+                if (TryConvertToFloat(f?.GetValue(o), out seconds))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // ignore
             }
         }
 
@@ -1990,36 +2124,43 @@ internal static class DeviceInventoryReflection
     private static bool TryReadIl2CppTimeSpanNamed(object o, string[] names, out TimeSpan ts)
     {
         ts = default;
-        if (o == null)
+        if (o == null || names == null)
         {
             return false;
         }
 
         var t = o.GetType();
-        for (var bt = t; bt != null; bt = bt.BaseType)
+        foreach (var name in names)
         {
-            foreach (var name in names)
+            if (!TryResolveMember(t, name, out var p, out var f))
             {
-                try
-                {
-                    var p = bt.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    var pv = p?.GetValue(o);
-                    if (pv != null && TryConvertToSystemTimeSpan(pv, out ts))
-                    {
-                        return true;
-                    }
+                continue;
+            }
 
-                    var f = bt.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    var fv = f?.GetValue(o);
-                    if (fv != null && TryConvertToSystemTimeSpan(fv, out ts))
-                    {
-                        return true;
-                    }
-                }
-                catch
+            try
+            {
+                var pv = p?.GetValue(o);
+                if (pv != null && TryConvertToSystemTimeSpan(pv, out ts))
                 {
-                    // Il2Cpp
+                    return true;
                 }
+            }
+            catch
+            {
+                // Il2Cpp
+            }
+
+            try
+            {
+                var fv = f?.GetValue(o);
+                if (fv != null && TryConvertToSystemTimeSpan(fv, out ts))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // Il2Cpp
             }
         }
 
