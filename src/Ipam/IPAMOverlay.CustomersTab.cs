@@ -187,7 +187,7 @@ public static partial class IPAMOverlay
         var y = CardPad;
         y += SectionTitleH + 2f + 7f;
         y += 34f + SectionTitleH + 4f + 28f;
-        y += SectionTitleH + 4f + TableHeaderH + rowCount * TableRowH + 52f + CardPad;
+        y += SectionTitleH + 4f + TableHeaderH + rowCount * TableRowH + ServerBulkBarHeight() + 52f + CardPad;
         return Mathf.Max(300f, y);
     }
 
@@ -657,6 +657,7 @@ public static partial class IPAMOverlay
                 status = "";
             }
 
+            var custCheckRect = GetServerCheckboxRect(r, 8f);
             if (TableDataRowClick(
                     r,
                     StableRowHint(8, server, i),
@@ -668,13 +669,20 @@ public static partial class IPAMOverlay
                     ipCol,
                     eolCol,
                     status,
-                    cardW))
+                    cardW,
+                    false,
+                    custCheckRect))
             {
                 HandleServerRowClick(server, i, ip, CustomersTabServersBuffer);
             }
 
+            DrawServerRowCheckbox(r, server, 8f);
+
             y += TableRowH;
         }
+
+        y += 4f;
+        DrawServerBulkBar(ref y, x0, cardW);
 
         GUI.Label(
             new Rect(x0, y, cardW, 44f),

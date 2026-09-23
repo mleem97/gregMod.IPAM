@@ -1481,7 +1481,7 @@ public static partial class IPAMOverlay
                         var bodyRows = n == 0 ? 1 : Mathf.Min(_ipamIpAddressPageSize, n - start);
                         const float paginationBarH = 28f;
                         var y = CardPad + SectionTitleH + 2f + 7f + SectionTitleH + 4f + filterExtra + TableHeaderH
-                            + bodyRows * TableRowH + paginationBarH + CardPad;
+                            + bodyRows * TableRowH + paginationBarH + ServerBulkBarHeight() + CardPad;
                         _cachedContentHeight = Mathf.Max(220f, y);
                         return;
                     }
@@ -1550,7 +1550,7 @@ public static partial class IPAMOverlay
                     + bodyRows * TableRowH + devicesPaginationBarH + CardPad;
                 if (_devicesSub == DevicesSubSection.Servers)
                 {
-                    yd += 8f + TechnicianPanelHeight();
+                    yd += 8f + TechnicianPanelHeight() + ServerBulkBarHeight();
                 }
                 else if (_devicesSub == DevicesSubSection.Routers)
                 {
@@ -2118,10 +2118,13 @@ public static partial class IPAMOverlay
                     status,
                     tableW,
                     menuBlocksRowPointerSv,
-                    toggleRectSv))
+                    UnionRects(toggleRectSv, GetServerCheckboxRect(r, 136f))))
             {
                 HandleServerRowClick(server, rowIdx, ip, SortedServersBuffer);
             }
+
+            // Checkbox nach der Zeile zeichnen (sonst vom Zeilenhintergrund übermalt).
+            DrawServerRowCheckbox(r, server, 136f);
 
             // Toggle button
             var toggleKeySv = 96000 + Mathf.Abs(server.GetInstanceID()) % 10000;
@@ -2191,6 +2194,9 @@ public static partial class IPAMOverlay
         y += 28f;
 
         DrawInventoryPageSizePopup(menuDropRectSv, ref _ipamDevicesServerPageMenuOpen, 9214, 9215, 9216);
+
+        y += 8f;
+        DrawServerBulkBar(ref y, x0, cardW);
 
         y += 8f;
         DrawTechnicianPanel(ref y, x0, cardW);
@@ -2854,6 +2860,7 @@ public static partial class IPAMOverlay
                 status = "";
             }
 
+            var ipCheckRect = GetServerCheckboxRect(r, 8f);
             if (TableDataRowClick(
                     r,
                     StableRowHint(4, server, i),
@@ -2866,10 +2873,13 @@ public static partial class IPAMOverlay
                     eolCol,
                     status,
                     tableW,
-                    menuBlocksRowPointer))
+                    menuBlocksRowPointer,
+                    ipCheckRect))
             {
                 HandleServerRowClick(server, i, ip, ipViewRows);
             }
+
+            DrawServerRowCheckbox(r, server, 8f);
 
             y += TableRowH;
         }
@@ -2921,6 +2931,9 @@ public static partial class IPAMOverlay
         y += 28f;
 
         DrawInventoryPageSizePopup(menuDropRect, ref _ipamIpAddrPageMenuOpen, 9118, 9119, 9120);
+
+        y += 4f;
+        DrawServerBulkBar(ref y, x0, cardW);
     }
 
     private static List<Server> GetIpamIpAddressViewRows()

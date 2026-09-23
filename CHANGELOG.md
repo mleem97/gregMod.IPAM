@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/). Version: siehe
 
 ### Added
 
+- Massenaktionen per Checkbox (Devices-, IP- und Kunden-Listen): Bulk-Bar bei Auswahl (DHCP zuweisen, Techniker, Abwählen). Sortierung weiter über klickbare Spaltenköpfe (▲▼).
 - WebUI: Racks-Tab (Mounts aufbauen inkl. Cheat-Option, Racks/Templates listen, Template anwenden); API: `racks/mounts`, `racks/install`, `racks/list`, `racks/templates`, `racks/apply-template`.
 - Techniker-Dispatch: „Tech“-Button an defekten Servern + Bulk-Panel („Send to all broken devices“, Queue-Status) — nutzt die Vanilla-Dispatch-Pfade.
 - Router-Verwaltung (Devices → Routers): Subnetze/Routen ansehen, hinzufügen, entfernen, Reapply, Same-ASN-Sync.
