@@ -1548,6 +1548,15 @@ public static partial class IPAMOverlay
                 const float devicesPaginationBarH = 28f;
                 var yd = CardPad + SectionTitleH + 2f + 7f + SectionTitleH + 4f + DevicesTabSearchBarH + TableHeaderH
                     + bodyRows * TableRowH + devicesPaginationBarH + CardPad;
+                if (_devicesSub == DevicesSubSection.Routers)
+                {
+                    yd += RouterDetailHeight();
+                }
+                else if (_devicesSub == DevicesSubSection.Firewall)
+                {
+                    yd += FirewallDetailHeight();
+                }
+
                 _cachedContentHeight = Mathf.Max(220f, yd);
                 return;
             }
@@ -1752,6 +1761,7 @@ public static partial class IPAMOverlay
                     "No network routers",
                     showGear: false,
                     pageSizeHint: "Page size matches Network switches (gear on Switches tab).");
+                DrawRouterManagement(ref y, x0, cardW);
                 break;
             case DevicesSubSection.Firewall:
                 DrawDevicesNetworkSwitchTable(
@@ -1776,6 +1786,7 @@ public static partial class IPAMOverlay
                     9286,
                     9,
                     "No firewalls");
+                DrawFirewallManagement(ref y, x0, cardW);
                 break;
             case DevicesSubSection.Servers:
                 DrawDevicesServerTable(ref y, x0, cardW, tableW, ps);

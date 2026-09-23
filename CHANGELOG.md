@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/). Version: siehe
 
 ### Added
 
+- Router-Verwaltung (Devices → Routers): Subnetze/Routen ansehen, hinzufügen, entfernen, Reapply, Same-ASN-Sync.
+- Firewall-Verwaltung (Devices → Firewall): Regeln ansehen, hinzufügen, entfernen, Cluster-Sync/Broadcast, Traffic-Test.
 - Harte Vergabe-Sperren: Netzwerk- (.0) und Broadcast-Adresse (.255) werden nie vergeben (alle Pfade) + `ExcludeIps`-Pref für eigene Ausschlüsse.
 - React-WebUI im Hintergrund (127.0.0.1:8177, Prefs `WebEnabled`/`WebPort`): Dashboard, Server-Steuerung (DHCP/IP/Rename/Power), Scopes-CRUD, Logs; JSON-API + Main-Thread-Queue; Frontend in `web/` (Vite+React+TS), Deploy via `scripts/deploy-web.sh`.
 - Server-Auswahl: Ctrl+A (Cmd+A) wählt alle angezeigten Server (Devices-, IP- und Kunden-Liste, aktuelle Seite); Shift-Klick-Bereich startet jetzt am zuletzt per Ctrl gewählten Server.

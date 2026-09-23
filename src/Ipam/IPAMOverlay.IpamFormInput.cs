@@ -388,6 +388,17 @@ public static partial class IPAMOverlay
             IpamFormFocusDevicesRouterSearch => 96,
             IpamFormFocusDevicesFirewallSearch => 96,
             IpamFormFocusDevicesServerSearch => 96,
+            IpamFormFocusRouterSubnetVlan => 4,
+            IpamFormFocusRouterSubnetCidr => 18,
+            IpamFormFocusRouterRouteSrcVlan => 4,
+            IpamFormFocusRouterRouteSrcIp => 18,
+            IpamFormFocusRouterRouteDstVlan => 4,
+            IpamFormFocusRouterRouteDstIp => 18,
+            IpamFormFocusFirewallRulePort => 4,
+            IpamFormFocusFirewallRuleSrc => 20,
+            IpamFormFocusFirewallRuleDst => 20,
+            IpamFormFocusFirewallRuleNetPort => 5,
+            IpamFormFocusFirewallTestVlan => 4,
             _ => 0,
         };
     }
@@ -424,6 +435,17 @@ public static partial class IPAMOverlay
             IpamFormFocusDevicesRouterSearch => _devicesTabRouterSearchBuf ?? "",
             IpamFormFocusDevicesFirewallSearch => _devicesTabFirewallSearchBuf ?? "",
             IpamFormFocusDevicesServerSearch => _devicesTabServerSearchBuf ?? "",
+            IpamFormFocusRouterSubnetVlan => _rtVlanBuf ?? "",
+            IpamFormFocusRouterSubnetCidr => _rtCidrBuf ?? "",
+            IpamFormFocusRouterRouteSrcVlan => _rtSrcVlanBuf ?? "",
+            IpamFormFocusRouterRouteSrcIp => _rtSrcIpBuf ?? "",
+            IpamFormFocusRouterRouteDstVlan => _rtDstVlanBuf ?? "",
+            IpamFormFocusRouterRouteDstIp => _rtDstIpBuf ?? "",
+            IpamFormFocusFirewallRulePort => _fwPortIdxBuf ?? "",
+            IpamFormFocusFirewallRuleSrc => _fwSrcBuf ?? "",
+            IpamFormFocusFirewallRuleDst => _fwDstBuf ?? "",
+            IpamFormFocusFirewallRuleNetPort => _fwNetPortBuf ?? "",
+            IpamFormFocusFirewallTestVlan => _fwTestVlanBuf ?? "",
             _ => "",
         };
     }
@@ -541,6 +563,39 @@ public static partial class IPAMOverlay
                     RecomputeContentHeight();
                 }
 
+                break;
+            case IpamFormFocusRouterSubnetVlan:
+                _rtVlanBuf = s;
+                break;
+            case IpamFormFocusRouterSubnetCidr:
+                _rtCidrBuf = s;
+                break;
+            case IpamFormFocusRouterRouteSrcVlan:
+                _rtSrcVlanBuf = s;
+                break;
+            case IpamFormFocusRouterRouteSrcIp:
+                _rtSrcIpBuf = s;
+                break;
+            case IpamFormFocusRouterRouteDstVlan:
+                _rtDstVlanBuf = s;
+                break;
+            case IpamFormFocusRouterRouteDstIp:
+                _rtDstIpBuf = s;
+                break;
+            case IpamFormFocusFirewallRulePort:
+                _fwPortIdxBuf = s;
+                break;
+            case IpamFormFocusFirewallRuleSrc:
+                _fwSrcBuf = s;
+                break;
+            case IpamFormFocusFirewallRuleDst:
+                _fwDstBuf = s;
+                break;
+            case IpamFormFocusFirewallRuleNetPort:
+                _fwNetPortBuf = s;
+                break;
+            case IpamFormFocusFirewallTestVlan:
+                _fwTestVlanBuf = s;
                 break;
         }
     }
@@ -693,6 +748,17 @@ public static partial class IPAMOverlay
             IpamFormFocusDevicesRouterSearch => _devicesTabRouterSearchBuf ?? "",
             IpamFormFocusDevicesFirewallSearch => _devicesTabFirewallSearchBuf ?? "",
             IpamFormFocusDevicesServerSearch => _devicesTabServerSearchBuf ?? "",
+            IpamFormFocusRouterSubnetVlan => _rtVlanBuf ?? "",
+            IpamFormFocusRouterSubnetCidr => _rtCidrBuf ?? "",
+            IpamFormFocusRouterRouteSrcVlan => _rtSrcVlanBuf ?? "",
+            IpamFormFocusRouterRouteSrcIp => _rtSrcIpBuf ?? "",
+            IpamFormFocusRouterRouteDstVlan => _rtDstVlanBuf ?? "",
+            IpamFormFocusRouterRouteDstIp => _rtDstIpBuf ?? "",
+            IpamFormFocusFirewallRulePort => _fwPortIdxBuf ?? "",
+            IpamFormFocusFirewallRuleSrc => _fwSrcBuf ?? "",
+            IpamFormFocusFirewallRuleDst => _fwDstBuf ?? "",
+            IpamFormFocusFirewallRuleNetPort => _fwNetPortBuf ?? "",
+            IpamFormFocusFirewallTestVlan => _fwTestVlanBuf ?? "",
             _ => "",
         };
     }

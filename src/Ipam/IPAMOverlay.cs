@@ -375,6 +375,17 @@ public static partial class IPAMOverlay
     private const int IpamFormFocusInlineNamingConvName = 44;
     private const int IpamFormFocusInlineNamingManualRow = 45;
     private const int IpamFormFocusInlineNamingManualCol = 46;
+    private const int IpamFormFocusRouterSubnetVlan = 50;
+    private const int IpamFormFocusRouterSubnetCidr = 51;
+    private const int IpamFormFocusRouterRouteSrcVlan = 52;
+    private const int IpamFormFocusRouterRouteSrcIp = 53;
+    private const int IpamFormFocusRouterRouteDstVlan = 54;
+    private const int IpamFormFocusRouterRouteDstIp = 55;
+    private const int IpamFormFocusFirewallRulePort = 56;
+    private const int IpamFormFocusFirewallRuleSrc = 57;
+    private const int IpamFormFocusFirewallRuleDst = 58;
+    private const int IpamFormFocusFirewallRuleNetPort = 59;
+    private const int IpamFormFocusFirewallTestVlan = 60;
     private static int _ipamFormFieldFocus = IpamFormFocusNone;
 
     private static string _devicesTabSwitchSearchBuf = "";
