@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/). Version: siehe
 
 ### Added
 
+- React-WebUI im Hintergrund (127.0.0.1:8177, Prefs `WebEnabled`/`WebPort`): Dashboard, Server-Steuerung (DHCP/IP/Rename/Power), Scopes-CRUD, Logs; JSON-API + Main-Thread-Queue; Frontend in `web/` (Vite+React+TS), Deploy via `scripts/deploy-web.sh`.
 - Server-Auswahl: Ctrl+A (Cmd+A) wählt alle angezeigten Server (Devices-, IP- und Kunden-Liste, aktuelle Seite); Shift-Klick-Bereich startet jetzt am zuletzt per Ctrl gewählten Server.
 - Naming: „Reset saved seq counter“-Button (persistierte Zähler zurücksetzen).
 - `ExcludeGateway`-Pref (Default an) + Toggle in DHCP Scopes: DHCP vergibt nie .1 auf /24 oder kürzer, auch in privaten Netzen.

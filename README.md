@@ -28,6 +28,22 @@ Siehe [docs/INDEX.md](docs/INDEX.md) für die komplette Dokumentation.
 
 - Siehe [docs/INDEX.md](docs/INDEX.md) und [QUICKSTART.md](QUICKSTART.md)
 
+## WebUI (React, Port 8177)
+
+Ab Mod-Start läuft im Hintergrund ein Webserver (nur 127.0.0.1, Prefs
+`WebEnabled`/`WebPort`): http://127.0.0.1:8177/
+
+- Dashboard (Status, Overlay auf/zu, DHCP assign-all), Server-Tabelle
+  (Filter, DHCP/IP/Rename/Power pro Server), DHCP-Scopes (CRUD), Logs
+- API unter `/api/*` (JSON): `status`, `servers`, `dhcp/assign-all`,
+  `dhcp/assign-one`, `server/ip`, `server/rename`, `server/power`,
+  `scopes` (GET/POST/DELETE), `logs`, `overlay`
+- Game-Zugriffe laufen über eine Main-Thread-Queue (8s-Timeout), sonst 503
+- Frontend entwickeln: `cd web && npm install && npm run dev`
+- Frontend deployen: `npm run build` in `web/`, dann
+  `scripts/deploy-web.sh` (kopiert `web/dist` nach
+  `UserData/gregMod.IPAM/web/`)
+
 ## Installation
 
 Siehe [QUICKSTART.md](QUICKSTART.md).

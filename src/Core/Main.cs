@@ -27,6 +27,8 @@ public class GregModIPAMMod : MelonMod
     private static MelonPreferences_Entry<float> _prefUiFontScale;
     private static MelonPreferences_Entry<string> _prefToggleKey;
     private static MelonPreferences_Entry<bool> _prefExcludeGateway;
+    private static MelonPreferences_Entry<bool> _prefWebEnabled;
+    private static MelonPreferences_Entry<int> _prefWebPort;
     private static Key _toggleKey = Key.P;
     private static bool _prefSavePending;
     private static float _prefSaveDueAtRealtime;
@@ -65,6 +67,8 @@ public class GregModIPAMMod : MelonMod
             _prefToggleKey = _prefs.CreateEntry("ToggleKey", "P", "Hotkey to open/close the IPAM window");
             _prefExcludeGateway = _prefs.CreateEntry("ExcludeGateway", true,
                 "DHCP never assigns the typical gateway (.1 on /24-or-shorter), including private subnets");
+            _prefWebEnabled = _prefs.CreateEntry("WebEnabled", true, "Run the React WebUI backend (http://127.0.0.1:port/)");
+            _prefWebPort = _prefs.CreateEntry("WebPort", 8177, "Port for the React WebUI backend (127.0.0.1 only)");
             try
             {
                 if (System.Enum.TryParse<Key>(_prefToggleKey.Value, true, out var k) && k != Key.None)
@@ -117,6 +121,8 @@ public class GregModIPAMMod : MelonMod
 
             ModReleaseLog.Info($"Release log: {ModReleaseLog.LogPath}");
             ModReleaseLog.Info("");
+
+            StartWebBackend();
         }
         catch (System.Exception ex)
         {
@@ -220,8 +226,49 @@ public class GregModIPAMMod : MelonMod
         }
     }
 
+    // React-WebUI-Backend (läuft im Hintergrund ab Mod-Start, 127.0.0.1 only).
+    private static void StartWebBackend()
+    {
+        try
+        {
+            bool enabled = true;
+            int port = 8177;
+            try { if (_prefWebEnabled != null) enabled = _prefWebEnabled.Value; } catch { }
+            try { if (_prefWebPort != null) port = Math.Max(1024, Math.Min(65535, _prefWebPort.Value)); } catch { }
+            if (!enabled)
+            {
+                ModReleaseLog.Info("WebUI backend disabled (WebEnabled=false)");
+                return;
+            }
+
+            string webRoot = "";
+            try
+            {
+                webRoot = System.IO.Path.Combine(
+                    MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "gregMod.IPAM", "web");
+                System.IO.Directory.CreateDirectory(webRoot);
+            }
+            catch (System.Exception ex)
+            {
+                ModLogging.Warning($"WebUI webRoot failed: {ex.Message}");
+            }
+
+            Web.IpamWebServer.Start(port, webRoot);
+        }
+        catch (System.Exception ex)
+        {
+            ModLogging.Warning($"WebUI backend start failed: {ex.Message}");
+        }
+    }
+
+    public override void OnDeinitializeMelon()
+    {
+        try { Web.IpamWebServer.Stop(); } catch { }
+    }
+
     public override void OnUpdate()
     {
+        try { Web.IpamWebServer.Drain(); } catch { }
         // Melon OnUpdate runs before most Unity behaviours — sync uGUI blocker early so pause menus do not eat the first click under IPAM.
         UiRaycastBlocker.SetBlocking(IPAMOverlay.IsVisible);
 

@@ -19,6 +19,10 @@ Thumbs.db
 
 # Dist
 dist/
+!web/dist/
+
+# Frontend deps (rebuild via npm install in web/)
+web/node_modules/
 
 # Game assemblies (live symlinks into the Data Center install,
 # see ModRepositories/tools/sync-melon-assemblies.sh — never commit DLLs)
