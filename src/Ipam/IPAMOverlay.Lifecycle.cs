@@ -166,24 +166,6 @@ public static partial class IPAMOverlay
         return localRect.Contains(localPointer);
     }
     /// <summary>
-    /// Deactivates any <see cref="UnityEngine.InputSystem.PlayerInput"/> spawned after IPAM opened so letter keys
-    /// (e.g. pause bound to P) do not reach gameplay while the overlay is up.
-    /// </summary>
-    internal static void TickIpamGameInputSuppression()
-    {
-        if (!IsVisible)
-        {
-            return;
-        }
-
-        if (Time.unscaledTime >= _ipamNextPlayerInputRescanTime)
-        {
-            _ipamNextPlayerInputRescanTime = Time.unscaledTime + 2.5f;
-            GameInputSuppression.RefreshWhileActive();
-        }
-    }
-
-    /// <summary>
     /// After a scene/save load, Unity may destroy IMGUI textures and leave scroll groups unbalanced.
     /// Rebuild assets and reset scroll/layout state so the overlay does not render transparent or misaligned.
     /// </summary>

@@ -91,6 +91,16 @@ public static class RouteMath
             return false;
         }
 
+        return IsShortPrefixForGatewayReservation(cidr);
+    }
+
+    /// <summary>
+    /// Prefix check without the RFC1918 carve-out: true for /24-or-shorter
+    /// (valid .1-reservation range). Used with the ExcludeGateway preference
+    /// so DHCP never hands out the typical gateway, including private nets.
+    /// </summary>
+    public static bool IsShortPrefixForGatewayReservation(string cidr)
+    {
         return TryParseIpv4Cidr(cidr, out _, out var prefixLen) && prefixLen <= 24;
     }
 

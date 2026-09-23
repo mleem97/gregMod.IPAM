@@ -974,6 +974,17 @@ public static partial class IPAMOverlay
             _stHint);
         y += 50f;
 
+        // ── Global DHCP-Optionen ──
+        var gatewayOn = GregModIPAMMod.ExcludeGatewayFromDhcp;
+        GUI.Label(new Rect(x0, y, cardW - 120f, 22f), "Exclude gateway (.1 on /24 or shorter) from DHCP", _stFormLabel);
+        if (ImguiButtonOnce(new Rect(x0 + cardW - 112f, y, 104f, 22f), gatewayOn ? "ON" : "OFF", 9290,
+            gatewayOn ? _stPrimaryBtn : _stMutedBtn))
+        {
+            GregModIPAMMod.ExcludeGatewayFromDhcp = !gatewayOn;
+        }
+
+        y += 26f;
+
         // ── Add Form (collapsible card) ──
         var addCardRect = new Rect(x0, y, cardW, 22f);
         DrawTintedRect(addCardRect, new Color(0.08f, 0.10f, 0.14f, 0.7f));
@@ -1203,7 +1214,7 @@ public static partial class IPAMOverlay
 
     private static float ComputeIpamDhcpScopesContentHeight()
     {
-        var top = CardPad * 2f + SectionTitleH + 4f + 50f + 26f;
+        var top = CardPad * 2f + SectionTitleH + 4f + 50f + 26f + 26f;
         if (_scopeAddFormOpen)
         {
             top += 100f;

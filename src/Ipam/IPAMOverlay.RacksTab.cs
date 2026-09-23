@@ -224,13 +224,13 @@ public static partial class IPAMOverlay
         out float totalW,
         out float totalH)
     {
-        var aisleTotal = (RackFloorGroupsOnScreen.Length - 1) * RackFloorGroupAisleW;
-        var usableW = Mathf.Max(120f, availableW - RackFloorAxisLabelW * 2f);
-        cellSize = Mathf.Max(12f, (usableW - aisleTotal) / RackFloorColCount);
+        var aisleTotal = (RackFloorGroupsOnScreen.Length - 1) * S(RackFloorGroupAisleW);
+        var usableW = Mathf.Max(S(120f), availableW - S(RackFloorAxisLabelW) * 2f);
+        cellSize = Mathf.Max(S(12f), (usableW - aisleTotal) / RackFloorColCount);
         gridW = RackFloorColCount * cellSize + aisleTotal;
-        gridH = RackFloorRowCount * cellSize + (RackFloorRowCount - 1) * RackFloorRowAisleH;
-        totalW = gridW + RackFloorAxisLabelW * 2f;
-        totalH = gridH + RackFloorAxisLabelH * 2f;
+        gridH = RackFloorRowCount * cellSize + (RackFloorRowCount - 1) * S(RackFloorRowAisleH);
+        totalW = gridW + S(RackFloorAxisLabelW) * 2f;
+        totalH = gridH + S(RackFloorAxisLabelH) * 2f;
     }
 
     private static float RackFloorVisualIndexToX(float gridX0, int visualIndex, float cellSize)
@@ -252,7 +252,7 @@ public static partial class IPAMOverlay
 
             if (vi < RackFloorColCount)
             {
-                x += RackFloorGroupAisleW;
+                x += S(RackFloorGroupAisleW);
             }
         }
 
@@ -261,7 +261,7 @@ public static partial class IPAMOverlay
 
     private static float RackFloorRowToY(float gridY0, int rowIndex, float cellSize)
     {
-        return gridY0 + rowIndex * (cellSize + RackFloorRowAisleH);
+        return gridY0 + rowIndex * (cellSize + S(RackFloorRowAisleH));
     }
 
     private static GUIStyle GetRackGridAxisLabelStyle(float cellSize)
@@ -281,7 +281,7 @@ public static partial class IPAMOverlay
 
         if (_rackGridAxisLabelStyle != null)
         {
-            _rackGridAxisLabelStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(Mathf.Min(cellSize, RackFloorAxisLabelH) * 0.42f), 8, 11);
+            _rackGridAxisLabelStyle.fontSize = Mathf.RoundToInt(Mathf.Clamp(Mathf.Min(cellSize, S(RackFloorAxisLabelH)) * 0.42f, S(8f), S(11f)));
         }
 
         return _rackGridAxisLabelStyle ?? _stMutedCenter;
@@ -304,7 +304,7 @@ public static partial class IPAMOverlay
 
         if (_rackGridLabelStyle != null)
         {
-            _rackGridLabelStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(cellSize * 0.38f), 7, 12);
+            _rackGridLabelStyle.fontSize = Mathf.RoundToInt(Mathf.Clamp(cellSize * 0.38f, S(7f), S(12f)));
         }
 
         return _rackGridLabelStyle ?? _stMutedCenter;
@@ -327,8 +327,8 @@ public static partial class IPAMOverlay
         y += 38f;
 
         var outerRect = new Rect(x0, y, totalW, totalH);
-        var gridX0 = RackFloorAxisLabelW;
-        var gridY0 = RackFloorAxisLabelH;
+        var gridX0 = S(RackFloorAxisLabelW);
+        var gridY0 = S(RackFloorAxisLabelH);
         var labelSt = GetRackGridLabelStyle(cellSize);
         var axisSt = GetRackGridAxisLabelStyle(cellSize);
 
@@ -340,8 +340,8 @@ public static partial class IPAMOverlay
             {
                 var col = RackFloorScreenColumnOrder[visualIndex];
                 var cx = RackFloorVisualIndexToX(gridX0, visualIndex, cellSize);
-                var topRect = new Rect(cx, 0f, cellSize, RackFloorAxisLabelH - 2f);
-                var bottomRect = new Rect(cx, gridY0 + gridH + 2f, cellSize, RackFloorAxisLabelH - 2f);
+                var topRect = new Rect(cx, 0f, cellSize, S(RackFloorAxisLabelH) - 2f);
+                var bottomRect = new Rect(cx, gridY0 + gridH + 2f, cellSize, S(RackFloorAxisLabelH) - 2f);
                 DrawAxisLabel(topRect, col.ToString(CultureInfo.InvariantCulture), axisSt);
                 DrawAxisLabel(bottomRect, col.ToString(CultureInfo.InvariantCulture), axisSt);
             }
@@ -351,8 +351,8 @@ public static partial class IPAMOverlay
         {
             var rowLetter = ((char)('A' + row)).ToString(CultureInfo.InvariantCulture);
             var cy = RackFloorRowToY(gridY0, row, cellSize);
-            var leftAxisRect = new Rect(0f, cy, RackFloorAxisLabelW - 2f, cellSize);
-            var rightAxisRect = new Rect(gridX0 + gridW + 2f, cy, RackFloorAxisLabelW - 2f, cellSize);
+            var leftAxisRect = new Rect(0f, cy, S(RackFloorAxisLabelW) - 2f, cellSize);
+            var rightAxisRect = new Rect(gridX0 + gridW + 2f, cy, S(RackFloorAxisLabelW) - 2f, cellSize);
 
             if (Event.current.type == EventType.Repaint)
             {
@@ -1055,7 +1055,7 @@ public static partial class IPAMOverlay
     private static void DrawRackServerPickScroll(Rect outer, List<int> filtered, string rackId, int rackTotalU)
     {
         var innerH = filtered.Count * TableRowH;
-        var viewH = Mathf.Min(160f, Mathf.Max(TableRowH + 4f, innerH));
+        var viewH = Mathf.Min(S(160f), Mathf.Max(TableRowH + 4f, innerH));
         var innerW = outer.width - 18f;
         var innerRect = new Rect(0f, 0f, innerW, Mathf.Max(innerH, viewH));
         var scrollRect = new Rect(outer.x, outer.y, outer.width, viewH);
@@ -1106,7 +1106,7 @@ public static partial class IPAMOverlay
     private static void DrawRackSwitchPickScroll(Rect outer, List<int> filtered, string rackId, int rackTotalU)
     {
         var innerH = filtered.Count * TableRowH;
-        var viewH = Mathf.Min(160f, Mathf.Max(TableRowH + 4f, innerH));
+        var viewH = Mathf.Min(S(160f), Mathf.Max(TableRowH + 4f, innerH));
         var innerW = outer.width - 18f;
         var innerRect = new Rect(0f, 0f, innerW, Mathf.Max(innerH, viewH));
         var scrollRect = new Rect(outer.x, outer.y, outer.width, viewH);
@@ -1258,12 +1258,12 @@ public static partial class IPAMOverlay
         }
 
         var devices = BuildDiagramDevices(drilled, out _);
-        var metaH = drilled.IsPersistedEditable ? 160f : 120f;
-        var rowH = TableHeaderH + Mathf.Max(1, devices.Count) * TableRowH + (drilled.IsPersistedEditable ? 580f : 40f);
-        var middleCol = metaH + rowH + 24f;
-        var rightCol = SectionTitleH + RackDiagramFixedHeight + 56f;
-        var body = Mathf.Max(middleCol, rightCol) + 36f;
-        return Mathf.Max(480f, CardPad * 2f + topBlock + body);
+        var metaH = drilled.IsPersistedEditable ? S(160f) : S(120f);
+        var rowH = TableHeaderH + Mathf.Max(1, devices.Count) * TableRowH + (drilled.IsPersistedEditable ? S(580f) : S(40f));
+        var middleCol = metaH + rowH + S(24f);
+        var rightCol = SectionTitleH + S(RackDiagramFixedHeight) + S(56f);
+        var body = Mathf.Max(middleCol, rightCol) + S(36f);
+        return Mathf.Max(S(480f), CardPad * 2f + topBlock + body);
     }
 
     private static void DrawRacksView(float innerW)
@@ -1362,10 +1362,10 @@ public static partial class IPAMOverlay
         var dx = mx0 + midW + gap;
         var yDiagCol = my;
         var ru = Mathf.Max(1, rackTotalU);
-        var diagramH = RackDiagramFixedHeight;
-        var unitLab = 56f;
-        var rackBodyW = Mathf.Max(180f, rightDiagW - unitLab - 12f);
-        var rackBodyRect = new Rect(dx + unitLab + 4f, yDiagCol + SectionTitleH + 6f, rackBodyW, diagramH);
+        var diagramH = S(RackDiagramFixedHeight);
+        var unitLab = S(56f);
+        var rackBodyW = Mathf.Max(S(180f), rightDiagW - unitLab - S(12f));
+        var rackBodyRect = new Rect(dx + unitLab + S(4f), yDiagCol + SectionTitleH + S(6f), rackBodyW, diagramH);
         _rackMountDropBodyLast = rackBodyRect;
         _rackMountDropRackId = selected.IsPersistedEditable && selected.Persisted != null ? selected.Persisted.Id : "";
         _rackMountDropRackTotalU = ru;
@@ -1377,11 +1377,11 @@ public static partial class IPAMOverlay
         {
             GUI.Label(new Rect(mx0, yMid, 52f, 22f), "Name", _stMuted);
             DrawIpamFormTextField(
-                new Rect(mx0 + 56f, yMid, midW - 56f - 160f, 22f),
+                new Rect(mx0 + S(56f), yMid, midW - S(56f) - S(160f), S(22f)),
                 IpamFormFocusRackRename,
                 96,
                 IpamTextFieldKind.Name);
-            GUI.Label(new Rect(mx0 + midW - 152f, yMid, 148f, 22f), "47 U (standard)", _stMuted);
+            GUI.Label(new Rect(mx0 + midW - S(152f), yMid, S(148f), S(22f)), "47 U (standard)", _stMuted);
             yMid += 26f;
             if (ImguiButtonOnce(new Rect(mx0 + midW - 168f, yMid, 78f, 24f), "Apply", 9221, _stMutedBtn))
             {
@@ -1434,7 +1434,7 @@ public static partial class IPAMOverlay
 
             if (selected.SceneCopy != null)
             {
-                yMid += 32f;
+                yMid += S(32f);
             }
         }
 
@@ -1454,7 +1454,7 @@ public static partial class IPAMOverlay
         {
             var d = diagramDevices[r];
             var alt = r % 2 == 1;
-            var rr = new Rect(mx0, yMid, midW - (selected.IsPersistedEditable ? 36f : 4f), TableRowH);
+            var rr = new Rect(mx0, yMid, midW - (selected.IsPersistedEditable ? S(36f) : S(4f)), TableRowH);
             if (Event.current.type == EventType.Repaint)
             {
                 DrawTintedRect(rr, alt ? new Color(0.06f, 0.08f, 0.1f, 0.5f) : new Color(0.04f, 0.05f, 0.06f, 0.35f));
@@ -1496,7 +1496,7 @@ public static partial class IPAMOverlay
                 && !string.IsNullOrEmpty(d.EntryId))
             {
                 var dedRm = 928000 + Mathf.Abs(d.EntryId.GetHashCode() % 90000);
-                if (ImguiButtonOnce(new Rect(mx0 + midW - 32f, yMid + 2f, 28f, TableRowH - 4f), "×", dedRm, _stMutedBtn))
+                if (ImguiButtonOnce(new Rect(mx0 + midW - S(32f), yMid + S(2f), S(28f), TableRowH - S(4f)), "×", dedRm, _stMutedBtn))
                 {
                     if (RackDataStore.TryRemoveMount(selected.Persisted.Id, d.EntryId))
                     {

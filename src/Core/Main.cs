@@ -26,6 +26,7 @@ public class GregModIPAMMod : MelonMod
     private static MelonPreferences_Category _prefs;
     private static MelonPreferences_Entry<float> _prefUiFontScale;
     private static MelonPreferences_Entry<string> _prefToggleKey;
+    private static MelonPreferences_Entry<bool> _prefExcludeGateway;
     private static Key _toggleKey = Key.P;
     private static bool _prefSavePending;
     private static float _prefSaveDueAtRealtime;
@@ -62,6 +63,8 @@ public class GregModIPAMMod : MelonMod
             _prefs = MelonPreferences.CreateCategory(PrefCategoryId, PrefCategoryName);
             _prefUiFontScale = _prefs.CreateEntry(PrefUiFontScaleKey, 1f, "IPAM UI font scale");
             _prefToggleKey = _prefs.CreateEntry("ToggleKey", "P", "Hotkey to open/close the IPAM window");
+            _prefExcludeGateway = _prefs.CreateEntry("ExcludeGateway", true,
+                "DHCP never assigns the typical gateway (.1 on /24-or-shorter), including private subnets");
             try
             {
                 if (System.Enum.TryParse<Key>(_prefToggleKey.Value, true, out var k) && k != Key.None)
@@ -193,6 +196,27 @@ public class GregModIPAMMod : MelonMod
         else
         {
             try { ModLocalGuard.SetLocked(open); } catch { }
+        }
+    }
+
+    internal static bool ExcludeGatewayFromDhcp
+    {
+        get
+        {
+            try { return _prefExcludeGateway == null || _prefExcludeGateway.Value; }
+            catch { return true; }
+        }
+        set
+        {
+            try
+            {
+                if (_prefExcludeGateway == null) return;
+                if (_prefExcludeGateway.Value == value) return;
+                _prefExcludeGateway.Value = value;
+                _prefSavePending = true;
+                _prefSaveDueAtRealtime = Time.unscaledTime + PrefSaveDebounceSeconds;
+            }
+            catch { }
         }
     }
 

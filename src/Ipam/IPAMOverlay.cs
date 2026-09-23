@@ -63,8 +63,8 @@ public static partial class IPAMOverlay
                 _nextEolSnapshotRefreshTime = 0f;
                 _focusIpamWindowOnNextFrame = true;
                 UiRaycastBlocker.SetBlocking(true);
-                GameInputSuppression.SetSuppressed(true);
-                GameInputSuppression.RefreshWhileActive();
+                // Zentral (gregCore) oder lokal (standalone) — nie beides.
+                try { GregModIPAMMod.SetMenuOpen(true); } catch { }
                 _ipamNextPlayerInputRescanTime = Time.unscaledTime + 2.5f;
                 IpamMenuOcclusion.BumpScanPriority();
                 ResetIpamEscapeKeyboardLatchForOverlayOpen();
@@ -108,7 +108,7 @@ public static partial class IPAMOverlay
                 IpamIpAddressViewBuffer.Clear();
                 BeginImGuiInputRecoveryBurst();
                 UiRaycastBlocker.SetBlocking(false);
-                GameInputSuppression.SetSuppressed(false);
+                try { GregModIPAMMod.SetMenuOpen(false); } catch { }
                 _ipamNextPlayerInputRescanTime = 0f;
                 IpamMenuOcclusion.Tick(false);
                 ModDebugLog.WriteIpam($"IPAM close frame={Time.frameCount} recoverUntil={_imguiRecoverUntilExclusive}");
@@ -920,15 +920,9 @@ public static partial class IPAMOverlay
         var oldBg = GUI.backgroundColor;
         var oldContent = GUI.contentColor;
 
-        // Ensure camera/game input is blocked while overlay is visible
-        if (GameInputSuppression.IsActive)
-        {
-            GameInputSuppression.RefreshWhileActive();
-        }
-        else
-        {
-            GameInputSuppression.SetSuppressed(true);
-        }
+        // Ensure camera/game input is blocked while overlay is visible.
+        // Zentraler Lock (GregMenuRegistry/GregInputLock) uebernimmt das;
+        // die lokale PlayerInput-Deaktivierung ist wirkungslos im Spiel.
 
         // Full-screen IMGUI control: absorbs pointer events for IMGUI stacks. Do not disable
         // UnityEngine.EventSystems.EventSystem here — Data Center's UI_SelectedBorder.Update null-refs when it is off.

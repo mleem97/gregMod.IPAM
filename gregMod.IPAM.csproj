@@ -19,6 +19,7 @@
     <Reference Include="Il2Cppmscorlib"><HintPath>references/Il2Cppmscorlib.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Assembly-CSharp"><HintPath>references/Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>references/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="gregCore"><HintPath>references/gregCore.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>references/UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.PhysicsModule"><HintPath>references/UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.TextRenderingModule"><HintPath>references/UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>

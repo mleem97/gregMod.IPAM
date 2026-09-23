@@ -416,7 +416,7 @@ public static partial class IPAMOverlay
         _stBadgeOn.fontSize = Fs(11);
         _stBadgeOn.fontStyle = FontStyle.Bold;
         _stBadgeOn.alignment = TextAnchor.MiddleCenter;
-        _stBadgeOn.normal.textColor = new Color32(110, 231, 210, 255);
+        _stBadgeOn.normal.textColor = new Color32(135, 206, 235, 255);
         _stBadgeOn.normal.background = MakeTexture(12, 56, 52, 255);
         _stBadgeOn.border = Ro(4, 4, 4, 4);
 
@@ -435,7 +435,7 @@ public static partial class IPAMOverlay
         _stNavItemActive.fontStyle = FontStyle.Bold;
         _stNavItemActive.alignment = TextAnchor.MiddleLeft;
         _stNavItemActive.padding = Ro(28, 8, 0, 0);
-        _stNavItemActive.normal.textColor = new Color32(80, 220, 210, 255);
+        _stNavItemActive.normal.textColor = new Color32(135, 206, 235, 255);
 
         _stNavHint = new GUIStyle();
         _stNavHint.font = lf;
@@ -527,7 +527,7 @@ public static partial class IPAMOverlay
         _stNavSubActive.fontStyle = FontStyle.Bold;
         _stNavSubActive.alignment = TextAnchor.MiddleLeft;
         _stNavSubActive.padding = Ro(38, 8, 0, 0);
-        _stNavSubActive.normal.textColor = new Color32(80, 220, 210, 255);
+        _stNavSubActive.normal.textColor = new Color32(135, 206, 235, 255);
 
         _stMuted = new GUIStyle();
         _stMuted.font = lf;
@@ -661,6 +661,12 @@ public static partial class IPAMOverlay
         _stIopsResultPlaceholder.padding = Ro(0, 0, 0, 0);
         _stIopsResultPlaceholder.clipping = TextClipping.Clip;
         _stIopsResultPlaceholder.normal.textColor = new Color32(154, 164, 178, 255);
+
+        // Racks-Caches halten kopierte fontSize-Werte — mit neu aufbauen,
+        // sonst friert die Racks-Seite auf der alten Skalierung ein.
+        _rackGridAxisLabelStyle = null;
+        _rackGridLabelStyle = null;
+        _rackPickRowLabelStyle = null;
 
         _stylesReady = true;
     }

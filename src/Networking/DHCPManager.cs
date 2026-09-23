@@ -475,6 +475,27 @@ public static class DHCPManager
         return IsTypicalGatewayLastOctet(ip) && RouteMath.ShouldReserveTypicalGateway(cidr);
     }
 
+    /// <summary>
+    /// Gateway-Skip für die Vergabe: Vanilla-Pfad (öffentliche /24er) plus
+    /// ExcludeGateway-Pref (gilt auch für private Netze, Default an).
+    /// </summary>
+    private static bool ShouldSkipGatewayForPick(string candidate, string cidr, bool applyGatewaySkip)
+    {
+        if (!IsTypicalGatewayLastOctet(candidate))
+        {
+            return false;
+        }
+
+        if (applyGatewaySkip && RouteMath.ShouldReserveTypicalGateway(cidr))
+        {
+            return true;
+        }
+
+        bool exclude = true;
+        try { exclude = GregModIPAMMod.ExcludeGatewayFromDhcp; } catch { exclude = true; }
+        return exclude && RouteMath.IsShortPrefixForGatewayReservation(cidr);
+    }
+
     private static bool IsIpUsedByAnotherServer(Server self, string ip, Server[] allServers)
     {
         if (string.IsNullOrWhiteSpace(ip) || allServers == null)
@@ -561,7 +582,7 @@ public static class DHCPManager
                 continue;
             }
 
-            if (applyGatewaySkip && ShouldSkipTypicalGateway(candidate, cidrForLog))
+            if (ShouldSkipGatewayForPick(candidate, cidrForLog, applyGatewaySkip))
             {
                 nGatewaySkip++;
                 if (logEachReject)
@@ -612,7 +633,7 @@ public static class DHCPManager
             && current != "0.0.0.0"
             && RouteMath.IsIpv4InCidr(current.Trim(), trimmed)
             && !IsIpUsedByAnotherServer(server, current.Trim(), allServers)
-            && (!applyGatewaySkip || !ShouldSkipTypicalGateway(current.Trim(), trimmed)))
+            && !ShouldSkipGatewayForPick(current.Trim(), trimmed, applyGatewaySkip))
         {
             ip = current.Trim();
             return true;
@@ -638,7 +659,9 @@ public static class DHCPManager
 
     private static string PickFromPrivateLan(string privateCidr, Server server, Server[] allServers)
     {
-        foreach (var candidate in CustomerPrivateSubnetRegistry.EnumerateDhcpCandidates(privateCidr))
+        bool skipGateway = true;
+        try { skipGateway = GregModIPAMMod.ExcludeGatewayFromDhcp; } catch { skipGateway = true; }
+        foreach (var candidate in CustomerPrivateSubnetRegistry.EnumerateDhcpCandidates(privateCidr, skipGateway))
         {
             if (string.IsNullOrWhiteSpace(candidate))
             {

@@ -1,38 +1,20 @@
-# Security Policy
+# Security Policy — gregMod.IPAM
 
-## Supported Versions
+## Melden
 
-Security fixes are currently provided for the latest code on the `master` branch.
+Sicherheitslücken bitte **nicht** als öffentliches Issue melden, sondern per E-Mail an den Maintainer
+([mleem97](https://github.com/mleem97)) mit Betreff `[SECURITY] gregMod.IPAM` und folgenden Angaben:
 
----
+- betroffene Version (`VERSION` / Commit),
+- Schritte zur Reproduktion,
+- mögliche Auswirkungen.
 
-## Reporting a Vulnerability
+Antwortziel: Bestätigung innerhalb von 72 Stunden. Details werden erst nach einem Fix veröffentlicht
+(Coordinated Disclosure).
 
-Please **do not** open a public issue for sensitive security reports.
+## Unterstützte Versionen
 
-Instead:
-
-1. Open a private security advisory on GitHub (preferred), or
-2. Contact the maintainer through repository security contact channels.
-
-Include:
-
-- Affected version/commit
-- Reproduction steps
-- Impact assessment
-- Suggested remediation (if available)
-
----
-
-## Response Process
-
-- Initial triage target: within **7 days**
-- If confirmed, a fix plan and timeline will be provided
-- Coordinated disclosure is preferred after patch availability
-
----
-
-## Scope Notes
-
-This repository is a game mod project and may interact with game/runtime APIs.
-Please report only issues relevant to this repository's code and packaging.
+| Version | Support |
+|---|---|
+| Letztes Release (`VERSION`) | ✅ |
+| Ältere | ❌ (nur Best-Effort) |

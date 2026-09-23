@@ -15,8 +15,8 @@ public static class CustomerPrivateSubnetRegistry
         return false;
     }
 
-    public static IEnumerable<string> EnumerateDhcpCandidates(string privateCidr)
+    public static IEnumerable<string> EnumerateDhcpCandidates(string privateCidr, bool skipGateway = true)
     {
-        return RouteMath.EnumerateDhcpCandidates(privateCidr, skipTypicalGatewayLastOctet: true);
+        return RouteMath.EnumerateDhcpCandidates(privateCidr, skipTypicalGatewayLastOctet: skipGateway);
     }
 }
