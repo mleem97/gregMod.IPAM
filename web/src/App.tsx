@@ -35,8 +35,8 @@ export default function App() {
         </div>
         <div className="status-chips">
           <span className={status ? 'chip ok' : 'chip bad'}>{status ? 'linked' : 'no game'}</span>
-          {status && <span className="chip">{status.scene || '—'}</span>}
-          {status && <span className={status.dhcpUnlocked ? 'chip ok' : 'chip'}>DHCP {status.dhcpUnlocked ? 'on' : 'off'}</span>}
+          {status ? <span className="chip">{status.scene || '—'}</span> : null}
+          {status ? <span className={status.dhcpUnlocked ? 'chip ok' : 'chip'}>DHCP {status.dhcpUnlocked ? 'on' : 'off'}</span>}
         </div>
         <nav>
           {(['dash', 'servers', 'dhcp', 'racks', 'logs'] as const).map((t) => (
@@ -78,7 +78,7 @@ function Dashboard({ status }: { status: Status | null }) {
         <button onClick={toggleOverlay}>{status.overlayVisible ? 'Close' : 'Open'}</button></div>
       <div className="card"><h3>DHCP</h3>
         <button onClick={assignAll} disabled={!status.dhcpUnlocked}>Assign all (Ctrl+L)</button>
-        {msg && <p className="muted">{msg}</p>}</div>
+        {msg ? <p className="muted">{msg}</p> : null}</div>
     </div>
   )
 }
@@ -105,7 +105,7 @@ function Servers() {
       <div className="toolbar">
         <input placeholder="Filter ..." value={filter} onChange={(e) => setFilter(e.target.value)} />
         <button onClick={reload}>Reload</button>
-        {msg && <span className="muted">{msg}</span>}
+        {msg ? <span className="muted">{msg}</span> : null}
       </div>
       <table>
         <thead><tr><th>Name</th><th>IP</th><th>Customer</th><th>Type</th><th>Power</th><th>Actions</th></tr></thead>
@@ -172,7 +172,7 @@ function Dhcp() {
           <option>Global</option><option>VLAN</option><option>Switch</option>
         </select>
         <button onClick={add}>Create scope</button>
-        {msg && <span className="muted">{msg}</span>}
+        {msg ? <span className="muted">{msg}</span> : null}
       </div>
       <table>
         <thead><tr><th>Prio</th><th>Name</th><th>Level</th><th>CIDR</th><th></th></tr></thead>
@@ -231,7 +231,7 @@ function Racks() {
       <div className="toolbar">
         <label><input type="checkbox" checked={cheat} onChange={(e) => setCheat(e.target.checked)} /> Cheat (free)</label>
         <button onClick={reload}>Reload</button>
-        {msg && <span className="muted">{msg}</span>}
+        {msg ? <span className="muted">{msg}</span> : null}
       </div>
       <h3>Mounts ({mounts.length}, open: {open.length})</h3>
       <table>

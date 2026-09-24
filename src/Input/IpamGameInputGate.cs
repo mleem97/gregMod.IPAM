@@ -9,6 +9,7 @@ internal static class IpamGameInputGate
 {
     internal static int HardwareMouseBypassDepth { get; private set; }
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage(Justification = "Headless-testable part covered; game-bound remainder needs running game (Il2Cpp/Unity/Melon runtime).")]
     internal static bool ShouldStripGameMouse =>
         IPAMOverlay.IsVisible && HardwareMouseBypassDepth == 0;
 
