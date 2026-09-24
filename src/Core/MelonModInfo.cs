@@ -1,5 +1,6 @@
 using GregModIPAM;
 using MelonLoader;
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ModCoverage.Tests")]
 
 [assembly: MelonInfo(typeof(GregModIPAMMod), "gregMod.IPAM", "0.8.1", "TeamGreg Modding (mleem97 & mochimus)")]
 // Empty MelonGame = universal (any game). For a stricter mod, use e.g. [MelonGame("CompanyFromLog", "ProductFromLog")] from MelonLoader/Latest.log.
