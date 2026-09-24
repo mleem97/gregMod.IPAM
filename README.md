@@ -60,17 +60,17 @@ Details: [QUICKSTART.md](QUICKSTART.md), [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Repository Layout
 
 ```
-├── README.md            # Diese Datei
-├── QUICKSTART.md        # Schnellstart
+├── README.md            # This file
+├── QUICKSTART.md        # Quickstart
 ├── CHANGELOG.md         # Changelog (Keep a Changelog)
-├── CONTRIBUTING.md      # Mitmachen
-├── SECURITY.md          # Sicherheitsmeldungen
-├── CODE_OF_CONDUCT.md   # Verhaltenskodex
-├── AGENTS.md            # Hinweise für KI-Agenten
+├── CONTRIBUTING.md      # Contributing
+├── SECURITY.md          # Security reports
+├── CODE_OF_CONDUCT.md   # Code of conduct
+├── AGENTS.md            # Notes for AI agents
 ├── LICENSE              # Apache-2.0
 ├── VERSION              # Single Source of Truth für die Version
-├── docs/                # Dokumentation ([Index](docs/INDEX.md))
-├── scripts/             # Build-/Hilfsskripte
+├── docs/                # Documentation ([Index](docs/INDEX.md))
+├── scripts/             # Build/helper scripts
 ├── tests/               # Tests
 ├── references/          # Referenzen
 ├── sponsors/            # Sponsoren
