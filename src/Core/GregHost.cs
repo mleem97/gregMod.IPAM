@@ -2,11 +2,11 @@ using System;
 
 namespace GregModIPAM;
 
-// Erkennt zur Laufzeit, ob gregCore vorhanden ist (Typname-Lookup, kein
-// direkter Typzugriff). Mit Core: zentrale Registry/Lock-Services.
-// Ohne: mod-lokale Minimal-Implementationen (Standalone-Modus).
-// Regel: Methoden mit gregCore-Typen duerfen NUR bei HasCore aufgerufen
-// werden (sonst JIT-TypeLoad bei fehlender DLL).
+// Detects at runtime if gregCore is present (type-name lookup, no
+// direct type access). With core: central registry/lock services.
+// Without: mod-local minimal impls (standalone mode).
+// Rule: methods with gregCore types may ONLY run when HasCore is true
+// (else JIT TypeLoad with missing DLL).
 internal static class GregHost
 {
     private const string ProbeType = "gregCore.UI.GregNotificationManager, gregCore";

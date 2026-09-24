@@ -476,8 +476,8 @@ public static class DHCPManager
     }
 
     /// <summary>
-    /// Gateway-Skip für die Vergabe: Vanilla-Pfad (öffentliche /24er) plus
-    /// ExcludeGateway-Pref (gilt auch für private Netze, Default an).
+    /// Gateway skip for picks: vanilla path (public /24s) plus
+    /// ExcludeGateway pref (also for private nets, default on).
     /// </summary>
     private static bool ShouldSkipGatewayForPick(string candidate, string cidr, bool applyGatewaySkip)
     {
@@ -497,9 +497,9 @@ public static class DHCPManager
     }
 
     /// <summary>
-    /// Harte Vergabe-Sperren (immer, unabhängig von Quelle und Config):
-    /// Netzwerk- und Broadcast-Adresse des Bereichs sowie konfigurierte
-    /// ExcludeIps. DHCP darf erste/letzte Adresse nie vergeben.
+    /// Hard pick blocks (always, any source or config):
+    /// range network + broadcast addr plus configured
+    /// ExcludeIps. DHCP never hands out first/last addr.
     /// </summary>
     private static bool IsHardReservedForPick(string candidate, string cidr)
     {

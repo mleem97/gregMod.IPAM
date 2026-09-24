@@ -6,9 +6,9 @@ using UnityEngine;
 
 namespace GregModIPAM
 {
-    // Checkbox-Mehrfachauswahl + Massenaktionen für Server-Listen
-    // (Devices, IP-Adressen, Kunden-Server). Sortierung läuft weiter über
-    // die klickbaren Spaltenköpfe (▲▼) der jeweiligen Tabelle.
+    // Checkbox multi-select + bulk actions for server lists
+    // (devices, IPs, customer servers). Sorting still via
+    // clickable column headers (▲▼) of each table.
     public static partial class IPAMOverlay
     {
         // ── Checkbox ─────────────────────────────────────────────────────────
@@ -77,22 +77,22 @@ namespace GregModIPAM
             try { count = _selectedServerInstanceIds.Count; } catch { }
             if (count <= 0) return;
 
-            GUI.Label(new Rect(x0, y + 3f, 150f, 22f), $"{count} ausgewählt:", _stTableCell);
+            GUI.Label(new Rect(x0, y + 3f, 150f, 22f), $"{count} selected:", _stTableCell);
 
             var bx = x0 + 154f;
-            if (ImguiButtonOnce(new Rect(bx, y, 110f, 24f), "DHCP zuweisen", 87100, _stPrimaryBtn))
+            if (ImguiButtonOnce(new Rect(bx, y, 110f, 24f), "Assign DHCP", 87100, _stPrimaryBtn))
             {
                 BulkDhcpAssignSelected();
             }
 
             bx += 116f;
-            if (ImguiButtonOnce(new Rect(bx, y, 110f, 24f), "Techniker", 87101, _stMutedBtn))
+            if (ImguiButtonOnce(new Rect(bx, y, 110f, 24f), "Technician", 87101, _stMutedBtn))
             {
                 BulkTechnicianSelected();
             }
 
             bx += 116f;
-            if (ImguiButtonOnce(new Rect(bx, y, 110f, 24f), "Abwählen", 87102, _stMutedBtn))
+            if (ImguiButtonOnce(new Rect(bx, y, 110f, 24f), "Deselect", 87102, _stMutedBtn))
             {
                 try
                 {
@@ -146,11 +146,11 @@ namespace GregModIPAM
                 }
                 catch (Exception ex)
                 {
-                    ModLogging.Warning($"Bulk-DHCP fehlgeschlagen: {ex.GetBaseException().Message}");
+                    ModLogging.Warning($"Bulk DHCP failed: {ex.GetBaseException().Message}");
                 }
             }
 
-            try { ShowIpamToast($"DHCP: {ok}/{servers.Count} zugewiesen."); } catch { }
+            try { ShowIpamToast($"DHCP: {ok}/{servers.Count} assigned."); } catch { }
             try { InvalidateDeviceCache(); } catch { }
             try { RecomputeContentHeight(); } catch { }
         }
@@ -169,7 +169,7 @@ namespace GregModIPAM
                 catch { }
             }
 
-            try { ShowIpamToast($"Techniker zu {ok}/{servers.Count} Geräten."); } catch { }
+            try { ShowIpamToast($"Technician to {ok}/{servers.Count} devices."); } catch { }
         }
     }
 }

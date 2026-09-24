@@ -4,9 +4,9 @@ using UnityEngine.InputSystem;
 
 namespace GregModIPAM;
 
-// Standalone-Input-Guard (ohne gregCore): Cursor + PlayerManager-Flags +
-// PlayerInput-Deaktivierung (2s-gedrosselt). Wird nur benutzt wenn
-// GregHost.HasCore == false; sonst steuert die zentrale Registry.
+// Standalone input guard (no gregCore): cursor + PlayerManager flags +
+// PlayerInput disable (2s throttled). Only used when
+// GregHost.HasCore == false; else central registry controls.
 internal static class ModLocalGuard
 {
     private static readonly List<PlayerInput> Suspended = new();

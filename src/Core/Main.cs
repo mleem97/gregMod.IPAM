@@ -181,12 +181,12 @@ public class GregModIPAMMod : MelonMod
         gregCore.UI.GregMenuRegistry.SetOpen("ipam", open);
     }
 
-    // Mod-Vertrag + Tasten-HUD + Oeffner fuers F1-Hub. Nur mit gregCore
-    // aufrufen (eigene Methode wegen JIT-Trennung ohne gregCore-DLL).
+    // Mod contract + key HUD + opener for F1 hub. Call only with gregCore
+    // (own method for JIT split without gregCore DLL).
     private static void CoreRegisterExtras()
     {
         gregCore.Core.Mods.GregModRegistry.Register(
-            "gregMod.IPAM", "IPAM", "0.7.6",
+            "gregMod.IPAM", "IPAM", "0.8.0",
             new string[] { "ipam" });
         gregCore.UI.GregHudRegistry.Register("ipam", _toggleKey.ToString(), "IPAM");
         gregCore.UI.GregMenuRegistry.RegisterOpener("ipam", () =>
@@ -201,7 +201,7 @@ public class GregModIPAMMod : MelonMod
 
     internal static void SetMenuOpen(bool open)
     {
-        // Zentral (gregCore) oder lokal (standalone) — nie beides.
+        // Central (gregCore) or local (standalone) — never both.
         if (GregHost.HasCore)
         {
             try { CoreSetOpen(open); } catch { }
@@ -254,7 +254,7 @@ public class GregModIPAMMod : MelonMod
         }
     }
 
-    // React-WebUI-Backend (läuft im Hintergrund ab Mod-Start, 127.0.0.1 only).
+    // React WebUI backend (runs in bg since mod start, 127.0.0.1 only).
     private static void StartWebBackend()
     {
         try
@@ -302,7 +302,7 @@ public class GregModIPAMMod : MelonMod
 
         // Keep the central input lock held for a short window after overlay
         // closes via Escape so the game does not see the same Escape press
-        // and open the pause menu. Standalone: lokaler Guard.
+        // and open the pause menu. Standalone: local guard.
         if (!IPAMOverlay.IsVisible)
         {
             try
@@ -321,7 +321,7 @@ public class GregModIPAMMod : MelonMod
 
         // Run before default Unity script order so keys are handled before many game scripts read the same keys.
         var kb = Keyboard.current;
-        // Toggle-Key oeffnet IPAM — aber NICHT wenn das Pause-Menue aktiv ist
+        // Toggle key opens IPAM — but NOT while pause menu is active
         if (kb != null)
         {
             // P toggles IPAM — but NOT while pause menu is active

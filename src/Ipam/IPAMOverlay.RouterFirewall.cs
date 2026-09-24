@@ -6,10 +6,10 @@ using UnityEngine;
 
 namespace GregModIPAM
 {
-    // Router- + Firewall-Verwaltung (wie im Spiel: Subnetze, Routen, Regeln).
+    // Router + firewall admin (as in game: subnets, routes, rules).
     public static partial class IPAMOverlay
     {
-        // ── Auswahl ──────────────────────────────────────────────────────────
+        // ── Select ─────────────────────────────────────────────────────────────
 
         private static Router SelectedRouter()
         {
@@ -457,8 +457,8 @@ namespace GregModIPAM
             }
         }
 
-        // RemoveRule braucht eine VLAN-ID, die in FilterRule nicht steht —
-        // deshalb Listenschnitt + Cluster-Broadcast statt Rate-Vanilla-Pfad.
+        // RemoveRule needs a VLAN id not stored in FilterRule —
+        // so list slice + cluster broadcast instead of rare vanilla path.
         private static void RemoveFirewallRuleByMatch(Firewall fw, int port, string src, string dst, int netport, string proto, bool allow)
         {
             if (fw == null) return;
@@ -497,11 +497,11 @@ namespace GregModIPAM
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[IPAM] Firewall-Regel löschen fehlgeschlagen: {ex.GetBaseException().Message}");
+                MelonLogger.Warning($"[IPAM] Firewall rule delete failed: {ex.GetBaseException().Message}");
             }
         }
 
-        // ── Höhen für RecomputeContentHeight ─────────────────────────────────
+        // ── Heights for RecomputeContentHeight ─────────────────────────────────
 
         internal static float RouterDetailHeight()
         {

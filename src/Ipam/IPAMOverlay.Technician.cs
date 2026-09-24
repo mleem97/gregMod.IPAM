@@ -6,8 +6,8 @@ using UnityEngine;
 
 namespace GregModIPAM
 {
-    // Techniker-Dispatch aus IPAM: pro defektem Gerät (Zeilen-Button) oder im
-    // Bulk (alle defekten). Nutzt GameTechnicianDispatch (Vanilla-Pfade).
+    // Tech dispatch from IPAM: per broken device (row button) or
+    // bulk (all broken). Uses GameTechnicianDispatch (vanilla paths).
     public static partial class IPAMOverlay
     {
         private static string _techFeedback = "";
@@ -123,7 +123,7 @@ namespace GregModIPAM
             return false;
         }
 
-        // Zeilen-Button links neben dem Power-Toggle (nur bei Arbeitsbedarf).
+        // Row button left of power toggle (only when work needed).
         internal static void DrawServerTechButton(Rect rowRect, Server server)
         {
             if (server == null) return;
@@ -144,7 +144,7 @@ namespace GregModIPAM
             }
         }
 
-        // Bulk-Panel unter der Server-Tabelle: Status + "alle defekten".
+        // Bulk panel below server table: status + "all broken".
         internal static void DrawTechnicianPanel(ref float y, float x0, float cardW)
         {
             int techCount = -1;
@@ -220,7 +220,7 @@ namespace GregModIPAM
 
         internal static float TechnicianPanelHeight()
         {
-            // Titel + Status + Button + optionales Feedback.
+            // Title + status + button + optional feedback.
             return SectionTitleH + 4f + 22f + 28f + 24f;
         }
     }
