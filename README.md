@@ -15,38 +15,38 @@
 
 **gregMod.IPAM** — gregMod.IPAM** extends **Data Center** with an in-game IPAM and network management layer. The focus is faster IP handling, better device visibility, DHCP/subnet
 
-Siehe [docs/INDEX.md](docs/INDEX.md) für die komplette Dokumentation.
+See [docs/INDEX.md](docs/INDEX.md) for the complete documentation.
 
 ## Compatibility
 
-| Plattform | Status |
+| Platform | Status |
 |---|---|
 | Windows x64 | Supported |
 | Linux x64 | Supported |
 
 ## Features
 
-- Siehe [docs/INDEX.md](docs/INDEX.md) und [QUICKSTART.md](QUICKSTART.md)
+- See [docs/INDEX.md](docs/INDEX.md) and [QUICKSTART.md](QUICKSTART.md)
 
 ## WebUI (React, Port 8177)
 
-Ab Mod-Start läuft im Hintergrund ein Webserver (nur 127.0.0.1, Prefs
+From mod start, a web server runs in the background (only 127.0.0.1, prefs
 `WebEnabled`/`WebPort`): http://127.0.0.1:8177/
 
-- Dashboard (Status, Overlay auf/zu, DHCP assign-all), Server-Tabelle
-  (Filter, DHCP/IP/Rename/Power pro Server), DHCP-Scopes (CRUD), Logs
-- API unter `/api/*` (JSON): `status`, `servers`, `dhcp/assign-all`,
+- Dashboard (status, overlay open/close, DHCP assign-all), server table
+  (filter, DHCP/IP/rename/power per server), DHCP scopes (CRUD), logs
+- API under `/api/*` (JSON): `status`, `servers`, `dhcp/assign-all`,
   `dhcp/assign-one`, `server/ip`, `server/rename`, `server/power`,
   `scopes` (GET/POST/DELETE), `logs`, `overlay`
-- Game-Zugriffe laufen über eine Main-Thread-Queue (8s-Timeout), sonst 503
-- Frontend entwickeln: `cd web && npm install && npm run dev`
-- Frontend deployen: `npm run build` in `web/`, dann
-  `scripts/deploy-web.sh` (kopiert `web/dist` nach
+- Game access runs via a main-thread queue (8s timeout), otherwise 503
+- Develop the frontend: `cd web && npm install && npm run dev`
+- Deploy the frontend: `npm run build` in `web/`, then
+  `scripts/deploy-web.sh` (copies `web/dist` to
   `UserData/gregMod.IPAM/web/`)
 
 ## Installation
 
-Siehe [QUICKSTART.md](QUICKSTART.md).
+See [QUICKSTART.md](QUICKSTART.md).
 
 ## Build from Source
 
@@ -79,25 +79,25 @@ Details: [QUICKSTART.md](QUICKSTART.md), [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## API Documentation
 
-Siehe [`docs/INDEX.md`](docs/INDEX.md).
+See [`docs/INDEX.md`](docs/INDEX.md).
 
 ## Credits
 
-| Rolle | Contributor |
+| Role | Contributor |
 |---|---|
 | **Codebase** | [mleem97](https://github.com/mleem97) |
 
 ## Contributing
 
-Siehe [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Apache-2.0 — siehe [`LICENSE`](LICENSE).
+Apache-2.0 — see [`LICENSE`](LICENSE).
 
 ## 🚀 Join the gregFramework Team!
 
-Baust du gerne Mods, Tools oder Docs? Melde dich: **apply@gregframework.eu** oder via
+Do you enjoy building mods, tools, or docs? Get in touch: **apply@gregframework.eu** or via
 [Discord](https://discord.gg/greg) — Code, Assets, Docs, Testing, Infra, Community.
 
 ---

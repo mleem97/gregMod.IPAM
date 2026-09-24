@@ -211,7 +211,7 @@ internal static class IpamWebServer
 
         if (!File.Exists(full))
         {
-            // SPA-Fallback: unbekannte Pfade -> index.html (React-Router).
+            // SPA fallback: unknown paths -> index.html (React Router).
             var index = Path.Combine(_webRoot, "index.html");
             if (File.Exists(index)) full = index;
             else

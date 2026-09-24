@@ -43,7 +43,7 @@ namespace GregModIPAM
             }
         }
 
-        // ── Formular-State ───────────────────────────────────────────────────
+        // ── Form State ───────────────────────────────────────────────────
 
         private static string _rtVlanBuf = "";
         private static string _rtCidrBuf = "";
@@ -66,7 +66,7 @@ namespace GregModIPAM
 
         private static readonly string[] FwProtocols = { "TCP", "UDP", "Both" };
 
-        // ── Router-Panel ─────────────────────────────────────────────────────
+        // ── Router Panel ─────────────────────────────────────────────────────
 
         internal static void DrawRouterManagement(ref float y, float x0, float cardW)
         {
@@ -279,7 +279,7 @@ namespace GregModIPAM
             }
         }
 
-        // ── Firewall-Panel ───────────────────────────────────────────────────
+        // ── Firewall Panel ───────────────────────────────────────────────────
 
         internal static void DrawFirewallManagement(ref float y, float x0, float cardW)
         {
@@ -488,7 +488,7 @@ namespace GregModIPAM
                         && string.Equals(rpr, proto, StringComparison.OrdinalIgnoreCase)
                         && ra == allow)
                     {
-                        // bidirectional bewusst ignoriert (Vanilla toggelt je Richtung).
+                        // bidirectional deliberately ignored (vanilla toggles per direction).
                         list.RemoveAt(i);
                         try { fw.BroadcastRulesToCluster(); } catch { }
                         return;

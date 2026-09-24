@@ -974,7 +974,7 @@ public static partial class IPAMOverlay
             _stHint);
         y += 50f;
 
-        // ── Global DHCP-Optionen ──
+        // ── Global DHCP options ──
         var gatewayOn = GregModIPAMMod.ExcludeGatewayFromDhcp;
         GUI.Label(new Rect(x0, y, cardW - 120f, 22f), "Exclude gateway (.1 on /24 or shorter) from DHCP", _stFormLabel);
         if (ImguiButtonOnce(new Rect(x0 + cardW - 112f, y, 104f, 22f), gatewayOn ? "ON" : "OFF", 9290,

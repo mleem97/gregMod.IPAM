@@ -4135,7 +4135,7 @@ public static partial class IPAMOverlay
             Event.current.Use();
         }
 
-        // Mouse-Wheel auf aktives Octet
+        // Mouse wheel on active octet
         if (_activeOctetSlot == octetSlot
             && Event.current.type == EventType.ScrollWheel
             && labelRect.Contains(Event.current.mousePosition))

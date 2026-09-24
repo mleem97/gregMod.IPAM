@@ -1,17 +1,17 @@
 # Contributing — gregMod.IPAM
 
-Repo: [https://github.com/mleem97/gregMod.IPAM](https://github.com/mleem97/gregMod.IPAM) · Lizenz: Apache-2.0 · Verhaltenskodex: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+Repo: [https://github.com/mleem97/gregMod.IPAM](https://github.com/mleem97/gregMod.IPAM) · License: Apache-2.0 · Code of Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## Workflow
 
-1. Issue oder Idee kurz beschreiben (was/warum).
-2. Branch vom aktuellen `main`: `feat/<kurzname>`, `fix/<kurzname>`, `docs/<kurzname>`.
-3. Kleine, reviewbare Commits (Conventional Commits).
-4. Vor dem PR: bauen + testen (siehe [QUICKSTART.md](QUICKSTART.md)), Doku (`README.md`, `docs/`) und `CHANGELOG.md` (Unreleased) aktualisieren.
-5. PR mit Beschreibung, Screenshots/Logs bei UI-/Verhaltensänderungen.
+1. Briefly describe the issue or idea (what/why).
+2. Branch from the current `main`: `feat/<kurzname>`, `fix/<kurzname>`, `docs/<kurzname>`.
+3. Small, reviewable commits (Conventional Commits).
+4. Before the PR: build + test (see [QUICKSTART.md](QUICKSTART.md)), update docs (`README.md`, `docs/`) and `CHANGELOG.md` (Unreleased).
+5. PR with description, screenshots/logs for UI/behavior changes.
 
-## Regeln
+## Rules
 
-- Keine Secrets, keine Binärdateien ohne Not (dann via Releases, nicht ins Repo).
-- Keine generierten Artefakte committen (`bin/`, `obj/`, `dist/`, `node_modules/`, `.next/` …).
-- Sicherheitsthemen NICHT als Issue, sondern per [SECURITY.md](SECURITY.md) melden.
+- No secrets, no binary files unless necessary (then via releases, not into the repo).
+- Do not commit generated artifacts (`bin/`, `obj/`, `dist/`, `node_modules/`, `.next/` …).
+- Do NOT report security topics as issues; report them via [SECURITY.md](SECURITY.md).
