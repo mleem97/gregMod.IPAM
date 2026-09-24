@@ -146,7 +146,7 @@ namespace GregModIPAM
                 }
                 catch (Exception ex)
                 {
-                    ModLogging.Warning($"Bulk-DHCP fehlgeschlagen: {ex.GetBaseException().Message}");
+                    ModLogging.Warning($"Bulk DHCP failed: {ex.GetBaseException().Message}");
                 }
             }
 

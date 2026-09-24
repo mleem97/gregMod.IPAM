@@ -90,7 +90,7 @@ internal static class IpamWebServer
         }
         catch (Exception ex)
         {
-            MelonLogger.Error($"[IPAM][Web] Start fehlgeschlagen (Port {port}): {ex.GetBaseException().Message}");
+            MelonLogger.Error($"[IPAM][Web] Start failed (port {port}): {ex.GetBaseException().Message}");
             try { _listener?.Close(); } catch { }
             _listener = null;
         }

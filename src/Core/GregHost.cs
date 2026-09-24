@@ -4,7 +4,7 @@ namespace GregModIPAM;
 
 // Erkennt zur Laufzeit, ob gregCore vorhanden ist (Typname-Lookup, kein
 // direkter Typzugriff). Mit Core: zentrale Registry/Lock-Services.
-// Ohne: mod-lokale Minimal-Implementationen (Standalone-Modus).
+// Without: mod-local minimal implementations (standalone mode).
 // Regel: Methoden mit gregCore-Typen duerfen NUR bei HasCore aufgerufen
 // werden (sonst JIT-TypeLoad bei fehlender DLL).
 internal static class GregHost
