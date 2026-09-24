@@ -186,7 +186,7 @@ public class GregModIPAMMod : MelonMod
     private static void CoreRegisterExtras()
     {
         gregCore.Core.Mods.GregModRegistry.Register(
-            "gregMod.IPAM", "IPAM", "0.8.0",
+            "gregMod.IPAM", "IPAM", "0.8.1",
             new string[] { "ipam" });
         gregCore.UI.GregHudRegistry.Register("ipam", _toggleKey.ToString(), "IPAM");
         gregCore.UI.GregMenuBinding.BindToggle("ipam",

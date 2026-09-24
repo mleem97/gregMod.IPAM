@@ -1310,7 +1310,7 @@ public static partial class IPAMOverlay
         y += 8f;
         GUI.Label(
             new Rect(x0, y, cardW, 22f),
-            "gregMod.IPAM v0.8.0 — TeamGreg Modding (mleem97 & mochimus)",
+            "gregMod.IPAM v0.8.1 — TeamGreg Modding (mleem97 & mochimus)",
             _stMuted);
     }
 
