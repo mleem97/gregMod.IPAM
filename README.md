@@ -68,7 +68,7 @@ Details: [QUICKSTART.md](QUICKSTART.md), [CONTRIBUTING.md](CONTRIBUTING.md).
 ├── CODE_OF_CONDUCT.md   # Code of conduct
 ├── AGENTS.md            # Notes for AI agents
 ├── LICENSE              # Apache-2.0
-├── VERSION              # Single Source of Truth für die Version
+├── VERSION              # Single source of truth for the version
 ├── docs/                # Documentation ([Index](docs/INDEX.md))
 ├── scripts/             # Build/helper scripts
 ├── tests/               # Tests
