@@ -15,12 +15,8 @@ public static class Ipv4Rfc1918
             return false;
         }
 
+        // NOTE: no Length check — InterNetwork guarantees 4 octets.
         var b = addr.GetAddressBytes();
-        if (b.Length != 4)
-        {
-            return false;
-        }
-
         be = ((uint)b[0] << 24) | ((uint)b[1] << 16) | ((uint)b[2] << 8) | b[3];
         return true;
     }

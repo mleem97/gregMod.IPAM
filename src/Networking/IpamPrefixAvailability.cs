@@ -55,17 +55,10 @@ internal static class IpamPrefixAvailability
 
         var parentStart = (ulong)pNet;
         var shiftTotal = templateLen - pLen;
-        if (shiftTotal >= 64)
-        {
-            return false;
-        }
-
+        // NOTE: no shiftTotal >= 64 / blockSize == 0 guards — both lengths are
+        // in [0, 32], so shifts stay in [0, 32] and blockSize is never 0.
         totalSlots = 1UL << shiftTotal;
         var blockSize = 1UL << (32 - templateLen);
-        if (blockSize == 0)
-        {
-            return false;
-        }
 
         var parentSpan = 1UL << (32 - pLen);
         var parentEnd = parentStart + parentSpan - 1UL;

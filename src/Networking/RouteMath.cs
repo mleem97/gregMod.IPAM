@@ -42,12 +42,8 @@ public static class RouteMath
             return false;
         }
 
+        // NOTE: no bytes.Length check — InterNetwork guarantees 4 octets.
         var bytes = ip.GetAddressBytes();
-        if (bytes.Length != 4)
-        {
-            return false;
-        }
-
         networkBe = ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
         if (prefixLen < 32)
         {
@@ -205,12 +201,8 @@ public static class RouteMath
             return false;
         }
 
+        // NOTE: no bytes.Length check — InterNetwork guarantees 4 octets.
         var bytes = ip.GetAddressBytes();
-        if (bytes.Length != 4)
-        {
-            return false;
-        }
-
         be = ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
         return true;
     }

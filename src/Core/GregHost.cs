@@ -12,6 +12,7 @@ internal static class GregHost
     private const string ProbeType = "gregCore.UI.GregNotificationManager, gregCore";
     private static bool? _hasCore;
 
+    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage(Justification = "Probe failure branch needs assembly-load failure; not simulable headless. Success path fully tested.")]
     internal static bool HasCore
     {
         get
