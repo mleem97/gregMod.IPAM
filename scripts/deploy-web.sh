@@ -9,7 +9,7 @@ SRC="$HERE/web/dist"
 DST="$GAME_DIR/UserData/gregMod.IPAM/web"
 
 if [ ! -d "$SRC" ]; then
-  echo "FEHLER: $SRC fehlt. Erst 'npm run build' in web/ ausführen."
+  echo "ERROR: $SRC missing. Run 'npm run build' in web/ first."
   exit 1
 fi
 mkdir -p "$DST"

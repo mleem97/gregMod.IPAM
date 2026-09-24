@@ -60,9 +60,9 @@ public static partial class IPAMOverlay
                 _iopsToolbarRectWindowLocal = default;
                 _iopsToolbarScreenRect = default;
                 _iopsToolbarRectLogHash = 0;
-                // Teurer Full-EOL-Snapshot nur beim allerersten Öffnen (leerer
-                // Cache) — danach reicht inkrementell (neue Geräte) + 60s-Takt.
-                // Das war der Hauptanteil des mehrsekündigen Open-Freezes.
+                // Expensive full-EOL snapshot only on the very first open (empty
+                // cache) — afterwards incremental (new devices) + 60s cadence.
+                // That was the main share of the multi-second open freeze.
                 if (_eolDisplayByInstanceId.Count == 0)
                 {
                     _nextEolSnapshotRefreshTime = 0f;

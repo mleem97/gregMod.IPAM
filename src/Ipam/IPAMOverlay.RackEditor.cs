@@ -99,7 +99,7 @@ public static partial class IPAMOverlay
             else
             {
                 GUI.Label(new Rect(mx, my, iw, 22f),
-                    $"{_autoCablingPreview.ServerCount} Server, {_autoCablingPreview.NetworkDeviceCount} Netzwerkgeräte, {_autoCablingPreview.Connections.Count} Kabel",
+                    $"{_autoCablingPreview.ServerCount} servers, {_autoCablingPreview.NetworkDeviceCount} network devices, {_autoCablingPreview.Connections.Count} cables",
                     _stTableCell);
                 my += 26f;
 
@@ -141,7 +141,7 @@ public static partial class IPAMOverlay
         my += 36f;
 
         // Close button
-        if (ImguiButtonOnce(new Rect(mx + modalW - 120f, modalY + modalH - 42f, 90f, 28f), "Schließen", 95006, _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(mx + modalW - 120f, modalY + modalH - 42f, 90f, 28f), "Close", 95006, _stMutedBtn))
         {
             _autoCablingModalOpen = false;
             _autoCablingPreview = null;
@@ -193,7 +193,7 @@ public static partial class IPAMOverlay
         var colPWBtn = 60f;
 
         GUI.Label(new Rect(x0, y, colPWPos, TableHeaderH), "U", _stTableHeaderText);
-        GUI.Label(new Rect(x0 + colPWPos, y, colPWName, TableHeaderH), "Gerät", _stTableHeaderText);
+        GUI.Label(new Rect(x0 + colPWPos, y, colPWName, TableHeaderH), "Device", _stTableHeaderText);
         GUI.Label(new Rect(x0 + colPWPos + colPWName, y, colPWStatus, TableHeaderH), "Status", _stTableHeaderText);
         y += TableHeaderH;
 

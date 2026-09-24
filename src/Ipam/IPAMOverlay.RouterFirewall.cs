@@ -497,11 +497,11 @@ namespace GregModIPAM
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[IPAM] Firewall-Regel löschen fehlgeschlagen: {ex.GetBaseException().Message}");
+                MelonLogger.Warning($"[IPAM] Failed to delete firewall rule: {ex.GetBaseException().Message}");
             }
         }
 
-        // ── Höhen für RecomputeContentHeight ─────────────────────────────────
+        // ── Heights for RecomputeContentHeight ─────────────────────────────────
 
         internal static float RouterDetailHeight()
         {

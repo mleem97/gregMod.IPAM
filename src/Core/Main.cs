@@ -254,7 +254,7 @@ public class GregModIPAMMod : MelonMod
         }
     }
 
-    // React-WebUI-Backend (läuft im Hintergrund ab Mod-Start, 127.0.0.1 only).
+    // React WebUI backend (runs in background since mod start, 127.0.0.1 only).
     private static void StartWebBackend()
     {
         try

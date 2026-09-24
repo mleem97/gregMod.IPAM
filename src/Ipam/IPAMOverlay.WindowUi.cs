@@ -2123,7 +2123,7 @@ public static partial class IPAMOverlay
                 HandleServerRowClick(server, rowIdx, ip, SortedServersBuffer);
             }
 
-            // Checkbox nach der Zeile zeichnen (sonst vom Zeilenhintergrund übermalt).
+            // Draw checkbox after the row (otherwise painted over by row background).
             DrawServerRowCheckbox(r, server, 136f);
 
             // Toggle button

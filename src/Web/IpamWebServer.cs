@@ -17,7 +17,7 @@ namespace GregModIPAM.Web;
 // Dateien aus webRoot (Vite-dist) + JSON-API unter /api/*.
 //
 // Unity-Regel: Szenen-/GameObject-Zugriffe laufen NUR im Main-Thread.
-// HTTP-Handler übergeben Arbeit per EnqueueMainThread (blockiert max. 8s),
+// HTTP handlers hand work over via EnqueueMainThread (blocks max 8s),
 // GregModIPAMMod.OnUpdate ruft Drain() auf. Reine Lese-Operationen ohne
 // Unity-Kontakt laufen direkt im HTTP-Thread.
 internal static class IpamWebServer
@@ -85,7 +85,7 @@ internal static class IpamWebServer
             _cts = new CancellationTokenSource();
             _listener.Start();
             Task.Run(() => ServeLoop(_cts.Token));
-            MelonLogger.Msg($"[IPAM][Web] WebUI läuft: http://127.0.0.1:{port}/ (Root: {_webRoot})");
+            MelonLogger.Msg($"[IPAM][Web] Web UI running: http://127.0.0.1:{port}/ (Root: {_webRoot})");
             PushLog($"WebUI gestartet auf Port {port}");
         }
         catch (Exception ex)
@@ -136,7 +136,7 @@ internal static class IpamWebServer
         _mainQueue.Enqueue(work);
         if (!work.Done.Wait(TimeSpan.FromSeconds(8)))
         {
-            error = "Main-Thread-Timeout (Spiel pausiert oder Szene lädt?)";
+            error = "Main-thread timeout (game paused or scene loading?)";
             return null;
         }
 
@@ -821,7 +821,7 @@ internal static class IpamWebServer
         }
     }
 
-    // Il2Cpp-Coroutine über verwaltete Pumpe starten (MoveNext pro Frame).
+    // Start Il2Cpp coroutine via managed pump (MoveNext per frame).
     private static System.Collections.IEnumerator PumpRoutine(Il2CppSystem.Collections.IEnumerator routine)
     {
         while (true)

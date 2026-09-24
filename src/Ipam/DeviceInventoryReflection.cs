@@ -43,9 +43,9 @@ internal static class DeviceInventoryReflection
 
     private static readonly Dictionary<Type, (PropertyInfo[] Props, FieldInfo[] Fields)> EolMemberScanCache = new();
 
-    // Auflösungs-Cache für Namens-Hinweis-Lookups: Der Hierarchie-Walk mit
-    // GetProperty/GetField pro Device pro Refresh ist auf IL2CPP der
-    // Hauptgrund für mehrsekündige Freezes beim Öffnen (133+ Geräte ×
+    // Resolution cache for name-hint lookups: the hierarchy walk with
+    // GetProperty/GetField per device per refresh is the main cause of
+    // multi-second freezes on open under IL2CPP (133+ devices ×
     // Dutzende Namen × Ebenen). Nach dem ersten Treffer kostet ein Lookup
     // nur noch einen Dictionary-Zugriff; Werte werden weiterhin live gelesen.
     private sealed class ResolvedMember
@@ -81,7 +81,7 @@ internal static class DeviceInventoryReflection
         FieldInfo foundField = null;
         try
         {
-            // Gleiche Präzedenz wie früher: pro Ebene erst Property, dann Feld.
+            // Same precedence as before: per level property first, then field.
             for (var bt = type; bt != null && bt != typeof(object); bt = bt.BaseType)
             {
                 try

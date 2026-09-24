@@ -6,8 +6,8 @@ using UnityEngine;
 
 namespace GregModIPAM
 {
-    // Techniker-Dispatch aus IPAM: pro defektem Gerät (Zeilen-Button) oder im
-    // Bulk (alle defekten). Nutzt GameTechnicianDispatch (Vanilla-Pfade).
+    // Technician dispatch from IPAM: per broken device (row button) or in
+    // Bulk (all broken ones). Uses GameTechnicianDispatch (vanilla paths).
     public static partial class IPAMOverlay
     {
         private static string _techFeedback = "";
