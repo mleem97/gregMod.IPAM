@@ -497,9 +497,9 @@ public static class DHCPManager
     }
 
     /// <summary>
-    /// Hard assignment locks (always, regardless of source and config):
-    /// Netzwerk- und Broadcast-Adresse des Bereichs sowie konfigurierte
-    /// ExcludeIps. DHCP darf erste/letzte Adresse nie vergeben.
+    /// Hard pick blocks (always, any source or config):
+    /// range network + broadcast addr plus configured
+    /// ExcludeIps. DHCP never hands out first/last addr.
     /// </summary>
     private static bool IsHardReservedForPick(string candidate, string cidr)
     {

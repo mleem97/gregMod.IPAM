@@ -6,7 +6,7 @@ namespace GregModIPAM;
 
 /// <summary>
 /// Controls server power state via Game-API (Server.TurnOnCommonFunction / TurnOffCommonFunctions).
-/// Power state is tracked in CablingDataStore (mod-eigen, nicht im Game-Savefile).
+/// Power state is tracked in CablingDataStore (mod-local, not in game save).
 /// </summary>
 internal static class ServerPowerController
 {

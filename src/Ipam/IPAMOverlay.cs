@@ -69,7 +69,7 @@ public static partial class IPAMOverlay
                 }
                 _focusIpamWindowOnNextFrame = true;
                 UiRaycastBlocker.SetBlocking(true);
-                // Zentral (gregCore) oder lokal (standalone) — nie beides.
+                // Central (gregCore) or local (standalone) — never both.
                 try { GregModIPAMMod.SetMenuOpen(true); } catch { }
                 _ipamNextPlayerInputRescanTime = Time.unscaledTime + 2.5f;
                 IpamMenuOcclusion.BumpScanPriority();
@@ -938,8 +938,8 @@ public static partial class IPAMOverlay
         var oldContent = GUI.contentColor;
 
         // Ensure camera/game input is blocked while overlay is visible.
-        // Zentraler Lock (GregMenuRegistry/GregInputLock) uebernimmt das;
-        // die lokale PlayerInput-Deaktivierung ist wirkungslos im Spiel.
+        // Central lock (GregMenuRegistry/GregInputLock) takes it;
+        // local PlayerInput disable is a no-op in game.
 
         // Full-screen IMGUI control: absorbs pointer events for IMGUI stacks. Do not disable
         // UnityEngine.EventSystems.EventSystem here — Data Center's UI_SelectedBorder.Update null-refs when it is off.

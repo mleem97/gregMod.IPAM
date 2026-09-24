@@ -662,8 +662,8 @@ public static partial class IPAMOverlay
         _stIopsResultPlaceholder.clipping = TextClipping.Clip;
         _stIopsResultPlaceholder.normal.textColor = new Color32(154, 164, 178, 255);
 
-        // Racks-Caches halten kopierte fontSize-Werte — mit neu aufbauen,
-        // sonst friert die Racks-Seite auf der alten Skalierung ein.
+        // Rack caches hold copied fontSize values — rebuild with styles,
+        // else racks page sticks to old scale.
         _rackGridAxisLabelStyle = null;
         _rackGridLabelStyle = null;
         _rackPickRowLabelStyle = null;

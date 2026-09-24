@@ -55,12 +55,12 @@ public static partial class IPAMOverlay
         var my = modalY + 16f;
         var iw = modalW - 32f;
 
-        GUI.Label(new Rect(mx, my, iw, 24f), "Auto-Verkabelung", _stSectionTitle);
+        GUI.Label(new Rect(mx, my, iw, 24f), "Auto-cabling", _stSectionTitle);
         my += 30f;
 
         // Mode selection
-        GUI.Label(new Rect(mx, my, 60f, 22f), "Modus:", _stMuted);
-        if (ImguiButtonOnce(new Rect(mx + 64f, my, 100f, 24f), "Einfach", 95001,
+        GUI.Label(new Rect(mx, my, 60f, 22f), "Mode:", _stMuted);
+        if (ImguiButtonOnce(new Rect(mx + 64f, my, 100f, 24f), "Simple", 95001,
             _autoCablingMode == CablingMode.Simple ? _stPrimaryBtn : _stMutedBtn))
         {
             _autoCablingMode = CablingMode.Simple;
@@ -79,7 +79,7 @@ public static partial class IPAMOverlay
         // Preview / Plan
         if (_autoCablingPreview == null)
         {
-            if (ImguiButtonOnce(new Rect(mx, my, 160f, 28f), "Vorschau berechnen", 95003, _stPrimaryBtn))
+            if (ImguiButtonOnce(new Rect(mx, my, 160f, 28f), "Calc preview", 95003, _stPrimaryBtn))
             {
                 _autoCablingPreview = AutoCablingEngine.PlanCabling(rackId, _autoCablingMode);
             }
@@ -91,7 +91,7 @@ public static partial class IPAMOverlay
             {
                 GUI.Label(new Rect(mx, my, iw, 44f), _autoCablingPreview.ErrorMessage, _stMuted);
                 my += 50f;
-                if (ImguiButtonOnce(new Rect(mx, my, 120f, 24f), "Erneut", 95004, _stMutedBtn))
+                if (ImguiButtonOnce(new Rect(mx, my, 120f, 24f), "Retry", 95004, _stMutedBtn))
                 {
                     _autoCablingPreview = null;
                 }
@@ -123,16 +123,16 @@ public static partial class IPAMOverlay
 
                 // Game cable option
                 _autoCablingCreateGameCables = GUI.Toggle(new Rect(mx, my, iw, 22f),
-                    _autoCablingCreateGameCables, " Game-Kabel erstellen (experimentell)");
+                    _autoCablingCreateGameCables, " Create game cables (experimental)");
                 my += 28f;
 
                 // Execute button
-                if (ImguiButtonOnce(new Rect(mx, my, 180f, 28f), "Verkabelung erstellen", 95005, _stPrimaryBtn))
+                if (ImguiButtonOnce(new Rect(mx, my, 180f, 28f), "Create cabling", 95005, _stPrimaryBtn))
                 {
                     AutoCablingEngine.ExecuteCabling(rackId, _autoCablingPreview, _autoCablingCreateGameCables);
                     _autoCablingModalOpen = false;
                     _autoCablingPreview = null;
-                    ShowIpamToast("Auto-Verkabelung abgeschlossen.");
+                    ShowIpamToast("Auto-cabling done.");
                     RecomputeContentHeight();
                 }
             }
@@ -170,18 +170,18 @@ public static partial class IPAMOverlay
         var poweredOn = CablingDataStore.CountPoweredOn(rackId);
         var total = serverMounts.Count;
 
-        GUI.Label(new Rect(x0, y, 200f, 22f), $"{poweredOn}/{total} Server eingeschaltet", _stTableCell);
+        GUI.Label(new Rect(x0, y, 200f, 22f), $"{poweredOn}/{total} servers on", _stTableCell);
 
-        if (ImguiButtonOnce(new Rect(x0 + 210f, y, 100f, 22f), "Alle Ein", 96001, _stPrimaryBtn))
+        if (ImguiButtonOnce(new Rect(x0 + 210f, y, 100f, 22f), "All on", 96001, _stPrimaryBtn))
         {
             var cnt = ServerPowerController.PowerOnAll(rackId);
-            ShowIpamToast($"{cnt} Server eingeschaltet.");
+            ShowIpamToast($"{cnt} servers on.");
         }
 
-        if (ImguiButtonOnce(new Rect(x0 + 316f, y, 100f, 22f), "Alle Aus", 96002, _stMutedBtn))
+        if (ImguiButtonOnce(new Rect(x0 + 316f, y, 100f, 22f), "All off", 96002, _stMutedBtn))
         {
             var cnt = ServerPowerController.PowerOffAll(rackId);
-            ShowIpamToast($"{cnt} Server ausgeschaltet.");
+            ShowIpamToast($"{cnt} servers off.");
         }
 
         y += 28f;
@@ -225,7 +225,7 @@ public static partial class IPAMOverlay
                 btnLabel, btnId, _stMutedBtn))
             {
                 ServerPowerController.TryTogglePower(rackId, m);
-                ShowIpamToast($"{m.DisplayName}: {(isOn ? "ausgeschaltet" : "eingeschaltet")}");
+                ShowIpamToast($"{m.DisplayName}: {(isOn ? "off" : "on")}");
             }
 
             y += TableRowH;
@@ -245,7 +245,7 @@ public static partial class IPAMOverlay
             return;
         }
 
-        var label = $"{connections.Count} Kabel";
+        var label = $"{connections.Count} cables";
         GUI.Label(new Rect(x, y, width, TableRowH), label, _stTableCell);
     }
 

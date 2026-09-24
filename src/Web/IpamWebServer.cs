@@ -13,13 +13,13 @@ using UnityEngine;
 
 namespace GregModIPAM.Web;
 
-// React-WebUI-Backend: HttpListener auf 127.0.0.1 (Default 8177), statische
-// Dateien aus webRoot (Vite-dist) + JSON-API unter /api/*.
+// React WebUI backend: HttpListener on 127.0.0.1 (default 8177), static
+// files from webRoot (Vite dist) + JSON API under /api/*.
 //
-// Unity-Regel: Szenen-/GameObject-Zugriffe laufen NUR im Main-Thread.
-// HTTP handlers hand work over via EnqueueMainThread (blocks max 8s),
-// GregModIPAMMod.OnUpdate ruft Drain() auf. Reine Lese-Operationen ohne
-// Unity-Kontakt laufen direkt im HTTP-Thread.
+// Unity rule: scene/GameObject access ONLY on main thread.
+// HTTP handlers hand off work via EnqueueMainThread (blocks max 8s),
+// GregModIPAMMod.OnUpdate calls Drain(). Pure reads without
+// Unity contact run directly on the HTTP thread.
 internal static class IpamWebServer
 {
     private sealed class MainThreadWork
@@ -85,8 +85,8 @@ internal static class IpamWebServer
             _cts = new CancellationTokenSource();
             _listener.Start();
             Task.Run(() => ServeLoop(_cts.Token));
-            MelonLogger.Msg($"[IPAM][Web] Web UI running: http://127.0.0.1:{port}/ (Root: {_webRoot})");
-            PushLog($"WebUI gestartet auf Port {port}");
+            MelonLogger.Msg($"[IPAM][Web] WebUI live: http://127.0.0.1:{port}/ (Root: {_webRoot})");
+            PushLog($"WebUI started on port {port}");
         }
         catch (Exception ex)
         {
@@ -108,7 +108,7 @@ internal static class IpamWebServer
         _listener = null;
     }
 
-    // Pro Frame aus OnUpdate: Main-Thread-Arbeit abarbeiten.
+    // Per frame from OnUpdate: drain main-thread work.
     public static void Drain()
     {
         for (var i = 0; i < 32; i++)
@@ -217,7 +217,7 @@ internal static class IpamWebServer
             else
             {
                 WriteText(res, 404, "text/html",
-                    "<h1>IPAM WebUI: kein Frontend gefunden</h1><p>web/dist nach UserData/gregMod.IPAM/web kopieren (siehe README).</p>");
+                    "<h1>IPAM WebUI: no frontend found</h1><p>Copy web/dist to UserData/gregMod.IPAM/web (see README).</p>");
                 return;
             }
         }
@@ -696,7 +696,7 @@ internal static class IpamWebServer
                         var routine = mount.InstallRack(cheat, 0, false);
                         if (routine == null) return (object)new { ok = false, error = "no routine" };
                         MelonCoroutines.Start(PumpRoutine(routine));
-                        PushLog($"Rack-Aufbau via WebUI (mount {mountId}{(cheat ? ", cheat" : "")})");
+                        PushLog($"Rack build via WebUI (mount {mountId}{(cheat ? ", cheat" : "")})");
                     }
                     catch (Exception ex) { return (object)new { ok = false, error = ex.GetBaseException().Message }; }
                     return (object)new { ok = true };

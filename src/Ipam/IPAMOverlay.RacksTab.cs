@@ -1446,7 +1446,7 @@ public static partial class IPAMOverlay
         GUI.Label(new Rect(mx0, yMid, colType, TableHeaderH), "Type", _stTableHeaderText);
         GUI.Label(new Rect(mx0 + colType, yMid, colPos, TableHeaderH), "Pos", _stTableHeaderText);
         GUI.Label(new Rect(mx0 + colType + colPos, yMid, colSz, TableHeaderH), "Size", _stTableHeaderText);
-        GUI.Label(new Rect(mx0 + colType + colPos + colSz, yMid, colCable, TableHeaderH), "Kabel", _stTableHeaderText);
+        GUI.Label(new Rect(mx0 + colType + colPos + colSz, yMid, colCable, TableHeaderH), "Cables", _stTableHeaderText);
         GUI.Label(new Rect(mx0 + colType + colPos + colSz + colCable, yMid, colDev, TableHeaderH), "Device", _stTableHeaderText);
         yMid += TableHeaderH;
 
@@ -1513,22 +1513,22 @@ public static partial class IPAMOverlay
         {
             yMid += 8f;
 
-            // ── Rack Editor: Auto-Verkabelung + Power ──
+            // ── Rack editor: auto-cabling + power ──
             GUI.Label(new Rect(mx0, yMid, midW, SectionTitleH), "Rack Editor", _stSectionTitle);
             yMid += SectionTitleH + 4f;
 
-            // Auto-Verkabelung button
+            // Auto-cabling button
             var cableMode = CablingDataStore.GetCablingMode(selected.Persisted.Id);
             var cableCount = CablingDataStore.GetConnections(selected.Persisted.Id).Count;
             var modeLabel = cableMode switch
             {
-                CablingMode.Simple => "Einfach",
+                CablingMode.Simple => "Simple",
                 CablingMode.Redundant => "Redundant",
-                _ => "Keine",
+                _ => "None",
             };
-            GUI.Label(new Rect(mx0, yMid, 200f, 22f), $"Verkabelung: {modeLabel} ({cableCount} Kabel)", _stTableCell);
+            GUI.Label(new Rect(mx0, yMid, 200f, 22f), $"Cabling: {modeLabel} ({cableCount} cables)", _stTableCell);
 
-            if (ImguiButtonOnce(new Rect(mx0 + 210f, yMid, 140f, 24f), "Auto-Verkabelung", 94100, _stPrimaryBtn))
+            if (ImguiButtonOnce(new Rect(mx0 + 210f, yMid, 140f, 24f), "Auto-cabling", 94100, _stPrimaryBtn))
             {
                 _autoCablingModalOpen = true;
                 _autoCablingPreview = null;

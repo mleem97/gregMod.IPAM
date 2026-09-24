@@ -34,9 +34,9 @@ export default function App() {
           <p className="sub">gregMod.IPAM · http://127.0.0.1 backend</p>
         </div>
         <div className="status-chips">
-          <span className={status ? 'chip ok' : 'chip bad'}>{status ? 'verbunden' : 'kein Spiel'}</span>
+          <span className={status ? 'chip ok' : 'chip bad'}>{status ? 'linked' : 'no game'}</span>
           {status && <span className="chip">{status.scene || '—'}</span>}
-          {status && <span className={status.dhcpUnlocked ? 'chip ok' : 'chip'}>DHCP {status.dhcpUnlocked ? 'an' : 'aus'}</span>}
+          {status && <span className={status.dhcpUnlocked ? 'chip ok' : 'chip'}>DHCP {status.dhcpUnlocked ? 'on' : 'off'}</span>}
         </div>
         <nav>
           {(['dash', 'servers', 'dhcp', 'racks', 'logs'] as const).map((t) => (
@@ -59,25 +59,25 @@ export default function App() {
 
 function Dashboard({ status }: { status: Status | null }) {
   const [msg, setMsg] = useState('')
-  if (!status) return <p className="muted">Spiel nicht erreichbar — Mod geladen und Szene aktiv?</p>
+  if (!status) return <p className="muted">Game unreachable — mod loaded and scene active?</p>
   const toggleOverlay = async () => {
     const r = await api<{ ok: boolean; error?: string }>('/api/overlay', {
       method: 'POST', body: JSON.stringify({ visible: !status.overlayVisible }),
     })
-    setMsg(r.ok ? '' : r.error ?? 'Fehler')
+    setMsg(r.ok ? '' : r.error ?? 'Error')
   }
   const assignAll = async () => {
     const r = await api<{ ok: boolean; error?: string }>('/api/dhcp/assign-all', { method: 'POST' })
-    setMsg(r.ok ? 'DHCP assign-all gestartet' : r.error ?? 'Fehler')
+    setMsg(r.ok ? 'DHCP assign-all started' : r.error ?? 'Error')
   }
   return (
     <div className="cards">
-      <div className="card"><h3>Server</h3><p className="big">{status.servers}</p></div>
-      <div className="card"><h3>Szene</h3><p className="big">{status.scene || '—'}</p></div>
-      <div className="card"><h3>Overlay</h3><p className="big">{status.overlayVisible ? 'offen' : 'zu'}</p>
-        <button onClick={toggleOverlay}>{status.overlayVisible ? 'Schließen' : 'Öffnen'}</button></div>
+      <div className="card"><h3>Servers</h3><p className="big">{status.servers}</p></div>
+      <div className="card"><h3>Scene</h3><p className="big">{status.scene || '—'}</p></div>
+      <div className="card"><h3>Overlay</h3><p className="big">{status.overlayVisible ? 'open' : 'closed'}</p>
+        <button onClick={toggleOverlay}>{status.overlayVisible ? 'Close' : 'Open'}</button></div>
       <div className="card"><h3>DHCP</h3>
-        <button onClick={assignAll} disabled={!status.dhcpUnlocked}>Alle zuweisen (Ctrl+L)</button>
+        <button onClick={assignAll} disabled={!status.dhcpUnlocked}>Assign all (Ctrl+L)</button>
         {msg && <p className="muted">{msg}</p>}</div>
     </div>
   )
@@ -94,7 +94,7 @@ function Servers() {
 
   const act = async (path: string, payload: object, label: string) => {
     const r = await api<{ ok: boolean; error?: string; ip?: string }>(path, { method: 'POST', body: JSON.stringify(payload) })
-    setMsg(r.ok ? `${label} OK${r.ip ? ': ' + r.ip : ''}` : r.error ?? 'Fehler')
+    setMsg(r.ok ? `${label} OK${r.ip ? ': ' + r.ip : ''}` : r.error ?? 'Error')
     reload()
   }
 
@@ -103,12 +103,12 @@ function Servers() {
   return (
     <div>
       <div className="toolbar">
-        <input placeholder="Filter …" value={filter} onChange={(e) => setFilter(e.target.value)} />
-        <button onClick={reload}>Neu laden</button>
+        <input placeholder="Filter ..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <button onClick={reload}>Reload</button>
         {msg && <span className="muted">{msg}</span>}
       </div>
       <table>
-        <thead><tr><th>Name</th><th>IP</th><th>Kunde</th><th>Typ</th><th>Power</th><th>Aktionen</th></tr></thead>
+        <thead><tr><th>Name</th><th>IP</th><th>Customer</th><th>Type</th><th>Power</th><th>Actions</th></tr></thead>
         <tbody>
           {rows.map((s) => (
             <ServerRow key={s.id} s={s} act={act} />
@@ -154,24 +154,24 @@ function Dhcp() {
     const r = await api<{ ok: boolean; error?: string }>('/api/scopes', {
       method: 'POST', body: JSON.stringify({ name, cidr, level }),
     })
-    setMsg(r.ok ? 'Scope angelegt' : r.error ?? 'Fehler')
+    setMsg(r.ok ? 'Scope created' : r.error ?? 'Error')
     setName(''); setCidr('')
     reload()
   }
   const del = async (id: string) => {
     const r = await api<{ ok: boolean }>(`/api/scopes?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    setMsg(r.ok ? 'Scope gelöscht' : 'Fehler')
+    setMsg(r.ok ? 'Scope deleted' : 'Error')
     reload()
   }
   return (
     <div>
       <div className="toolbar">
         <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input placeholder="CIDR z. B. 10.0.0.0/24" value={cidr} onChange={(e) => setCidr(e.target.value)} />
+        <input placeholder="CIDR e.g. 10.0.0.0/24" value={cidr} onChange={(e) => setCidr(e.target.value)} />
         <select value={level} onChange={(e) => setLevel(e.target.value)}>
           <option>Global</option><option>VLAN</option><option>Switch</option>
         </select>
-        <button onClick={add}>Scope anlegen</button>
+        <button onClick={add}>Create scope</button>
         {msg && <span className="muted">{msg}</span>}
       </div>
       <table>
@@ -179,7 +179,7 @@ function Dhcp() {
         <tbody>
           {scopes.map((s) => (
             <tr key={s.id}><td>{s.priority}</td><td>{s.name}</td><td>{s.level}</td><td>{s.cidr}</td>
-              <td><button onClick={() => del(s.id)}>Löschen</button></td></tr>
+              <td><button onClick={() => del(s.id)}>Delete</button></td></tr>
           ))}
         </tbody>
       </table>
@@ -215,25 +215,25 @@ function Racks() {
     const r = await api<{ ok: boolean; error?: string }>('/api/racks/install', {
       method: 'POST', body: JSON.stringify({ id, cheat }),
     })
-    setMsg(r.ok ? `Aufbau gestartet (Mount ${id})` : r.error ?? 'Fehler')
+    setMsg(r.ok ? `Build started (mount ${id})` : r.error ?? 'Error')
     setTimeout(reload, 3000)
   }
   const applyTpl = async () => {
-    if (!rackSel || !tplSel) { setMsg('Rack + Template wählen'); return }
+    if (!rackSel || !tplSel) { setMsg('Pick rack + template'); return }
     const r = await api<{ ok: boolean; error?: string }>('/api/racks/apply-template', {
       method: 'POST', body: JSON.stringify({ rackId: Number(rackSel), templateId: tplSel }),
     })
-    setMsg(r.ok ? 'Template wird angewendet' : r.error ?? 'Fehler')
+    setMsg(r.ok ? 'Applying template' : r.error ?? 'Error')
   }
   const open = mounts.filter((m) => !m.instantiated)
   return (
     <div>
       <div className="toolbar">
-        <label><input type="checkbox" checked={cheat} onChange={(e) => setCheat(e.target.checked)} /> Cheat (ohne Kosten)</label>
-        <button onClick={reload}>Neu laden</button>
+        <label><input type="checkbox" checked={cheat} onChange={(e) => setCheat(e.target.checked)} /> Cheat (free)</label>
+        <button onClick={reload}>Reload</button>
         {msg && <span className="muted">{msg}</span>}
       </div>
-      <h3>Mounts ({mounts.length}, offen: {open.length})</h3>
+      <h3>Mounts ({mounts.length}, open: {open.length})</h3>
       <table>
         <thead><tr><th>Position</th><th>Template</th><th>Status</th><th></th></tr></thead>
         <tbody>
@@ -241,23 +241,23 @@ function Racks() {
             <tr key={m.id}>
               <td>{m.x}, {m.z}</td>
               <td>{m.template || '—'}</td>
-              <td>{m.instantiated ? 'aufgebaut' : 'offen'}</td>
-              <td>{!m.instantiated && <button onClick={() => install(m.id)}>Aufbauen</button>}</td>
+              <td>{m.instantiated ? 'built' : 'open'}</td>
+              <td>{!m.instantiated && <button onClick={() => install(m.id)}>Build</button>}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <h3>Template anwenden</h3>
+      <h3>Apply template</h3>
       <div className="toolbar">
         <select value={rackSel} onChange={(e) => setRackSel(e.target.value)}>
-          <option value="">Rack wählen …</option>
+          <option value="">Pick rack ...</option>
           {racks.map((r) => <option key={r.id} value={r.id}>{r.name || r.id} ({r.x}, {r.z})</option>)}
         </select>
         <select value={tplSel} onChange={(e) => setTplSel(e.target.value)}>
-          <option value="">Template wählen …</option>
+          <option value="">Pick template ...</option>
           {templates.map((t) => <option key={t.id} value={t.id}>{t.id} ({t.price})</option>)}
         </select>
-        <button onClick={applyTpl}>Anwenden</button>
+        <button onClick={applyTpl}>Apply</button>
       </div>
     </div>
   )

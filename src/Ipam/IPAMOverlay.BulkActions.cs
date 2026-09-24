@@ -80,13 +80,13 @@ namespace GregModIPAM
             GUI.Label(new Rect(x0, y + 3f, 150f, 22f), $"{count} selected:", _stTableCell);
 
             var bx = x0 + 154f;
-            if (ImguiButtonOnce(new Rect(bx, y, 110f, 24f), "DHCP zuweisen", 87100, _stPrimaryBtn))
+            if (ImguiButtonOnce(new Rect(bx, y, 110f, 24f), "Assign DHCP", 87100, _stPrimaryBtn))
             {
                 BulkDhcpAssignSelected();
             }
 
             bx += 116f;
-            if (ImguiButtonOnce(new Rect(bx, y, 110f, 24f), "Techniker", 87101, _stMutedBtn))
+            if (ImguiButtonOnce(new Rect(bx, y, 110f, 24f), "Technician", 87101, _stMutedBtn))
             {
                 BulkTechnicianSelected();
             }
@@ -150,7 +150,7 @@ namespace GregModIPAM
                 }
             }
 
-            try { ShowIpamToast($"DHCP: {ok}/{servers.Count} zugewiesen."); } catch { }
+            try { ShowIpamToast($"DHCP: {ok}/{servers.Count} assigned."); } catch { }
             try { InvalidateDeviceCache(); } catch { }
             try { RecomputeContentHeight(); } catch { }
         }

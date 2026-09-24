@@ -46,8 +46,8 @@ internal static class DeviceInventoryReflection
     // Resolution cache for name-hint lookups: the hierarchy walk with
     // GetProperty/GetField per device per refresh is the main cause of
     // multi-second freezes on open under IL2CPP (133+ devices ×
-    // Dutzende Namen × Ebenen). Nach dem ersten Treffer kostet ein Lookup
-    // nur noch einen Dictionary-Zugriff; Werte werden weiterhin live gelesen.
+    // dozens of names × levels). After the first hit a lookup costs
+    // just one dictionary access; values are still read live.
     private sealed class ResolvedMember
     {
         public PropertyInfo Prop;
