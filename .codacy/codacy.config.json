@@ -37,133 +37,10 @@
    "toolId": "markdownlint",
    "patterns": [
     {
-     "patternId": "markdownlint_MD001"
-    },
-    {
-     "patternId": "markdownlint_MD003"
-    },
-    {
-     "patternId": "markdownlint_MD004"
-    },
-    {
-     "patternId": "markdownlint_MD005"
-    },
-    {
-     "patternId": "markdownlint_MD007"
-    },
-    {
-     "patternId": "markdownlint_MD010"
-    },
-    {
-     "patternId": "markdownlint_MD011"
-    },
-    {
-     "patternId": "markdownlint_MD012"
-    },
-    {
-     "patternId": "markdownlint_MD014"
-    },
-    {
-     "patternId": "markdownlint_MD018"
-    },
-    {
-     "patternId": "markdownlint_MD019"
-    },
-    {
-     "patternId": "markdownlint_MD020"
-    },
-    {
-     "patternId": "markdownlint_MD021"
-    },
-    {
-     "patternId": "markdownlint_MD022"
-    },
-    {
-     "patternId": "markdownlint_MD023"
-    },
-    {
-     "patternId": "markdownlint_MD024"
-    },
-    {
-     "patternId": "markdownlint_MD025"
-    },
-    {
-     "patternId": "markdownlint_MD026"
-    },
-    {
-     "patternId": "markdownlint_MD027"
-    },
-    {
-     "patternId": "markdownlint_MD028"
-    },
-    {
-     "patternId": "markdownlint_MD029"
-    },
-    {
-     "patternId": "markdownlint_MD030"
-    },
-    {
-     "patternId": "markdownlint_MD032"
-    },
-    {
-     "patternId": "markdownlint_MD033"
-    },
-    {
-     "patternId": "markdownlint_MD034"
-    },
-    {
-     "patternId": "markdownlint_MD035"
-    },
-    {
-     "patternId": "markdownlint_MD036"
-    },
-    {
-     "patternId": "markdownlint_MD037"
-    },
-    {
-     "patternId": "markdownlint_MD038"
-    },
-    {
-     "patternId": "markdownlint_MD039"
-    },
-    {
      "patternId": "markdownlint_MD042"
     },
     {
-     "patternId": "markdownlint_MD044"
-    },
-    {
-     "patternId": "markdownlint_MD045"
-    },
-    {
-     "patternId": "markdownlint_MD046"
-    },
-    {
-     "patternId": "markdownlint_MD048"
-    },
-    {
-     "patternId": "markdownlint_MD049"
-    },
-    {
-     "patternId": "markdownlint_MD050"
-    },
-    {
-     "patternId": "markdownlint_MD051"
-    },
-    {
      "patternId": "markdownlint_MD052"
-    },
-    {
-     "patternId": "markdownlint_MD053"
-    },
-    {
-     "patternId": "markdownlint_MD054"
-    },
-    {
-     "patternId": "markdownlint_MD055"
-    },
-    {
-     "patternId": "markdownlint_MD056"
     }
    ]
   },
@@ -2549,48 +2426,9 @@
    "toolId": "Lizard",
    "patterns": [
     {
-     "patternId": "Lizard_file-nloc-medium",
-     "parameters": {
-      "threshold": "1920"
-     }
-    },
-    {
-     "patternId": "Lizard_nloc-medium",
-     "parameters": {
-      "threshold": "90"
-     }
-    },
-    {
-     "patternId": "Lizard_parameter-count-medium"
-    },
-    {
-     "patternId": "Lizard_nloc-critical",
-     "parameters": {
-      "threshold": "470"
-     }
-    },
-    {
-     "patternId": "Lizard_ccn-critical",
-     "parameters": {
-      "threshold": "180"
-     }
-    },
-    {
      "patternId": "Lizard_ccn-medium",
      "parameters": {
       "threshold": "20"
-     }
-    },
-    {
-     "patternId": "Lizard_parameter-count-critical",
-     "parameters": {
-      "threshold": "20"
-     }
-    },
-    {
-     "patternId": "Lizard_file-nloc-critical",
-     "parameters": {
-      "threshold": "3740"
      }
     }
    ]
@@ -2688,9 +2526,6 @@
      "patternId": "Agentlinter_clarity_token-efficiency-score"
     },
     {
-     "patternId": "Agentlinter_clarity_undefined-term"
-    },
-    {
      "patternId": "Agentlinter_claude-code_agent-focus"
     },
     {
@@ -2718,28 +2553,10 @@
      "patternId": "Agentlinter_completeness_freshness-file-paths"
     },
     {
-     "patternId": "Agentlinter_completeness_has-boundaries"
-    },
-    {
-     "patternId": "Agentlinter_completeness_has-error-handling"
-    },
-    {
-     "patternId": "Agentlinter_completeness_has-identity"
-    },
-    {
      "patternId": "Agentlinter_completeness_has-output-format"
     },
     {
      "patternId": "Agentlinter_completeness_has-priorities"
-    },
-    {
-     "patternId": "Agentlinter_completeness_has-tools"
-    },
-    {
-     "patternId": "Agentlinter_completeness_has-user-context"
-    },
-    {
-     "patternId": "Agentlinter_completeness_has-workflow"
     },
     {
      "patternId": "Agentlinter_completeness_session-learning-hooks"
@@ -2763,16 +2580,10 @@
      "patternId": "Agentlinter_consistency_no-duplicate-instructions"
     },
     {
-     "patternId": "Agentlinter_consistency_outdated-cross-references"
-    },
-    {
      "patternId": "Agentlinter_consistency_permission-conflict"
     },
     {
      "patternId": "Agentlinter_consistency_priority-conflict"
-    },
-    {
-     "patternId": "Agentlinter_consistency_referenced-files-exist"
     },
     {
      "patternId": "Agentlinter_consistency_stale-date"
@@ -2790,24 +2601,6 @@
      "patternId": "Agentlinter_consistency_tone-voice-alignment"
     },
     {
-     "patternId": "Agentlinter_memory_has-context-window-awareness"
-    },
-    {
-     "patternId": "Agentlinter_memory_has-file-based-notes"
-    },
-    {
-     "patternId": "Agentlinter_memory_has-handoff-protocol"
-    },
-    {
-     "patternId": "Agentlinter_memory_has-learning-loop"
-    },
-    {
-     "patternId": "Agentlinter_memory_has-memory-strategy"
-    },
-    {
-     "patternId": "Agentlinter_memory_has-state-tracking"
-    },
-    {
      "patternId": "Agentlinter_memory_no-mental-notes"
     },
     {
@@ -2821,9 +2614,6 @@
     },
     {
      "patternId": "Agentlinter_runtime_auth-mode"
-    },
-    {
-     "patternId": "Agentlinter_runtime_config-exists"
     },
     {
      "patternId": "Agentlinter_runtime_config-secrets"
@@ -2845,12 +2635,6 @@
     },
     {
      "patternId": "Agentlinter_security_env-var-references"
-    },
-    {
-     "patternId": "Agentlinter_security_has-injection-defense"
-    },
-    {
-     "patternId": "Agentlinter_security_has-permission-boundaries"
     },
     {
      "patternId": "Agentlinter_security_no-injection-defense"
