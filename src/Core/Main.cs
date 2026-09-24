@@ -189,14 +189,9 @@ public class GregModIPAMMod : MelonMod
             "gregMod.IPAM", "IPAM", "0.8.0",
             new string[] { "ipam" });
         gregCore.UI.GregHudRegistry.Register("ipam", _toggleKey.ToString(), "IPAM");
-        gregCore.UI.GregMenuRegistry.RegisterOpener("ipam", () =>
-        {
-            try { IPAMOverlay.IsVisible = !IPAMOverlay.IsVisible; } catch { }
-        });
-        gregCore.UI.GregMenuRegistry.RegisterCloser("ipam", () =>
-        {
-            try { if (IPAMOverlay.IsVisible) IPAMOverlay.IsVisible = false; } catch { }
-        });
+        gregCore.UI.GregMenuBinding.BindToggle("ipam",
+            () => { try { IPAMOverlay.IsVisible = !IPAMOverlay.IsVisible; } catch { } },
+            () => IPAMOverlay.IsVisible);
     }
 
     internal static void SetMenuOpen(bool open)
