@@ -101,40 +101,63 @@ internal static class NamingConventionStore
             return _root;
         }
 
-        if (!ModSaveScope.EnsureBindingChecked(out _))
-        {
-            _deferEmptyRoot ??= NewEmptyRoot();
-            return _deferEmptyRoot;
-        }
+        // Diagnostic marker only — must never gate loading or divert writes
+        // into a deferred empty root that would clobber the real file.
+        try { ModSaveScope.EnsureBindingChecked(out _); } catch { }
+
+        var pending = _deferEmptyRoot;
+        _deferEmptyRoot = null;
 
         _loaded = true;
         _root = NewEmptyRoot();
-        _deferEmptyRoot = null;
 
-        var path = GetPath();
-        if (!File.Exists(path))
+        var path = ModSaveScope.LoadPath(GetPath());
+        if (File.Exists(path) || File.Exists(path + ".bak"))
         {
-            return _root;
-        }
-
-        try
-        {
-            var json = File.ReadAllText(path);
-            var file = JsonSerializer.Deserialize<NamingPersistedRoot>(json, JsonOptions);
-            if (file != null)
+            try
             {
-                file.Conventions ??= new List<NamingConventionEntry>();
-                file.Abbreviations ??= new Dictionary<string, string>();
-                file.Overrides ??= new Dictionary<string, string>();
-                file.CounterState ??= new Dictionary<string, int>();
-                file.CustomerDefaultConventionId ??= new Dictionary<string, string>();
-                _root = file;
-                _root.Version = FileVersion;
+                if (!AtomicFile.TryReadAllTextWithBackup(path, out var json) || json == null)
+                    return _root;
+                var file = JsonSerializer.Deserialize<NamingPersistedRoot>(json, JsonOptions);
+                if (file != null)
+                {
+                    file.Conventions ??= new List<NamingConventionEntry>();
+                    file.Abbreviations ??= new Dictionary<string, string>();
+                    file.Overrides ??= new Dictionary<string, string>();
+                    file.CounterState ??= new Dictionary<string, int>();
+                    file.CustomerDefaultConventionId ??= new Dictionary<string, string>();
+                    _root = file;
+                    _root.Version = FileVersion;
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogging.Warning($"Naming data load failed ({path}): {ex.Message}");
             }
         }
-        catch (Exception ex)
+
+        if (pending != null)
         {
-            ModLogging.Warning($"Naming data load failed ({path}): {ex.Message}");
+            try
+            {
+                bool touched = false;
+                foreach (var c in pending.Conventions ?? Enumerable.Empty<NamingConventionEntry>())
+                {
+                    if (c == null) continue;
+                    if (!_root.Conventions.Any(x => x != null && string.Equals(x.Id, c.Id, StringComparison.Ordinal)))
+                    { _root.Conventions.Add(c); touched = true; }
+                }
+                foreach (var kv in pending.Abbreviations ?? Enumerable.Empty<KeyValuePair<string, string>>())
+                { if (!_root.Abbreviations.ContainsKey(kv.Key)) { _root.Abbreviations[kv.Key] = kv.Value; touched = true; } }
+                foreach (var kv in pending.Overrides ?? Enumerable.Empty<KeyValuePair<string, string>>())
+                { if (!_root.Overrides.ContainsKey(kv.Key)) { _root.Overrides[kv.Key] = kv.Value; touched = true; } }
+                foreach (var kv in pending.CounterState ?? Enumerable.Empty<KeyValuePair<string, int>>())
+                { if (!_root.CounterState.ContainsKey(kv.Key)) { _root.CounterState[kv.Key] = kv.Value; touched = true; } }
+                foreach (var kv in pending.CustomerDefaultConventionId ?? Enumerable.Empty<KeyValuePair<string, string>>())
+                { if (!_root.CustomerDefaultConventionId.ContainsKey(kv.Key)) { _root.CustomerDefaultConventionId[kv.Key] = kv.Value; touched = true; } }
+                if (touched) Save();
+            }
+            catch { }
         }
 
         return _root;
@@ -583,7 +606,7 @@ internal static class NamingConventionStore
 
     private static void Save()
     {
-        var path = GetPath();
+        var path = ModSaveScope.ScopedPath(GetPath());
         try
         {
             var dir = Path.GetDirectoryName(path);
@@ -593,7 +616,7 @@ internal static class NamingConventionStore
             }
 
             var json = JsonSerializer.Serialize(EnsureLoaded(), JsonOptions);
-            File.WriteAllText(path, json);
+            AtomicFile.WriteAllText(path, json);
         }
         catch (Exception ex)
         {

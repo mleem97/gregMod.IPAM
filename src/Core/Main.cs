@@ -289,6 +289,12 @@ public class GregModIPAMMod : MelonMod
         try { Web.IpamWebServer.Stop(); } catch { }
     }
 
+    public override void OnApplicationQuit()
+    {
+        // Persist router/switch runtime configs — otherwise they live in RAM only.
+        try { DeviceConfigRegistry.TrySaveAllToDisk(); } catch { }
+    }
+
     public override void OnUpdate()
     {
         try { Web.IpamWebServer.Drain(); } catch { }
@@ -316,11 +322,13 @@ public class GregModIPAMMod : MelonMod
 
         // Run before default Unity script order so keys are handled before many game scripts read the same keys.
         var kb = Keyboard.current;
-        // Toggle key opens IPAM — but NOT while pause menu is active
         if (kb != null)
         {
-            // P toggles IPAM — but NOT while pause menu is active
-            if (kb[_toggleKey].wasPressedThisFrame && !IPAMOverlay.IsVisible && !IPAMOverlay.IsPauseMenuActive())
+            // Toggle key opens IPAM — but NOT while pause menu is active
+            // and NOT while typing into a text field (the keystroke
+            // belongs to the text; opening on top breaks focus).
+            if (kb[_toggleKey].wasPressedThisFrame && !IPAMOverlay.IsVisible && !IPAMOverlay.IsPauseMenuActive()
+                && !IPAMOverlay.IsTextInputActive())
             {
                 IPAMOverlay.IsVisible = true;
                 Cursor.lockState = CursorLockMode.None;
@@ -398,6 +406,9 @@ public class GregModIPAMBehaviour : MonoBehaviour
 
     private int _deferredInitialSceneSyncFrames = 1;
 
+    private const float DeviceConfigAutosaveIntervalSeconds = 300f;
+    private float _nextDeviceConfigAutosaveAtRealtime;
+
     private void Awake()
     {
         Instance = this;
@@ -413,6 +424,29 @@ public class GregModIPAMBehaviour : MonoBehaviour
 
     private int _lastSelectedServerCustomerId = -1;
 
+    /// <summary>
+    /// Router/switch configs otherwise live in RAM only
+    /// (<see cref="DeviceConfigRegistry.TrySaveAllToDisk"/> has no other caller).
+    /// </summary>
+    private void TickDeviceConfigAutosave()
+    {
+        try
+        {
+            if (_nextDeviceConfigAutosaveAtRealtime <= 0f)
+            {
+                _nextDeviceConfigAutosaveAtRealtime = Time.realtimeSinceStartup + DeviceConfigAutosaveIntervalSeconds;
+                return;
+            }
+
+            if (Time.realtimeSinceStartup < _nextDeviceConfigAutosaveAtRealtime)
+                return;
+
+            _nextDeviceConfigAutosaveAtRealtime = Time.realtimeSinceStartup + DeviceConfigAutosaveIntervalSeconds;
+            DeviceConfigRegistry.TrySaveAllToDisk();
+        }
+        catch { }
+    }
+
     private void Update()
     {
         if (_deferredInitialSceneSyncFrames > 0)
@@ -425,6 +459,7 @@ public class GregModIPAMBehaviour : MonoBehaviour
         }
 
         ModSaveScope.TickCapture();
+        TickDeviceConfigAutosave();
         UiRaycastBlocker.SetBlocking(IPAMOverlay.IsVisible);
 
         if (IPAMOverlay.IsVisible)

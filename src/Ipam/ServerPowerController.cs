@@ -86,8 +86,8 @@ internal static class ServerPowerController
             ModLogging.Warning($"Power-On: {mount.DisplayName} has no network connections.");
         }
 
-        // Call game API
-        var server = FindServerByInstanceId(mount.SceneInstanceId);
+        // Call game API (resolve via stable device key — heals stale post-reload IDs)
+        var server = FindServerByInstanceId(RackDataStore.TryResolveSceneInstanceId(mount));
         if (server != null)
         {
             try
@@ -111,7 +111,7 @@ internal static class ServerPowerController
     {
         if (mount == null) return false;
 
-        var server = FindServerByInstanceId(mount.SceneInstanceId);
+        var server = FindServerByInstanceId(RackDataStore.TryResolveSceneInstanceId(mount));
         if (server != null)
         {
             try

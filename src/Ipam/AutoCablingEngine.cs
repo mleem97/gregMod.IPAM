@@ -209,10 +209,13 @@ internal static class AutoCablingEngine
                     .FirstOrDefault(m => string.Equals(m.EntryId, conn.TargetEntryId, StringComparison.Ordinal));
 
                 if (sourceMount == null || targetMount == null) continue;
-                if (sourceMount.SceneInstanceId == 0 || targetMount.SceneInstanceId == 0) continue;
+                // Resolve via stable device key (heals stale post-reload instance IDs).
+                var sourceId = RackDataStore.TryResolveSceneInstanceId(sourceMount);
+                var targetId = RackDataStore.TryResolveSceneInstanceId(targetMount);
+                if (sourceId == 0 || targetId == 0) continue;
 
-                var sourceServer = FindServerByInstanceId(sourceMount.SceneInstanceId);
-                var targetSwitch = FindNetworkSwitchByInstanceId(targetMount.SceneInstanceId);
+                var sourceServer = FindServerByInstanceId(sourceId);
+                var targetSwitch = FindNetworkSwitchByInstanceId(targetId);
 
                 if (sourceServer == null || targetSwitch == null) continue;
 

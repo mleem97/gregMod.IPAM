@@ -24,6 +24,16 @@ See [docs/INDEX.md](docs/INDEX.md) for the complete documentation.
 | Windows x64 | Supported |
 | Linux x64 | Supported |
 
+### Save safety
+
+- Mod data (prefixes, racks, naming, cabling, device configs) lives in
+  `<Game>/UserData/gregMod.IPAM/` (`*.json` + crash-safe `*.bak`) and is
+  persistent — it is never auto-deleted. Back up that folder together with
+  your save.
+- DHCP-assigned addresses are written into the game save via the game's own
+  `SetIP` path; empty-IP servers get the same free address on every run
+  (deterministic assignment order).
+
 ## Features
 
 - See [docs/INDEX.md](docs/INDEX.md) and [QUICKSTART.md](QUICKSTART.md)

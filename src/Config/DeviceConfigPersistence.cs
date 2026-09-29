@@ -37,15 +37,16 @@ internal static class DeviceConfigPersistence
         RouterSeeds.Clear();
         SwitchSeeds.Clear();
 
-        var path = GetConfigPath();
-        if (!File.Exists(path))
+        var path = ModSaveScope.LoadPath(GetConfigPath());
+        if (!File.Exists(path) && !File.Exists(path + ".bak"))
         {
             return;
         }
 
         try
         {
-            var json = File.ReadAllText(path);
+            if (!AtomicFile.TryReadAllTextWithBackup(path, out var json) || json == null)
+                return;
             var file = JsonSerializer.Deserialize<PersistedFile>(json, JsonOptions);
             if (file?.Routers != null)
             {
@@ -101,7 +102,7 @@ internal static class DeviceConfigPersistence
         IReadOnlyDictionary<string, RouterRuntimeConfig> routers,
         IReadOnlyDictionary<string, SwitchRuntimeConfig> switches)
     {
-        var path = GetConfigPath();
+        var path = ModSaveScope.ScopedPath(GetConfigPath());
         try
         {
             var dir = Path.GetDirectoryName(path);
@@ -128,7 +129,7 @@ internal static class DeviceConfigPersistence
             }
 
             var json = JsonSerializer.Serialize(file, JsonOptions);
-            File.WriteAllText(path, json);
+            AtomicFile.WriteAllText(path, json);
             ModLogging.Msg($"Saved device configs to {path} ({file.Routers.Count} routers, {file.Switches.Count} switches).");
             return true;
         }

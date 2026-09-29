@@ -76,37 +76,77 @@ internal static class IpamDataStore
             return _root;
         }
 
-        if (!ModSaveScope.EnsureBindingChecked(out _))
-        {
-            _deferEmptyRoot ??= NewEmptyRoot();
-            return _deferEmptyRoot;
-        }
+        // Diagnostic marker only — must never gate loading or divert writes
+        // into a deferred empty root that would clobber the real file.
+        try { ModSaveScope.EnsureBindingChecked(out _); } catch { }
+
+        // Stash any pre-load writes (legacy defer path) so they survive the disk load below.
+        var pending = _deferEmptyRoot;
+        _deferEmptyRoot = null;
 
         _loaded = true;
         _root = NewEmptyRoot();
-        _deferEmptyRoot = null;
 
-        var loadPath = GetPath();
-        if (!File.Exists(loadPath))
+        var loadPath = ModSaveScope.LoadPath(GetPath());
+        if (File.Exists(loadPath) || File.Exists(loadPath + ".bak"))
         {
-            return _root;
-        }
-
-        try
-        {
-            var json = File.ReadAllText(loadPath);
-            var file = JsonSerializer.Deserialize<IpamPersistedRoot>(json, JsonOptions);
-            if (file != null)
+            try
             {
-                file.Prefixes ??= new List<IpamPrefixEntry>();
-                file.Vlans ??= new List<IpamVlanEntry>();
-                _root = file;
-                _root.Version = FileVersion;
+                if (!AtomicFile.TryReadAllTextWithBackup(loadPath, out var json) || json == null)
+                    return _root;
+                var file = JsonSerializer.Deserialize<IpamPersistedRoot>(json, JsonOptions);
+                if (file != null)
+                {
+                    file.Prefixes ??= new List<IpamPrefixEntry>();
+                    file.Vlans ??= new List<IpamVlanEntry>();
+                    file.DhcpScopes ??= new List<DhcpScopeEntry>();
+                    file.ServerTenancies ??= new List<ServerTenancyEntry>();
+                    _root = file;
+                    _root.Version = FileVersion;
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogging.Warning($"IPAM data load failed ({loadPath}): {ex.Message}");
             }
         }
-        catch (Exception ex)
+
+        // Merge stashed pre-load writes (dedupe by Id/CIDR) instead of dropping them.
+        if (pending != null)
         {
-            ModLogging.Warning($"IPAM data load failed ({loadPath}): {ex.Message}");
+            try
+            {
+                foreach (var p in pending.Prefixes ?? Enumerable.Empty<IpamPrefixEntry>())
+                {
+                    if (p == null) continue;
+                    bool exists = _root.Prefixes.Any(x => x != null &&
+                        (string.Equals(x.Id, p.Id, StringComparison.Ordinal) ||
+                         string.Equals((x.Cidr ?? "").Trim(), (p.Cidr ?? "").Trim(), StringComparison.OrdinalIgnoreCase)));
+                    if (!exists) _root.Prefixes.Add(p);
+                }
+                foreach (var v in pending.Vlans ?? Enumerable.Empty<IpamVlanEntry>())
+                {
+                    if (v == null) continue;
+                    if (!_root.Vlans.Any(x => x != null && (x.Id == v.Id || x.VlanId == v.VlanId)))
+                        _root.Vlans.Add(v);
+                }
+                foreach (var s in pending.DhcpScopes ?? Enumerable.Empty<DhcpScopeEntry>())
+                {
+                    if (s == null) continue;
+                    if (!_root.DhcpScopes.Any(x => x != null && x.Id == s.Id))
+                        _root.DhcpScopes.Add(s);
+                }
+                foreach (var t in pending.ServerTenancies ?? Enumerable.Empty<ServerTenancyEntry>())
+                {
+                    if (t == null) continue;
+                    if (!_root.ServerTenancies.Any(x => x != null && x.Id == t.Id))
+                        _root.ServerTenancies.Add(t);
+                }
+                if (pending.Prefixes?.Count > 0 || pending.Vlans?.Count > 0 ||
+                    pending.DhcpScopes?.Count > 0 || pending.ServerTenancies?.Count > 0)
+                    Save();
+            }
+            catch { }
         }
 
         return _root;
@@ -599,7 +639,81 @@ internal static class IpamDataStore
             return null;
         }
 
-        return root.ServerTenancies.FirstOrDefault(t => t.ServerInstanceId == serverInstanceId);
+        return FindTenancy(root, serverInstanceId);
+    }
+
+    /// <summary>
+    /// Instance IDs change on every load, so match by stable device key
+    /// (scene + hierarchy path + position) and heal the stored instance ID.
+    /// </summary>
+    private static ServerTenancyEntry FindTenancy(IpamPersistedRoot root, int serverInstanceId)
+    {
+        var exact = root.ServerTenancies.FirstOrDefault(t => t != null && t.ServerInstanceId == serverInstanceId);
+        if (exact != null)
+            return exact;
+
+        Server live = null;
+        try
+        {
+            var servers = UnityEngine.Object.FindObjectsOfType<Server>();
+            if (servers != null)
+            {
+                foreach (var s in servers)
+                {
+                    if (s == null) continue;
+                    try { if (s.GetInstanceID() == serverInstanceId) { live = s; break; } } catch { }
+                }
+            }
+        }
+        catch { }
+
+        if (live == null)
+            return null;
+
+        string key = null;
+        try { key = DeviceStableId.ForServer(live); } catch { }
+        if (string.IsNullOrEmpty(key))
+            return null;
+
+        foreach (var t in root.ServerTenancies)
+        {
+            if (t == null || string.IsNullOrEmpty(t.ServerStableKey)) continue;
+            bool match = string.Equals(t.ServerStableKey, key, StringComparison.Ordinal)
+                || string.Equals(DeviceStableId.PathPart(t.ServerStableKey),
+                    DeviceStableId.PathPart(key), StringComparison.Ordinal);
+            if (match)
+            {
+                t.ServerInstanceId = serverInstanceId;
+                t.ServerStableKey = key;
+                try { Save(); } catch { }
+                return t;
+            }
+        }
+
+        return null;
+    }
+
+    private static string StableKeyForInstanceId(int serverInstanceId)
+    {
+        try
+        {
+            var servers = UnityEngine.Object.FindObjectsOfType<Server>();
+            if (servers != null)
+            {
+                foreach (var s in servers)
+                {
+                    if (s == null) continue;
+                    try
+                    {
+                        if (s.GetInstanceID() == serverInstanceId)
+                            return DeviceStableId.ForServer(s);
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+        return null;
     }
 
     internal static bool TrySetServerMode(int serverInstanceId, string mode, int maxTenants, out string error)
@@ -613,11 +727,13 @@ internal static class IpamDataStore
 
         var root = EnsureLoaded();
         root.ServerTenancies ??= new List<ServerTenancyEntry>();
-        var existing = root.ServerTenancies.FirstOrDefault(t => t.ServerInstanceId == serverInstanceId);
+        var existing = FindTenancy(root, serverInstanceId);
         if (existing != null)
         {
             existing.Mode = mode;
             existing.MaxTenants = mode == "Dedicated" ? 1 : maxTenants;
+            if (string.IsNullOrEmpty(existing.ServerStableKey))
+                existing.ServerStableKey = StableKeyForInstanceId(serverInstanceId);
             if (mode == "Dedicated")
             {
                 existing.Tenants.Clear();
@@ -629,6 +745,7 @@ internal static class IpamDataStore
             {
                 Id = Guid.NewGuid().ToString("D"),
                 ServerInstanceId = serverInstanceId,
+                ServerStableKey = StableKeyForInstanceId(serverInstanceId),
                 Mode = mode,
                 MaxTenants = mode == "Dedicated" ? 1 : maxTenants,
             });
@@ -643,7 +760,7 @@ internal static class IpamDataStore
         error = null;
         var root = EnsureLoaded();
         root.ServerTenancies ??= new List<ServerTenancyEntry>();
-        var tenancy = root.ServerTenancies.FirstOrDefault(t => t.ServerInstanceId == serverInstanceId);
+        var tenancy = FindTenancy(root, serverInstanceId);
         if (tenancy == null)
         {
             error = "Server has no tenancy configuration. Set mode first.";
@@ -690,7 +807,7 @@ internal static class IpamDataStore
             return false;
         }
 
-        var tenancy = root.ServerTenancies.FirstOrDefault(t => t.ServerInstanceId == serverInstanceId);
+        var tenancy = FindTenancy(root, serverInstanceId);
         if (tenancy == null)
         {
             error = "Server has no tenancy configuration.";
@@ -713,7 +830,7 @@ internal static class IpamDataStore
 
     private static void Save()
     {
-        var path = GetPath();
+        var path = ModSaveScope.ScopedPath(GetPath());
         try
         {
             var dir = Path.GetDirectoryName(path);
@@ -723,7 +840,7 @@ internal static class IpamDataStore
             }
 
             var json = JsonSerializer.Serialize(EnsureLoaded(), JsonOptions);
-            File.WriteAllText(path, json);
+            AtomicFile.WriteAllText(path, json);
             DataRevision++;
         }
         catch (Exception ex)
@@ -776,6 +893,8 @@ internal sealed class ServerTenancyEntry
 {
     public string Id { get; set; }
     public int ServerInstanceId { get; set; }
+    /// <summary>Stable device key (scene + hierarchy path + position) — survives reloads.</summary>
+    public string ServerStableKey { get; set; }
     public string Mode { get; set; } = "Dedicated";
     public List<TenantAllocation> Tenants { get; set; } = new();
     public int MaxTenants { get; set; } = 1;

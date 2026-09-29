@@ -52,6 +52,32 @@ internal static class DeviceStableId
 
     private static string Quant(float f) => Math.Round(f, PositionDecimals).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// Compares a stored key against a live transform. Exact match first;
+    /// path-only match (ignoring position) as fallback for moved devices.
+    /// </summary>
+    internal static bool Matches(string storedKey, Transform tr)
+    {
+        if (string.IsNullOrEmpty(storedKey) || tr == null)
+            return false;
+        var live = ForTransform(tr);
+        if (string.Equals(live, storedKey, StringComparison.Ordinal))
+            return true;
+        return string.Equals(PathPart(live), PathPart(storedKey), StringComparison.Ordinal);
+    }
+
+    internal static string PathPart(string key)
+    {
+        if (string.IsNullOrEmpty(key))
+            return "";
+        // Format: scene|path|pos — path is the middle segment.
+        int first = key.IndexOf('|');
+        int last = key.LastIndexOf('|');
+        if (first < 0 || last <= first)
+            return key;
+        return key.Substring(first + 1, last - first - 1);
+    }
+
     private static string HierarchyPath(Transform tr)
     {
         var stack = new List<(string name, int idx)>(8);

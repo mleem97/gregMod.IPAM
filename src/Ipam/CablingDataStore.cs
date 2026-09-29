@@ -41,37 +41,57 @@ internal static class CablingDataStore
     {
         if (_loaded) return _root;
 
-        if (!ModSaveScope.EnsureBindingChecked(out _))
-        {
-            _root ??= NewEmptyRoot();
-            return _root;
-        }
+        // Diagnostic marker only — must never gate loading.
+        try { ModSaveScope.EnsureBindingChecked(out _); } catch { }
 
         _loaded = true;
+        // Preserve any pre-load in-memory state instead of discarding it.
+        _root ??= NewEmptyRoot();
+        var pending = _root;
         _root = NewEmptyRoot();
 
-        var path = GetPath();
-        if (!File.Exists(path)) return _root;
-
-        try
+        var path = ModSaveScope.LoadPath(GetPath());
+        if (File.Exists(path) || File.Exists(path + ".bak"))
         {
-            var json = File.ReadAllText(path);
-            var file = JsonSerializer.Deserialize<CablingRoot>(json, JsonOptions);
-            if (file != null)
+            try
             {
-                file.RackCablings ??= new List<RackCabling>();
-                foreach (var rc in file.RackCablings)
+                if (!AtomicFile.TryReadAllTextWithBackup(path, out var json) || json == null)
+                    return _root;
+                var file = JsonSerializer.Deserialize<CablingRoot>(json, JsonOptions);
+                if (file != null)
                 {
-                    rc.Connections ??= new List<CableConnection>();
-                    rc.PowerStates ??= new List<DevicePowerState>();
+                    file.RackCablings ??= new List<RackCabling>();
+                    foreach (var rc in file.RackCablings)
+                    {
+                        rc.Connections ??= new List<CableConnection>();
+                        rc.PowerStates ??= new List<DevicePowerState>();
+                    }
+                    _root = file;
+                    _root.Version = FileVersion;
                 }
-                _root = file;
-                _root.Version = FileVersion;
+            }
+            catch (Exception ex)
+            {
+                ModLogging.Warning($"Cabling data load failed ({path}): {ex.Message}");
             }
         }
-        catch (Exception ex)
+
+        // Merge pre-load state (dedupe by rack id) instead of dropping it.
+        if (pending?.RackCablings?.Count > 0)
         {
-            ModLogging.Warning($"Cabling data load failed ({path}): {ex.Message}");
+            try
+            {
+                bool touched = false;
+                foreach (var rc in pending.RackCablings)
+                {
+                    if (rc == null || string.IsNullOrEmpty(rc.RackId)) continue;
+                    var existing = _root.RackCablings.FirstOrDefault(x =>
+                        string.Equals(x?.RackId, rc.RackId, StringComparison.Ordinal));
+                    if (existing == null) { _root.RackCablings.Add(rc); touched = true; }
+                }
+                if (touched) Save();
+            }
+            catch { }
         }
 
         return _root;
@@ -186,13 +206,13 @@ internal static class CablingDataStore
 
     internal static void Save()
     {
-        var path = GetPath();
+        var path = ModSaveScope.ScopedPath(GetPath());
         try
         {
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             var json = JsonSerializer.Serialize(EnsureLoaded(), JsonOptions);
-            File.WriteAllText(path, json);
+            AtomicFile.WriteAllText(path, json);
         }
         catch (Exception ex)
         {

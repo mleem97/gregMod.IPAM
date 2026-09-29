@@ -59,6 +59,58 @@ public static class DHCPManager
         return _sceneServersCache ?? Array.Empty<Server>();
     }
 
+    /// <summary>
+    /// Deterministic assignment order (stable device key, then name): without
+    /// this, batch assignment follows FindObjectsOfType order, which is
+    /// undefined — empty-IP servers could receive different addresses after
+    /// every relog.
+    /// </summary>
+    internal static System.Collections.Generic.List<Server> OrderDeterministic(
+        System.Collections.Generic.IEnumerable<Server> servers)
+    {
+        var list = new System.Collections.Generic.List<Server>();
+        if (servers == null)
+            return list;
+        foreach (var s in servers)
+        {
+            if (s != null)
+                list.Add(s);
+        }
+
+        list.Sort((a, b) =>
+        {
+            string ka = StableOrderKey(a);
+            string kb = StableOrderKey(b);
+            int c = string.CompareOrdinal(ka, kb);
+            if (c != 0) return c;
+            try
+            {
+                return a.GetInstanceID().CompareTo(b.GetInstanceID());
+            }
+            catch { return 0; }
+        });
+        return list;
+    }
+
+    private static string StableOrderKey(Server server)
+    {
+        try
+        {
+            var key = DeviceStableId.ForServer(server);
+            if (!string.IsNullOrEmpty(key) && key != "null")
+                return "k:" + key;
+        }
+        catch { }
+        try
+        {
+            var go = server != null ? server.gameObject : null;
+            if (go != null && !string.IsNullOrEmpty(go.name))
+                return "n:" + go.name;
+        }
+        catch { }
+        return "x:";
+    }
+
     /// <summary>IPAM customer-assign and batch actions can surface errors the same way as <see cref="SetServerIP"/>.</summary>
     internal static void SetLastIpamError(string message) => LastSetIpError = message;
 
@@ -89,7 +141,7 @@ public static class DHCPManager
         RebuildAssignedIpsFromScene(servers);
 
         var assigned = 0;
-        foreach (var server in servers)
+        foreach (var server in OrderDeterministic(servers))
         {
             var ip = GetServerIP(server);
             if (!string.IsNullOrWhiteSpace(ip) && ip != "0.0.0.0")
@@ -163,7 +215,7 @@ public static class DHCPManager
         ModDebugLog.WriteDhcpAssign($"after RebuildAssignedIpsFromScene in-use IP slots={AssignedIPs.Count}");
 
         var n = 0;
-        foreach (var server in servers)
+        foreach (var server in OrderDeterministic(servers))
         {
             if (server == null)
             {

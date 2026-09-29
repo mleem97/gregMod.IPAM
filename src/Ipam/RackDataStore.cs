@@ -122,41 +122,55 @@ internal static class RackDataStore
             return _root;
         }
 
-        if (!ModSaveScope.EnsureBindingChecked(out _))
-        {
-            _deferEmptyRoot ??= NewEmptyRoot();
-            return _deferEmptyRoot;
-        }
+        // Diagnostic marker only — must never gate loading or divert writes
+        // into a deferred empty root that would clobber the real file.
+        try { ModSaveScope.EnsureBindingChecked(out _); } catch { }
+
+        var pending = _deferEmptyRoot;
+        _deferEmptyRoot = null;
 
         _loaded = true;
         _root = NewEmptyRoot();
-        _deferEmptyRoot = null;
-        var path = GetPath();
-        if (!File.Exists(path))
+        var path = ModSaveScope.LoadPath(GetPath());
+        if (File.Exists(path) || File.Exists(path + ".bak"))
         {
-            return _root;
-        }
-
-        try
-        {
-            var json = File.ReadAllText(path);
-            var file = JsonSerializer.Deserialize<RackPersistedRoot>(json, JsonOptions);
-            if (file != null)
+            try
             {
-                file.Racks ??= new List<RackDefinition>();
-                foreach (var r in file.Racks)
+                if (!AtomicFile.TryReadAllTextWithBackup(path, out var json) || json == null)
+                    return _root;
+                var file = JsonSerializer.Deserialize<RackPersistedRoot>(json, JsonOptions);
+                if (file != null)
                 {
-                    r.Mounts ??= new List<RackMountRecord>();
-                }
+                    file.Racks ??= new List<RackDefinition>();
+                    foreach (var r in file.Racks)
+                    {
+                        r.Mounts ??= new List<RackMountRecord>();
+                    }
 
-                _root = file;
-                _root.Version = FileVersion;
-                NormalizeAfterLoad();
+                    _root = file;
+                    _root.Version = FileVersion;
+                    NormalizeAfterLoad();
+                }
+            }
+            catch (Exception ex)
+            {
+                ModLogging.Warning($"Rack data load failed ({path}): {ex.Message}");
             }
         }
-        catch (Exception ex)
+
+        if (pending?.Racks?.Count > 0)
         {
-            ModLogging.Warning($"Rack data load failed ({path}): {ex.Message}");
+            try
+            {
+                foreach (var r in pending.Racks)
+                {
+                    if (r == null) continue;
+                    if (!_root.Racks.Any(x => x != null && string.Equals(x.Id, r.Id, StringComparison.Ordinal)))
+                        _root.Racks.Add(r);
+                }
+                Save();
+            }
+            catch { }
         }
 
         return _root;
@@ -360,6 +374,7 @@ internal static class RackDataStore
             DeviceType = dt,
             SceneInstanceId = sceneInstanceId,
             ServerInstanceId = string.Equals(dt, RackDeviceTypes.Server, StringComparison.OrdinalIgnoreCase) ? sceneInstanceId : 0,
+            DeviceStableKey = StableKeyForMount(dt, sceneInstanceId),
             PatchLabel = string.Equals(dt, RackDeviceTypes.PatchPanel, StringComparison.OrdinalIgnoreCase)
                 ? (string.IsNullOrWhiteSpace(patchLabel) ? "Patch panel" : patchLabel.Trim())
                 : null,
@@ -533,6 +548,8 @@ internal static class RackDataStore
                 continue;
             }
 
+            string stableKey = null;
+            try { stableKey = DeviceStableId.ForServer(d.Server); } catch { }
             rack.Mounts.Add(
                 new RackMountRecord
                 {
@@ -540,6 +557,7 @@ internal static class RackDataStore
                     DeviceType = RackDeviceTypes.Server,
                     SceneInstanceId = iid,
                     ServerInstanceId = iid,
+                    DeviceStableKey = stableKey,
                     StartU = su,
                     HeightU = h,
                 });
@@ -551,9 +569,129 @@ internal static class RackDataStore
         return true;
     }
 
+    /// <summary>Stable key for a mount's live device (null for patch panels / unknown).</summary>
+    private static string StableKeyForMount(string deviceType, int sceneInstanceId)
+    {
+        if (sceneInstanceId == 0)
+            return null;
+        try
+        {
+            if (string.Equals(deviceType, RackDeviceTypes.Server, StringComparison.OrdinalIgnoreCase))
+            {
+                var servers = UnityEngine.Object.FindObjectsOfType<Server>();
+                if (servers != null)
+                {
+                    foreach (var s in servers)
+                    {
+                        if (s == null) continue;
+                        try
+                        {
+                            if (s.GetInstanceID() == sceneInstanceId)
+                                return DeviceStableId.ForServer(s);
+                        }
+                        catch { }
+                    }
+                }
+            }
+            else if (IsSwitchFamily(deviceType))
+            {
+                var switches = UnityEngine.Object.FindObjectsOfType<NetworkSwitch>();
+                if (switches != null)
+                {
+                    foreach (var sw in switches)
+                    {
+                        if (sw == null) continue;
+                        try
+                        {
+                            if (sw.GetInstanceID() == sceneInstanceId)
+                                return DeviceStableId.ForNetworkSwitch(sw);
+                        }
+                        catch { }
+                    }
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves a mount to its live scene instance ID. Instance IDs change on
+    /// every load, so falls back to the stable device key and heals the record.
+    /// Returns the stored (possibly stale) ID when nothing resolves.
+    /// </summary>
+    internal static int TryResolveSceneInstanceId(RackMountRecord m)
+    {
+        if (m == null)
+            return 0;
+        int stored = m.SceneInstanceId != 0 ? m.SceneInstanceId : m.ServerInstanceId;
+        if (string.IsNullOrEmpty(m.DeviceStableKey))
+        {
+            // Backfill for records written before stable keys existed.
+            var key = StableKeyForMount(m.DeviceType, stored);
+            if (!string.IsNullOrEmpty(key))
+            {
+                m.DeviceStableKey = key;
+                try { Save(); } catch { }
+            }
+            return stored;
+        }
+        try
+        {
+            bool isServer = string.Equals(m.DeviceType, RackDeviceTypes.Server, StringComparison.OrdinalIgnoreCase);
+            if (isServer)
+            {
+                var servers = UnityEngine.Object.FindObjectsOfType<Server>();
+                if (servers != null)
+                {
+                    foreach (var s in servers)
+                    {
+                        if (s == null) continue;
+                        int iid;
+                        try { iid = s.GetInstanceID(); } catch { continue; }
+                        if (iid == stored) return stored;
+                        bool match = false;
+                        try { match = DeviceStableId.Matches(m.DeviceStableKey, s.transform); } catch { }
+                        if (match)
+                        {
+                            m.SceneInstanceId = iid;
+                            m.ServerInstanceId = iid;
+                            try { Save(); } catch { }
+                            return iid;
+                        }
+                    }
+                }
+            }
+            else if (IsSwitchFamily(m.DeviceType))
+            {
+                var switches = UnityEngine.Object.FindObjectsOfType<NetworkSwitch>();
+                if (switches != null)
+                {
+                    foreach (var sw in switches)
+                    {
+                        if (sw == null) continue;
+                        int iid;
+                        try { iid = sw.GetInstanceID(); } catch { continue; }
+                        if (iid == stored) return stored;
+                        bool match = false;
+                        try { match = DeviceStableId.Matches(m.DeviceStableKey, sw.transform); } catch { }
+                        if (match)
+                        {
+                            m.SceneInstanceId = iid;
+                            try { Save(); } catch { }
+                            return iid;
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        return stored;
+    }
+
     private static void Save()
     {
-        var path = GetPath();
+        var path = ModSaveScope.ScopedPath(GetPath());
         try
         {
             foreach (var r in EnsureLoaded().Racks)
@@ -571,7 +709,7 @@ internal static class RackDataStore
             }
 
             var json = JsonSerializer.Serialize(EnsureLoaded(), JsonOptions);
-            File.WriteAllText(path, json);
+            AtomicFile.WriteAllText(path, json);
         }
         catch (Exception ex)
         {
@@ -645,6 +783,8 @@ internal sealed class RackMountRecord
     public int SceneInstanceId { get; set; }
     /// <summary>Legacy JSON field — kept in sync for servers.</summary>
     public int ServerInstanceId { get; set; }
+    /// <summary>Stable device key (scene + hierarchy path + position) — survives reloads.</summary>
+    public string DeviceStableKey { get; set; }
     public string PatchLabel { get; set; }
     public int StartU { get; set; }
     public int HeightU { get; set; }
